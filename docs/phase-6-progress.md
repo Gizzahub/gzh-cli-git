@@ -113,15 +113,28 @@
 - ✅ `gzh-git history file <path>` - Shows file commit history
 - ✅ `gzh-git history blame <file>` - Shows line-by-line authorship
 
-### 7. Merge CLI Commands (0% Complete)
-- **Priority**: High
-- **Subcommands Needed**:
-  - `gzh-git merge do <branch>` - Execute merge
-  - `gzh-git merge detect <source> <target>` - Detect conflicts
-  - `gzh-git merge abort` - Abort merge
-  - `gzh-git merge rebase <branch>` - Rebase operations
-- **Dependencies**: pkg/merge package (already implemented)
-- **Estimated Effort**: 4-5 hours
+### 7. Merge CLI Commands (100% Complete)
+- **Status**: ✅ Complete and Tested
+- **Commit**: `dadf905`
+- **Files Created**:
+  - `cmd/gzh-git/cmd/merge.go` - Root command ✅
+  - `cmd/gzh-git/cmd/merge_do.go` - Execute merge ✅
+  - `cmd/gzh-git/cmd/merge_detect.go` - Detect conflicts ✅
+  - `cmd/gzh-git/cmd/merge_abort.go` - Abort merge ✅
+  - `cmd/gzh-git/cmd/merge_rebase.go` - Rebase operations ✅
+
+**API Integrations**:
+- MergeManager requires both executor and ConflictDetector
+- ConflictReport uses TotalConflicts, ConflictType, FilePath, Description
+- MergeResult uses CommitHash (not CommitSHA)
+- RebaseResult uses CommitsRebased, ConflictsFound
+- Current branch retrieved via gitcmd (rev-parse --abbrev-ref HEAD)
+
+**Verified Working**:
+- ✅ `gzh-git merge do <branch>` - Execute merge with strategies
+- ✅ `gzh-git merge detect <src> <target>` - Preview conflicts
+- ✅ `gzh-git merge abort` - Cancel in-progress merge
+- ✅ `gzh-git merge rebase <branch>` - Rebase with continue/skip/abort
 
 ### 8. Integration Tests (0% Complete)
 - **Priority**: High
@@ -169,40 +182,34 @@
 
 | Category | Progress | Target | Status |
 |----------|----------|--------|--------|
-| **CLI Commands** | 6/7 groups | 7 groups | 🟢 86% |
+| **CLI Commands** | 7/7 groups | 7 groups | ✅ **100%** |
 | - status, clone, info | ✅ Complete | - | ✅ Done |
 | - commit | ✅ Complete | - | ✅ Done |
 | - branch | ✅ Complete | - | ✅ Done |
 | - history | ✅ Complete | - | ✅ Done |
-| - merge | ⏸️ 0% | - | ⏸️ Pending |
+| - merge | ✅ Complete | - | ✅ Done |
 | **Integration Tests** | 0% | 100% | ⏸️ Pending |
 | **E2E Tests** | 0% | 100% | ⏸️ Pending |
 | **Benchmarks** | 0% | 100% | ⏸️ Pending |
 | **Documentation** | 20% | 100% | ⏸️ Pending |
-| **Overall Phase 6** | **43%** | **100%** | 🔄 **In Progress** |
+| **Overall Phase 6** | **50%** | **100%** | 🔄 **In Progress** |
 
 ---
 
 ## 🎯 Immediate Next Steps (Priority Order)
 
-1. **Implement merge commands** (3-4 hours) ← NEXT
-   - Create `cmd/gzh-git/cmd/merge.go` and subcommands
-   - Integrate with pkg/merge (86.8% coverage)
-   - Test conflict detection
-   - Commands: do, detect, abort, rebase
-
-3. **Write integration tests** (6-8 hours)
+1. **Write integration tests** (6-8 hours) ← NEXT
    - Set up test infrastructure
    - Write tests for CLI commands
    - Test real Git operations
    - Increase coverage to targets
 
-4. **Write E2E tests** (4-6 hours)
+2. **Write E2E tests** (4-6 hours)
    - Create realistic user scenarios
    - Test complete workflows
    - Validate error handling
 
-5. **Performance benchmarking** (3-4 hours)
+3. **Performance benchmarking** (3-4 hours)
    - Measure operation latency
    - Memory usage profiling
    - Optimize hot paths
@@ -247,8 +254,9 @@
 - `d57b634` - wip(cmd): add branch command infrastructure
 - `6227614` - fix(cmd): fix branch command API mismatches (WORKING ✅)
 - `19654b5` - feat(cmd): implement history CLI commands with security fixes (WORKING ✅)
+- `dadf905` - feat(cmd): implement merge CLI commands (7/7 CLI groups complete) (WORKING ✅)
 
 ---
 
-**Current Session**: Implemented and tested commit + branch + history commands (6/7 CLI groups done)
-**Next Session Focus**: Implement merge CLI commands
+**Current Session**: Implemented and tested all 7 CLI command groups (100% complete)
+**Next Session Focus**: Write integration tests for CLI commands

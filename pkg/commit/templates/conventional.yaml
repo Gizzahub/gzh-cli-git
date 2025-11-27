@@ -1,0 +1,54 @@
+name: conventional
+description: Conventional Commits 1.0.0
+format: |
+  {{.Type}}{{if .Scope}}({{.Scope}}){{end}}: {{.Description}}
+  {{if .Body}}
+  {{.Body}}
+  {{end}}
+  {{if .Footer}}
+  {{.Footer}}
+  {{end}}
+variables:
+  - name: Type
+    type: enum
+    required: true
+    options:
+      - feat
+      - fix
+      - docs
+      - style
+      - refactor
+      - perf
+      - test
+      - build
+      - ci
+      - chore
+      - revert
+    description: Type of change
+  - name: Scope
+    type: string
+    required: false
+    description: Scope of change (e.g., component, file)
+  - name: Description
+    type: string
+    required: true
+    description: Short description of change
+  - name: Body
+    type: string
+    required: false
+    description: Detailed description
+  - name: Footer
+    type: string
+    required: false
+    description: Footer (breaking changes, references)
+rules:
+  - type: pattern
+    pattern: "^.{1,72}$"
+    message: "Subject line must be 1-72 characters"
+  - type: pattern
+    pattern: "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\(.+\\))?: .+"
+    message: "Must follow Conventional Commits format"
+examples:
+  - "feat(cli): add commit automation command"
+  - "fix(parser): handle empty git status output"
+  - "docs: update README with new examples"

@@ -1,0 +1,42 @@
+name: semantic
+description: Semantic Versioning commit template
+format: |
+  [{{.Category}}] {{.Description}}
+  {{if .Details}}
+  Details: {{.Details}}
+  {{end}}
+  Affects: {{.Version}}
+variables:
+  - name: Category
+    type: enum
+    required: true
+    options:
+      - MAJOR
+      - MINOR
+      - PATCH
+      - BUILD
+    description: Semver category
+  - name: Description
+    type: string
+    required: true
+    description: Short description of change
+  - name: Details
+    type: string
+    required: false
+    description: Detailed description
+  - name: Version
+    type: string
+    required: true
+    default: "patch"
+    description: Version impact
+rules:
+  - type: pattern
+    pattern: "^\\[(MAJOR|MINOR|PATCH|BUILD)\\] .+"
+    message: "Must start with [CATEGORY] prefix"
+  - type: pattern
+    pattern: "^.{1,100}$"
+    message: "Description must be 1-100 characters"
+examples:
+  - "[MINOR] Add new API endpoint"
+  - "[PATCH] Fix typo in error message"
+  - "[MAJOR] Breaking API change in authentication"

@@ -129,21 +129,18 @@ func runTemplateShow(cmd *cobra.Command, args []string) error {
 			if v.Default != "" {
 				fmt.Printf("    Default: %s\n", v.Default)
 			}
-			if len(v.Enum) > 0 {
-				fmt.Printf("    Options: %v\n", v.Enum)
+			if len(v.Options) > 0 {
+				fmt.Printf("    Options: %v\n", v.Options)
 			}
 		}
 		fmt.Println()
 	}
 
 	// Show validation rules
-	if len(tmpl.Validation) > 0 {
+	if len(tmpl.Rules) > 0 {
 		fmt.Println("Validation Rules:")
-		for _, rule := range tmpl.Validation {
+		for _, rule := range tmpl.Rules {
 			fmt.Printf("  • %s\n", rule.Type)
-			if rule.MaxLength > 0 {
-				fmt.Printf("    Max length: %d\n", rule.MaxLength)
-			}
 			if rule.Pattern != "" {
 				fmt.Printf("    Pattern: %s\n", rule.Pattern)
 			}
@@ -196,7 +193,7 @@ func runTemplateValidate(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Description: %s\n", tmpl.Description)
 		}
 		fmt.Printf("Variables: %d\n", len(tmpl.Variables))
-		fmt.Printf("Rules: %d\n", len(tmpl.Validation))
+		fmt.Printf("Rules: %d\n", len(tmpl.Rules))
 		fmt.Println()
 	}
 

@@ -93,11 +93,7 @@ func runCommitValidate(cmd *cobra.Command, args []string) error {
 		if result.Warnings != nil && len(result.Warnings) > 0 {
 			fmt.Println("\n⚠️  Warnings:")
 			for _, warning := range result.Warnings {
-				fmt.Printf("  - %s", warning.Message)
-				if warning.Line > 0 {
-					fmt.Printf(" (line %d)", warning.Line)
-				}
-				fmt.Println()
+				fmt.Printf("  - %s\n", warning.Message)
 				if warning.Suggestion != "" {
 					fmt.Printf("    Suggestion: %s\n", warning.Suggestion)
 				}
@@ -125,11 +121,7 @@ func runCommitValidate(cmd *cobra.Command, args []string) error {
 	if result.Warnings != nil && len(result.Warnings) > 0 {
 		fmt.Println("\nWarnings:")
 		for _, warning := range result.Warnings {
-			fmt.Printf("  - %s", warning.Message)
-			if warning.Line > 0 {
-				fmt.Printf(" (line %d)", warning.Line)
-			}
-			fmt.Println()
+			fmt.Printf("  - %s\n", warning.Message)
 			if warning.Suggestion != "" {
 				fmt.Printf("    Suggestion: %s\n", warning.Suggestion)
 			}

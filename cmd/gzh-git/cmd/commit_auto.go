@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -161,22 +162,22 @@ func runCommitAuto(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create commit using git command
-	// Note: We use the repository's git command executor directly
-	gitCmd := []string{"git", "commit", "-m", message}
-
 	if !quiet {
 		fmt.Println("\n🔨 Creating commit...")
 	}
 
-	// Execute git commit
-	output, err := repo.Executor().Execute(ctx, repo.Path(), gitCmd...)
+	// Execute git commit directly using os/exec
+	gitCmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
+	gitCmd.Dir = repo.Path
+
+	output, err := gitCmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to create commit: %w\nOutput: %s", err, output)
+		return fmt.Errorf("failed to create commit: %w\nOutput: %s", err, string(output))
 	}
 
 	if !quiet {
 		fmt.Println("\n✅ Commit created successfully!")
-		fmt.Println(output)
+		fmt.Println(string(output))
 	}
 
 	return nil

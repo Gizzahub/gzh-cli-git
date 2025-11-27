@@ -83,15 +83,16 @@ func runBranchCreate(cmd *cobra.Command, args []string) error {
 
 	// Create branch
 	opts := branch.CreateOptions{
-		StartPoint: createBase,
-		Track:      createTrack,
+		Name:     branchName,
+		StartRef: createBase,
+		Track:    createTrack,
 	}
 
 	if !quiet {
 		fmt.Printf("Creating branch '%s'...\n", branchName)
 	}
 
-	if err := mgr.Create(ctx, repo, branchName, opts); err != nil {
+	if err := mgr.Create(ctx, repo, opts); err != nil {
 		return fmt.Errorf("failed to create branch: %w", err)
 	}
 
@@ -111,14 +112,17 @@ func runBranchCreate(cmd *cobra.Command, args []string) error {
 		}
 
 		wtMgr := branch.NewWorktreeManager()
-		wtOpts := branch.AddWorktreeOptions{
+		wtOpts := branch.AddOptions{
+			Path:   worktreePath,
 			Branch: branchName,
 			Force:  false,
 		}
 
-		if err := wtMgr.Add(ctx, repo, worktreePath, wtOpts); err != nil {
+		wt, err := wtMgr.Add(ctx, repo, wtOpts)
+		if err != nil {
 			return fmt.Errorf("failed to create worktree: %w", err)
 		}
+		_ = wt // Worktree created successfully
 
 		if !quiet {
 			fmt.Printf("✅ Worktree created at '%s'\n", worktreePath)

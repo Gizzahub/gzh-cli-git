@@ -133,7 +133,7 @@ func runBranchList(cmd *cobra.Command, args []string) error {
 	for _, b := range filtered {
 		// Show current branch indicator
 		indicator := "  "
-		if b.IsCurrent {
+		if b.IsHead {
 			indicator = "* "
 		}
 
@@ -154,8 +154,8 @@ func runBranchList(cmd *cobra.Command, args []string) error {
 			if b.IsMerged {
 				fmt.Println("    Status: Merged")
 			}
-			if b.LastCommit != "" {
-				fmt.Printf("    Last commit: %s\n", b.LastCommit[:8])
+			if b.LastCommit != nil && b.LastCommit.SHA != "" {
+				fmt.Printf("    Last commit: %s\n", b.LastCommit.SHA[:8])
 			}
 		}
 	}

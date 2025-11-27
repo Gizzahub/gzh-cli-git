@@ -78,6 +78,7 @@ func runBranchDelete(cmd *cobra.Command, args []string) error {
 
 	// Delete branch
 	opts := branch.DeleteOptions{
+		Name:   branchName,
 		Force:  deleteForce,
 		Remote: deleteRemote,
 	}
@@ -90,7 +91,7 @@ func runBranchDelete(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Deleting %s branch '%s'...\n", target, branchName)
 	}
 
-	if err := mgr.Delete(ctx, repo, branchName, opts); err != nil {
+	if err := mgr.Delete(ctx, repo, opts); err != nil {
 		return fmt.Errorf("failed to delete branch: %w", err)
 	}
 

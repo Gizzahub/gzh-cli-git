@@ -72,7 +72,65 @@ make install
 
 ### As CLI Tool
 
-**Commit with Template:**
+**Check Repository Status:**
+```bash
+# Show working tree status
+gzh-git status
+
+# Show status for specific repository
+gzh-git status /path/to/repo
+
+# Quiet mode (exit code 1 if dirty)
+gzh-git status -q
+```
+
+**View Repository Information:**
+```bash
+# Show detailed repository information
+gzh-git info
+
+# Displays: branch, remote URL, upstream, ahead/behind counts, dirty/clean status
+gzh-git info /path/to/repo
+```
+
+**Clone Repositories:**
+```bash
+# Basic clone
+gzh-git clone https://github.com/user/repo.git
+
+# Clone specific branch
+gzh-git clone -b develop https://github.com/user/repo.git
+
+# Shallow clone (faster)
+gzh-git clone --depth 1 https://github.com/user/repo.git
+
+# Clone with submodules
+gzh-git clone --recursive https://github.com/user/repo.git
+
+# Clone to specific directory
+gzh-git clone https://github.com/user/repo.git my-project
+```
+
+**Global Options:**
+```bash
+# Verbose output
+gzh-git -v status
+
+# Quiet mode (errors only)
+gzh-git -q clone https://github.com/user/repo.git
+
+# Show version
+gzh-git --version
+
+# Show help
+gzh-git --help
+```
+
+---
+
+### Future Features (Planned)
+
+**Commit Automation (Coming in v0.2.0):**
 ```bash
 # Use conventional commits template
 gzh-git commit --template conventional --type feat --scope cli
@@ -84,19 +142,16 @@ gzh-git commit --auto
 gzh-git push --smart
 ```
 
-**Branch & Worktree Management:**
+**Branch & Worktree Management (Coming in v0.3.0):**
 ```bash
 # Create worktree for parallel development
 gzh-git worktree add ~/work/feature-auth feature/auth
 
 # Clean up merged branches
 gzh-git branch cleanup --merged --dry-run
-
-# List all worktrees
-gzh-git worktree list
 ```
 
-**History Analysis:**
+**History Analysis (Coming in v0.4.0):**
 ```bash
 # Commit statistics
 gzh-git stats commits --since 2025-01-01 --format table
@@ -129,33 +184,85 @@ package main
 import (
     "context"
     "fmt"
+    "log"
+
     "github.com/gizzahub/gzh-cli-git/pkg/repository"
 )
 
 func main() {
+    ctx := context.Background()
+
     // Create repository client
-    client := repository.NewClient(nil)
+    client := repository.NewClient()
 
     // Open repository
-    repo, err := client.Open(context.Background(), ".")
+    repo, err := client.Open(ctx, ".")
     if err != nil {
-        panic(err)
+        log.Fatalf("Failed to open repository: %v", err)
     }
 
-    // Get repository status
-    status, err := client.GetStatus(context.Background(), repo)
+    // Get repository info
+    info, err := client.GetInfo(ctx, repo)
     if err != nil {
-        panic(err)
+        log.Fatalf("Failed to get info: %v", err)
     }
 
     fmt.Printf("Repository: %s\n", repo.Path)
+    fmt.Printf("Branch: %s\n", info.Branch)
+    fmt.Printf("Remote URL: %s\n", info.RemoteURL)
+
+    // Get repository status
+    status, err := client.GetStatus(ctx, repo)
+    if err != nil {
+        log.Fatalf("Failed to get status: %v", err)
+    }
+
     fmt.Printf("Clean: %v\n", status.IsClean)
     fmt.Printf("Modified files: %d\n", len(status.ModifiedFiles))
+    fmt.Printf("Staged files: %d\n", len(status.StagedFiles))
 }
 ```
 
-**Commit Automation:**
+**Clone Repository:**
 ```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/gizzahub/gzh-cli-git/pkg/repository"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // Create repository client
+    client := repository.NewClient()
+
+    // Clone repository with options
+    repo, err := client.Clone(ctx, repository.CloneOptions{
+        URL:          "https://github.com/user/repo.git",
+        Destination:  "/tmp/cloned-repo",
+        Branch:       "main",
+        Depth:        1,
+        SingleBranch: true,
+    })
+
+    if err != nil {
+        log.Fatalf("Failed to clone: %v", err)
+    }
+
+    fmt.Printf("Cloned to: %s\n", repo.Path)
+}
+```
+
+**Future Library Features (Planned):**
+
+**Commit Automation (v0.2.0):**
+```go
+// Coming soon
 package main
 
 import (
@@ -165,15 +272,16 @@ import (
 )
 
 func main() {
-    repoClient := repository.NewClient(nil)
-    commitMgr := commit.NewManager(nil)
+    ctx := context.Background()
+    repoClient := repository.NewClient()
+    commitMgr := commit.NewManager()
 
-    repo, _ := repoClient.Open(context.Background(), ".")
+    repo, _ := repoClient.Open(ctx, ".")
 
     // Auto-commit with smart message generation
-    result, err := commitMgr.AutoCommit(context.Background(), repo, commit.AutoCommitPolicy{
-        Enabled:       true,
+    result, err := commitMgr.AutoCommit(ctx, repo, commit.AutoCommitOptions{
         MessageFormat: "conventional",
+        Template:      "feat",
     })
 
     if err != nil {

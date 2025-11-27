@@ -31,7 +31,7 @@ func NewContributorAnalyzer(executor GitExecutor) ContributorAnalyzer {
 // Analyze analyzes contributor activity and returns detailed statistics
 func (c *contributorAnalyzer) Analyze(ctx context.Context, repo *repository.Repository, opts ContributorOptions) ([]*Contributor, error) {
 	// Get basic contributor stats from shortlog
-	result, err := c.executor.Run(ctx, repo.Path, "shortlog", "-sne", "--all")
+	result, err := c.executor.Run(ctx, repo.Path, "shortlog", "-s", "-n", "-e", "--all")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shortlog: %w", err)
 	}

@@ -53,12 +53,16 @@ var safeGitFlags = map[string]bool{
 	"--decorate":   true,
 	"--all":        true,
 	"--stat":       true,
+	"--shortstat":  true,
 	"--format":     true,
 	"--pretty":     true,
 	"--since":      true,
 	"--until":      true,
 	"--author":     true,
 	"--committer":  true,
+	"--max-count":  true,
+	"--follow":     true,
+	"--date":       true,
 
 	// Commit flags
 	"--message":    true,
@@ -127,10 +131,16 @@ func SanitizeArgs(args []string) ([]string, error) {
 	sanitized := make([]string, 0, len(args))
 
 	for i, arg := range args {
-		// Check for dangerous patterns
-		for _, pattern := range dangerousPatterns {
-			if pattern.MatchString(arg) {
-				return nil, fmt.Errorf("argument %d contains dangerous pattern: %s", i, arg)
+		// Allow pipes and special characters in --format= values
+		// These are safe because they're passed directly to git's format parser
+		isFormatValue := strings.HasPrefix(arg, "--format=") || strings.HasPrefix(arg, "--pretty=")
+
+		// Check for dangerous patterns (skip for format values)
+		if !isFormatValue {
+			for _, pattern := range dangerousPatterns {
+				if pattern.MatchString(arg) {
+					return nil, fmt.Errorf("argument %d contains dangerous pattern: %s", i, arg)
+				}
 			}
 		}
 
@@ -151,6 +161,11 @@ func SanitizeArgs(args []string) ([]string, error) {
 // validateFlag checks if a flag is in the safe list.
 // Flags with values (e.g., --branch=main) are also validated.
 func validateFlag(flag string) error {
+	// Allow the special '--' separator (used to separate flags from paths)
+	if flag == "--" {
+		return nil
+	}
+
 	// Extract flag name (before '=' if present)
 	flagName := flag
 	if idx := strings.Index(flag, "="); idx != -1 {

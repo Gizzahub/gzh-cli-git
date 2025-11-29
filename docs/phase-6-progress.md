@@ -136,17 +136,36 @@
 - ✅ `gzh-git merge abort` - Cancel in-progress merge
 - ✅ `gzh-git merge rebase <branch>` - Rebase with continue/skip/abort
 
-### 8. Integration Tests (0% Complete)
-- **Priority**: High
+### 8. Integration Tests (80% Complete)
+- **Status**: 🟢 Near Complete
+- **Commit**: `2e2adb6`
 - **Test Structure**: `tests/integration/`
-- **Categories**:
-  - Repository lifecycle tests
-  - Commit workflow tests
-  - Branch operations tests
-  - History analysis tests
-  - Merge scenarios tests
-- **Coverage Target**: Bring pkg/repository to 85%, pkg/branch to 85%
-- **Estimated Effort**: 8-10 hours
+- **Files Created**:
+  - `helper_test.go` (254 lines) - Test infrastructure ✅
+  - `repository_test.go` (90 lines) - Repository commands ✅
+  - `commit_test.go` (118 lines) - Commit commands ✅
+  - `branch_test.go` (163 lines) - Branch commands ✅
+  - `history_test.go` (209 lines) - History commands ✅
+  - `merge_test.go` (288 lines) - Merge commands ✅
+
+**Test Coverage**:
+- Total: 5 test files, 868 lines of test code
+- Tests all 7 CLI command groups
+- Tests 30+ command variations
+- Success and error path testing
+- Output format testing (table, json, csv, markdown)
+
+**Infrastructure Features**:
+- Automatic binary detection and building
+- Temporary Git repository creation with config
+- Helper methods for Git operations
+- Output validation helpers
+- Support for success/error test cases
+
+**Remaining (20%)**:
+- Fix output format assertions to match actual CLI
+- Add coverage analysis
+- Validate coverage targets (85% pkg/, 80% internal/, 70% cmd/)
 
 ### 9. E2E Tests (0% Complete)
 - **Priority**: Medium
@@ -200,21 +219,21 @@
 | - branch | ✅ Complete | - | ✅ Done |
 | - history | ✅ Complete | - | ✅ Done |
 | - merge | ✅ Complete | - | ✅ Done |
-| **Integration Tests** | 0% | 100% | ⏸️ Pending |
+| **Integration Tests** | 80% | 100% | 🟢 Near Complete |
 | **E2E Tests** | 0% | 100% | ⏸️ Pending |
 | **Benchmarks** | 0% | 100% | ⏸️ Pending |
 | **Documentation** | 90% | 100% | 🟢 Near Complete |
-| **Overall Phase 6** | **60%** | **100%** | 🔄 **In Progress** |
+| **Overall Phase 6** | **74%** | **100%** | 🔄 **In Progress** |
 
 ---
 
 ## 🎯 Immediate Next Steps (Priority Order)
 
-1. **Write integration tests** (6-8 hours) ← NEXT
-   - Set up test infrastructure
-   - Write tests for CLI commands
-   - Test real Git operations
-   - Increase coverage to targets
+1. **Fix integration test assertions** (1-2 hours) ← NEXT
+   - Update output format expectations to match actual CLI
+   - Fix remaining test failures (branch, commit, history, merge)
+   - Run full test suite and verify pass rate
+   - Add coverage analysis
 
 2. **Write E2E tests** (4-6 hours)
    - Create realistic user scenarios
@@ -268,8 +287,9 @@
 - `19654b5` - feat(cmd): implement history CLI commands with security fixes (WORKING ✅)
 - `dadf905` - feat(cmd): implement merge CLI commands (7/7 CLI groups complete) (WORKING ✅)
 - `7018f18` - docs(phase-6): add comprehensive user documentation (90% complete) ✅
+- `2e2adb6` - test(integration): add comprehensive integration tests for all CLI commands ✅
 
 ---
 
-**Current Session**: Completed all CLI commands and comprehensive documentation
-**Next Session Focus**: Write integration tests and complete remaining documentation
+**Current Session**: Completed integration test infrastructure and initial test suite
+**Next Session Focus**: Fix remaining test assertions and add coverage analysis

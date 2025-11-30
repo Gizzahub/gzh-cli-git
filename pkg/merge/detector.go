@@ -1,3 +1,19 @@
+// Package merge provides advanced merge and rebase operations.
+// This package includes conflict detection, merge strategy management,
+// automatic conflict resolution, and rebase operations with safety checks.
+//
+// Example usage:
+//
+//	// Detect conflicts before merging
+//	detector := merge.NewConflictDetector()
+//	report, err := detector.Detect(ctx, repo, "feature-branch")
+//
+//	// Execute merge with strategy
+//	mgr := merge.NewMergeManager()
+//	result, err := mgr.Merge(ctx, repo, merge.MergeOptions{
+//	    Branch:   "feature-branch",
+//	    Strategy: merge.StrategyOurs,
+//	})
 package merge
 
 import (

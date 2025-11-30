@@ -1,3 +1,19 @@
+// Package history provides Git repository history analysis and statistics.
+// This package includes commit statistics, contributor analysis, file history tracking,
+// and support for multiple output formats (table, JSON, CSV, markdown).
+//
+// Example usage:
+//
+//	// Analyze commit statistics
+//	analyzer := history.NewAnalyzer()
+//	stats, err := analyzer.GetCommitStats(ctx, repo, history.StatsOptions{
+//	    Since: time.Now().AddDate(0, -1, 0),
+//	})
+//
+//	// Get top contributors
+//	contributors, err := analyzer.GetContributors(ctx, repo, history.ContributorOptions{
+//	    TopN: 10,
+//	})
 package history
 
 import (

@@ -1,3 +1,7 @@
+// Package parser provides parsers for Git command output.
+// This package contains parsers for various Git commands including
+// status, diff, log, and other Git operations. All parsers are designed
+// to handle edge cases and provide structured output.
 package parser
 
 import (

@@ -1,3 +1,14 @@
+// Package branch provides Git branch management operations.
+// This package includes branch creation, deletion, listing, and worktree management.
+//
+// Example usage:
+//
+//	mgr := branch.NewManager()
+//	err := mgr.Create(ctx, repo, branch.CreateOptions{
+//	    Name:     "feature/new-feature",
+//	    StartRef: "main",
+//	    Checkout: true,
+//	})
 package branch
 
 import (

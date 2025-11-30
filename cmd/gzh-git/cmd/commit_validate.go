@@ -105,7 +105,7 @@ func runCommitValidate(cmd *cobra.Command, args []string) error {
 
 	// Invalid message
 	if !quiet {
-		fmt.Println("❌ Invalid commit message\n")
+		fmt.Println("❌ Invalid commit message")
 		fmt.Println("Errors:")
 	}
 

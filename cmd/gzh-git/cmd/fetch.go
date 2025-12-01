@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	fetchMaxDepth         int
+	fetchDepth            int
 	fetchParallel         int
 	fetchDryRun           bool
 	fetchAllRemotes       bool
@@ -41,34 +41,34 @@ By default:
 The command is safe to run and will not modify your working tree.
 It only updates remote-tracking branches.`,
 	Example: `  # Fetch all repositories in current directory (1-depth scan)
-  gzh-git fetch --max-depth 1
+  gz-git fetch -d 1
 
   # Fetch all repositories up to 2 levels deep
-  gzh-git fetch --max-depth 2 .
+  gz-git fetch -d 2 .
 
   # Fetch with custom parallelism
-  gzh-git fetch --parallel 10 ~/projects
+  gz-git fetch --parallel 10 ~/projects
 
   # Fetch from all remotes
-  gzh-git fetch --all ~/workspace
+  gz-git fetch --all ~/workspace
 
   # Fetch and prune deleted remote branches
-  gzh-git fetch --prune ~/projects
+  gz-git fetch --prune ~/projects
 
   # Fetch all tags
-  gzh-git fetch --tags ~/repos
+  gz-git fetch --tags ~/repos
 
   # Dry run to see what would be fetched
-  gzh-git fetch --dry-run ~/projects
+  gz-git fetch --dry-run ~/projects
 
   # Filter by pattern
-  gzh-git fetch --include "myproject.*" ~/workspace
+  gz-git fetch --include "myproject.*" ~/workspace
 
   # Exclude pattern
-  gzh-git fetch --exclude "test.*" ~/projects
+  gz-git fetch --exclude "test.*" ~/projects
 
   # Compact output format
-  gzh-git fetch --format compact ~/projects`,
+  gz-git fetch --format compact ~/projects`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runFetch,
 }
@@ -77,7 +77,7 @@ func init() {
 	rootCmd.AddCommand(fetchCmd)
 
 	// Flags
-	fetchCmd.Flags().IntVar(&fetchMaxDepth, "max-depth", 5, "maximum directory depth to scan")
+	fetchCmd.Flags().IntVarP(&fetchDepth, "depth", "d", 5, "directory depth to scan")
 	fetchCmd.Flags().IntVar(&fetchParallel, "parallel", 5, "number of parallel fetch operations")
 	fetchCmd.Flags().BoolVar(&fetchDryRun, "dry-run", false, "show what would be fetched without fetching")
 	fetchCmd.Flags().BoolVar(&fetchAllRemotes, "all", false, "fetch from all remotes (not just origin)")
@@ -104,7 +104,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		fmt.Printf("Scanning for repositories in %s (max depth: %d)...\n", directory, fetchMaxDepth)
+		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, fetchDepth)
 	}
 
 	// Create client
@@ -120,7 +120,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	opts := repository.BulkFetchOptions{
 		Directory:         directory,
 		Parallel:          fetchParallel,
-		MaxDepth:          fetchMaxDepth,
+		MaxDepth:          fetchDepth,
 		DryRun:            fetchDryRun,
 		Verbose:           verbose,
 		AllRemotes:        fetchAllRemotes,

@@ -160,10 +160,10 @@ gz-git clone https://github.com/user/repo.git my-project
 **Bulk Fetch Multiple Repositories:**
 ```bash
 # Fetch all repositories in current directory (1-depth)
-gz-git fetch --max-depth 1
+gz-git fetch -d 1
 
 # Fetch repositories up to 2 levels deep
-gz-git fetch --max-depth 2 ~/projects
+gz-git fetch -d 2 ~/projects
 
 # Fetch with custom parallelism
 gz-git fetch --parallel 10 ~/workspace

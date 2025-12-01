@@ -15,48 +15,53 @@
 
 ## Features
 
-### ✅ Currently Available (v0.1.0-alpha)
+### ✅ Fully Implemented & Available (v0.1.0-alpha)
 
 📦 **Repository Operations**
 - Clone repositories with advanced options (branch, depth, single-branch, recursive)
 - Check repository status (clean/dirty, modified/staged/untracked files)
 - Get repository information (branch, remote, upstream, ahead/behind counts)
-- Validate repository existence
+- Bulk operations (clone-or-update multiple repos in parallel)
+- Flexible clone strategies (always-clone, update-if-exists, skip-if-exists)
+
+🚀 **Commit Automation**
+- Template-based commit messages (Conventional Commits support)
+- Auto-generate commit messages from code changes
+- Validate commit messages against templates
+- Built-in template management (list, show, validate)
+
+🌿 **Branch Management**
+- Create, list, and delete branches
+- Worktree-based parallel development
+- Branch creation with linked worktrees
+- Local and remote branch operations
+
+📊 **History Analysis**
+- Commit statistics and trends
+- Contributor analysis with metrics
+- File change tracking and history
+- Multiple output formats (Table, JSON, CSV)
+
+🔀 **Advanced Merge/Rebase**
+- Pre-merge conflict detection
+- Execute merge with multiple strategies
+- Abort and rebase operations
+- Interactive conflict assistance
 
 📚 **Go Library API**
-- Clean, stable public APIs (`pkg/repository`, `pkg/operations`)
+- Clean, stable public APIs (all `pkg/*` packages)
 - Zero CLI dependencies in library code
 - Context-aware operations (cancellation, timeouts)
 - Easy integration into other Go projects
+- Full implementations: `repository`, `operations`, `commit`, `branch`, `history`, `merge`
 
-🔧 **Developer Tools**
-- Bulk repository operations (clone-or-update multiple repos in parallel)
-- Flexible clone strategies (always-clone, update-if-exists, skip-if-exists)
-- Comprehensive test coverage (141 tests, 69.1% coverage)
+🔧 **Quality & Testing**
+- 141 tests passing
+- 69.1% code coverage
+- Comprehensive integration tests
+- Well-documented codebase
 
-### ⏳ Planned Features (Coming Soon)
-
-🚀 **Commit Automation** *(v0.2.0)*
-- Template-based commit messages (Conventional Commits, Semantic Versioning)
-- Auto-generated messages from code changes
-- Smart push with safety checks
-
-🌿 **Branch Management** *(v0.3.0)*
-- Worktree-based parallel development
-- Branch naming validation
-- Automated cleanup of merged branches
-
-📊 **History Analysis** *(v0.4.0)*
-- Commit statistics and contributor insights
-- File change tracking
-- Multiple output formats (Table, JSON, CSV)
-
-🔀 **Advanced Merge/Rebase** *(v0.5.0)*
-- Pre-merge conflict detection
-- Auto-resolution with multiple strategies
-- Interactive assistance
-
-See [Roadmap](#roadmap) for detailed timeline and [FAQ](docs/user/guides/faq.md) for more information.
+> **Note**: Despite the v0.1.0-alpha version number, this project has substantially more features than typically expected from an alpha release. See [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for details.
 
 ---
 
@@ -149,53 +154,63 @@ gzh-git --help
 
 ---
 
-### 🔮 Usage Examples for Planned Features
+### Advanced Features Usage
 
-These features are not yet implemented. See [Roadmap](#roadmap) for timeline.
-
-**Commit Automation** *(Coming in v0.2.0):*
+**Commit Automation:**
 ```bash
-# Use conventional commits template
-gzh-git commit --template conventional --type feat --scope cli
+# Auto-generate and create commit
+gzh-git commit auto
 
-# Auto-generate commit message from changes
-gzh-git commit --auto
+# Validate commit message
+gzh-git commit validate "feat(cli): add new command"
 
-# Smart push with safety checks
-gzh-git push --smart
+# List available templates
+gzh-git commit template list
+
+# Show template details
+gzh-git commit template show conventional
 ```
 
-**Branch & Worktree Management** *(Coming in v0.3.0):*
+**Branch & Worktree Management:**
 ```bash
-# Create worktree for parallel development
-gzh-git worktree add ~/work/feature-auth feature/auth
+# List all branches
+gzh-git branch list --all
 
-# Clean up merged branches
-gzh-git branch cleanup --merged --dry-run
+# Create new branch
+gzh-git branch create feature/new-feature
+
+# Create branch with worktree
+gzh-git branch create feature/auth --worktree ~/work/auth
+
+# Delete branch
+gzh-git branch delete old-feature
 ```
 
-**History Analysis** *(Coming in v0.4.0):*
+**History Analysis:**
 ```bash
-# Commit statistics
-gzh-git stats commits --since 2025-01-01 --format table
+# Show commit statistics
+gzh-git history stats --since "1 month ago"
 
-# Contributor analysis
-gzh-git stats contributors --top 10
+# Analyze contributors
+gzh-git history contributors --top 10
 
-# File history
+# View file history
 gzh-git history file src/main.go
 ```
 
-**Advanced Merge/Rebase** *(Coming in v0.5.0):*
+**Advanced Merge/Rebase:**
 ```bash
 # Detect conflicts before merging
-gzh-git merge --detect-conflicts feature/auth
+gzh-git merge detect feature/new-feature main
 
-# Auto-resolve conflicts with strategy
-gzh-git merge --auto-resolve feature/auth --strategy theirs
+# Execute merge
+gzh-git merge do feature/new-feature
 
-# Interactive rebase assistance
-gzh-git rebase --interactive main --assistant
+# Abort merge if needed
+gzh-git merge abort
+
+# Rebase current branch
+gzh-git merge rebase main
 ```
 
 ### As Go Library
@@ -281,43 +296,22 @@ func main() {
 }
 ```
 
-**🔮 Planned Library Features**
+**Advanced Library Features:**
 
-These features are not yet implemented. See current library documentation at [docs/LIBRARY.md](docs/LIBRARY.md).
+All major packages are fully implemented. See [Library Documentation](docs/LIBRARY.md) for comprehensive examples.
 
-**Commit Automation** *(v0.2.0):*
-```go
-// Coming soon
-package main
+**Available Packages:**
+- `pkg/repository` - Repository operations
+- `pkg/operations` - Clone, pull, fetch operations
+- `pkg/commit` - Commit automation and validation
+- `pkg/branch` - Branch and worktree management
+- `pkg/history` - History analysis and statistics
+- `pkg/merge` - Merge and rebase operations
 
-import (
-    "context"
-    "github.com/gizzahub/gzh-cli-git/pkg/repository"
-    "github.com/gizzahub/gzh-cli-git/pkg/commit"
-)
-
-func main() {
-    ctx := context.Background()
-    repoClient := repository.NewClient()
-    commitMgr := commit.NewManager()
-
-    repo, _ := repoClient.Open(ctx, ".")
-
-    // Auto-commit with smart message generation
-    result, err := commitMgr.AutoCommit(ctx, repo, commit.AutoCommitOptions{
-        MessageFormat: "conventional",
-        Template:      "feat",
-    })
-
-    if err != nil {
-        panic(err)
-    }
-
-    fmt.Printf("Committed: %s\n", result.Hash)
-}
-```
-
-**For more examples, see [examples/](examples/) directory.**
+**For detailed examples, see:**
+- [Library Guide](docs/LIBRARY.md) - Complete library documentation
+- [examples/](examples/) directory - Working code samples
+- [API Reference](https://pkg.go.dev/github.com/gizzahub/gzh-cli-git) - Full API documentation
 
 ---
 
@@ -346,44 +340,33 @@ func main() {
 
 ### Roadmap
 
-- [x] **Phase 1**: Foundation & Infrastructure *(Completed)*
-  - [x] Project structure
+- [x] **Phase 1-5**: Core Features *(Completed - v0.1.0-alpha)*
+  - [x] Project structure and architecture
   - [x] Core documentation (PRD, REQUIREMENTS, ARCHITECTURE)
-  - [x] Basic Git operations (clone, status, info)
+  - [x] Repository operations (clone, status, info, update)
+  - [x] Commit automation (auto-commit, templates, validation)
+  - [x] Branch management (create, delete, list, worktrees)
+  - [x] History analysis (stats, contributors, file tracking)
+  - [x] Advanced merge/rebase (conflict detection, strategies)
+  - [x] Library-first architecture with full pkg/ implementations
   - [x] Test infrastructure (141 tests, 69.1% coverage)
-  - [x] Library-first architecture
-  - [x] Released: **v0.1.0-alpha** ✅
 
-- [ ] **Phase 2**: Commit Automation *(v0.2.0 - Planned)*
-  - [ ] Template system
-  - [ ] Auto-commit with smart message generation
-  - [ ] Smart push with safety checks
-  - [ ] Commit message validation
+- [ ] **Phase 6**: Documentation & Examples *(In Progress)*
+  - [x] Implementation status report
+  - [ ] Comprehensive usage examples
+  - [ ] Complete API documentation
+  - [ ] Video tutorials and guides
+  - [ ] Migration guides from other tools
 
-- [ ] **Phase 3**: Branch Management *(v0.3.0 - Planned)*
-  - [ ] Branch operations (create, delete, list)
-  - [ ] Worktree management
-  - [ ] Parallel development workflows
-  - [ ] Branch cleanup automation
-
-- [ ] **Phase 4**: History Analysis *(v0.4.0 - Planned)*
-  - [ ] Commit statistics and trends
-  - [ ] Contributor analysis
-  - [ ] File history tracking
-  - [ ] Multiple output formats (Table, JSON, CSV)
-
-- [ ] **Phase 5**: Advanced Merge/Rebase *(v0.5.0 - Planned)*
-  - [ ] Pre-merge conflict detection
-  - [ ] Auto-resolution strategies
-  - [ ] Interactive merge assistance
-  - [ ] Rebase workflow support
-
-- [ ] **Phase 6**: Production Readiness *(v1.0.0 - Target)*
+- [ ] **Phase 7**: Production Readiness *(Target: v1.0.0)*
   - [ ] 90%+ test coverage
-  - [ ] Performance optimization
-  - [ ] Complete documentation
+  - [ ] Performance benchmarks and optimization
+  - [ ] Security audit
   - [ ] API stability guarantees
-  - [ ] Production-grade error handling
+  - [ ] Production deployment guides
+  - [ ] Official release announcement
+
+> **Note**: Phases 2-5 were completed during initial development but documented as "planned". See [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for details on this discrepancy.
 
 **See full roadmap in [PRD.md](PRD.md)**
 

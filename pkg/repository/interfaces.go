@@ -24,6 +24,11 @@ type Client interface {
 	// Returns the opened repository on success.
 	Clone(ctx context.Context, opts CloneOptions) (*Repository, error)
 
+	// CloneOrUpdate intelligently clones a repository if it doesn't exist,
+	// or updates it using the specified strategy if it does.
+	// This is a high-level convenience method for repository synchronization.
+	CloneOrUpdate(ctx context.Context, opts CloneOrUpdateOptions) (*CloneOrUpdateResult, error)
+
 	// IsRepository checks if the path points to a valid Git repository.
 	// Returns true if the path contains a .git directory or is a bare repository.
 	IsRepository(ctx context.Context, path string) bool

@@ -15,30 +15,48 @@
 
 ## Features
 
-🚀 **Commit Automation**
+### ✅ Currently Available (v0.1.0-alpha)
+
+📦 **Repository Operations**
+- Clone repositories with advanced options (branch, depth, single-branch, recursive)
+- Check repository status (clean/dirty, modified/staged/untracked files)
+- Get repository information (branch, remote, upstream, ahead/behind counts)
+- Validate repository existence
+
+📚 **Go Library API**
+- Clean, stable public APIs (`pkg/repository`, `pkg/operations`)
+- Zero CLI dependencies in library code
+- Context-aware operations (cancellation, timeouts)
+- Easy integration into other Go projects
+
+🔧 **Developer Tools**
+- Bulk repository operations (clone-or-update multiple repos in parallel)
+- Flexible clone strategies (always-clone, update-if-exists, skip-if-exists)
+- Comprehensive test coverage (141 tests, 69.1% coverage)
+
+### ⏳ Planned Features (Coming Soon)
+
+🚀 **Commit Automation** *(v0.2.0)*
 - Template-based commit messages (Conventional Commits, Semantic Versioning)
 - Auto-generated messages from code changes
 - Smart push with safety checks
 
-🌿 **Branch Management**
+🌿 **Branch Management** *(v0.3.0)*
 - Worktree-based parallel development
 - Branch naming validation
 - Automated cleanup of merged branches
 
-📊 **History Analysis**
+📊 **History Analysis** *(v0.4.0)*
 - Commit statistics and contributor insights
 - File change tracking
 - Multiple output formats (Table, JSON, CSV)
 
-🔀 **Advanced Merge/Rebase**
+🔀 **Advanced Merge/Rebase** *(v0.5.0)*
 - Pre-merge conflict detection
 - Auto-resolution with multiple strategies
 - Interactive assistance
 
-📦 **Library-First Design**
-- Clean, stable public APIs
-- Zero CLI dependencies in library code
-- Easy integration into other Go projects
+See [Roadmap](#roadmap) for detailed timeline and [FAQ](docs/user/guides/faq.md) for more information.
 
 ---
 
@@ -131,9 +149,11 @@ gzh-git --help
 
 ---
 
-### Future Features (Planned)
+### 🔮 Usage Examples for Planned Features
 
-**Commit Automation (Coming in v0.2.0):**
+These features are not yet implemented. See [Roadmap](#roadmap) for timeline.
+
+**Commit Automation** *(Coming in v0.2.0):*
 ```bash
 # Use conventional commits template
 gzh-git commit --template conventional --type feat --scope cli
@@ -145,7 +165,7 @@ gzh-git commit --auto
 gzh-git push --smart
 ```
 
-**Branch & Worktree Management (Coming in v0.3.0):**
+**Branch & Worktree Management** *(Coming in v0.3.0):*
 ```bash
 # Create worktree for parallel development
 gzh-git worktree add ~/work/feature-auth feature/auth
@@ -154,7 +174,7 @@ gzh-git worktree add ~/work/feature-auth feature/auth
 gzh-git branch cleanup --merged --dry-run
 ```
 
-**History Analysis (Coming in v0.4.0):**
+**History Analysis** *(Coming in v0.4.0):*
 ```bash
 # Commit statistics
 gzh-git stats commits --since 2025-01-01 --format table
@@ -166,7 +186,7 @@ gzh-git stats contributors --top 10
 gzh-git history file src/main.go
 ```
 
-**Advanced Merge/Rebase:**
+**Advanced Merge/Rebase** *(Coming in v0.5.0):*
 ```bash
 # Detect conflicts before merging
 gzh-git merge --detect-conflicts feature/auth
@@ -261,9 +281,11 @@ func main() {
 }
 ```
 
-**Future Library Features (Planned):**
+**🔮 Planned Library Features**
 
-**Commit Automation (v0.2.0):**
+These features are not yet implemented. See current library documentation at [docs/LIBRARY.md](docs/LIBRARY.md).
+
+**Commit Automation** *(v0.2.0):*
 ```go
 // Coming soon
 package main
@@ -324,41 +346,44 @@ func main() {
 
 ### Roadmap
 
-- [x] **Phase 1**: Foundation & Infrastructure (Weeks 1-2)
+- [x] **Phase 1**: Foundation & Infrastructure *(Completed)*
   - [x] Project structure
   - [x] Core documentation (PRD, REQUIREMENTS, ARCHITECTURE)
-  - [ ] Basic Git operations
-  - [ ] Test infrastructure
+  - [x] Basic Git operations (clone, status, info)
+  - [x] Test infrastructure (141 tests, 69.1% coverage)
+  - [x] Library-first architecture
+  - [x] Released: **v0.1.0-alpha** ✅
 
-- [ ] **Phase 2**: Commit Automation (Week 3)
+- [ ] **Phase 2**: Commit Automation *(v0.2.0 - Planned)*
   - [ ] Template system
-  - [ ] Auto-commit
-  - [ ] Smart push
+  - [ ] Auto-commit with smart message generation
+  - [ ] Smart push with safety checks
+  - [ ] Commit message validation
 
-- [ ] **Phase 3**: Branch Management (Week 4)
-  - [ ] Branch operations
+- [ ] **Phase 3**: Branch Management *(v0.3.0 - Planned)*
+  - [ ] Branch operations (create, delete, list)
   - [ ] Worktree management
-  - [ ] Parallel workflows
+  - [ ] Parallel development workflows
+  - [ ] Branch cleanup automation
 
-- [ ] **Phase 4**: History Analysis (Week 5)
-  - [ ] Commit statistics
+- [ ] **Phase 4**: History Analysis *(v0.4.0 - Planned)*
+  - [ ] Commit statistics and trends
   - [ ] Contributor analysis
-  - [ ] Reporting
+  - [ ] File history tracking
+  - [ ] Multiple output formats (Table, JSON, CSV)
 
-- [ ] **Phase 5**: Advanced Merge/Rebase (Week 6)
-  - [ ] Conflict detection
-  - [ ] Auto-resolution
-  - [ ] Interactive assistance
+- [ ] **Phase 5**: Advanced Merge/Rebase *(v0.5.0 - Planned)*
+  - [ ] Pre-merge conflict detection
+  - [ ] Auto-resolution strategies
+  - [ ] Interactive merge assistance
+  - [ ] Rebase workflow support
 
-- [ ] **Phase 6**: Integration & Testing (Weeks 7-8)
-  - [ ] Comprehensive test suite
+- [ ] **Phase 6**: Production Readiness *(v1.0.0 - Target)*
+  - [ ] 90%+ test coverage
   - [ ] Performance optimization
-  - [ ] Documentation completion
-
-- [ ] **Phase 7**: gzh-cli Integration (Weeks 9-10)
-  - [ ] Library publication (v0.1.0)
-  - [ ] gzh-cli integration
-  - [ ] Release v1.0.0
+  - [ ] Complete documentation
+  - [ ] API stability guarantees
+  - [ ] Production-grade error handling
 
 **See full roadmap in [PRD.md](PRD.md)**
 

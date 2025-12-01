@@ -180,6 +180,12 @@ gz-git fetch --dry-run ~/projects
 # Filter by pattern
 gz-git fetch --include "myproject.*" ~/workspace
 gz-git fetch --exclude "test.*" ~/projects
+
+# Include git submodules in scan (default: exclude submodules)
+gz-git fetch --include-submodules ~/projects
+
+# Exclude submodules (default behavior)
+gz-git fetch ~/projects
 ```
 
 **Global Options:**

@@ -311,28 +311,36 @@ func (c *client) scanRepositoriesWithConfig(ctx context.Context, dir string, max
 	return repos, nil
 }
 
-// isSubmodule checks if a directory is a git submodule
+// isSubmodule checks if a directory is a git submodule.
+//
+// A git submodule is identified by having a .git FILE (not directory) that points
+// to the parent repository's .git/modules/ directory. This is the definitive way
+// to distinguish submodules from independent nested repositories.
+//
+// Independent nested repositories have their own .git DIRECTORY with a complete
+// git object database, whereas submodules only have a .git file containing a
+// reference like "gitdir: ../.git/modules/submodule-name".
+//
+// This distinction is important for scanning strategies:
+//   - Submodules should only be scanned when explicitly requested (--include-submodules)
+//   - Independent nested repos should always be found during recursive scans
+//
+// Returns true if dir is a git submodule, false otherwise.
 func isSubmodule(dir string) bool {
-	// Check if .git is a file (submodule) rather than a directory
+	// Primary check: If .git is a file (not directory), it's a submodule
 	gitPath := filepath.Join(dir, ".git")
 	info, err := os.Stat(gitPath)
 	if err != nil {
 		return false
 	}
 
-	// If .git is a file, it's a submodule
+	// If .git is a file, it's definitely a submodule
 	if !info.IsDir() {
 		return true
 	}
 
-	// Also check if parent has .gitmodules and references this dir
-	parent := filepath.Dir(dir)
-	gitmodulesPath := filepath.Join(parent, ".gitmodules")
-	if _, err := os.Stat(gitmodulesPath); err == nil {
-		// .gitmodules exists in parent, likely a submodule
-		return true
-	}
-
+	// If .git is a directory, it's an independent repository
+	// (Even if parent has .gitmodules, this repo has its own .git directory)
 	return false
 }
 
@@ -348,7 +356,22 @@ func (c *client) walkDirectory(ctx context.Context, dir string, depth, maxDepth 
 	})
 }
 
-// walkDirectoryWithConfig walks directories with configuration options
+// walkDirectoryWithConfig walks directories with configuration options to find git repositories.
+//
+// Scanning Strategy:
+//   - Always scans the root directory (depth 0) and its children
+//   - For repositories found at depth > 0:
+//     * If it's a submodule and config.includeSubmodules==false: skip its children
+//     * If it's a submodule and config.includeSubmodules==true: scan its children
+//     * If it's an independent nested repo: scan its children to find more nested repos
+//   - Respects maxDepth limit to prevent infinite recursion
+//   - Skips hidden directories (.git, node_modules, etc.) to improve performance
+//
+// This strategy ensures:
+//   - Independent nested repositories are always discovered
+//   - Submodules are only scanned when explicitly requested
+//   - Deeply nested repository structures are properly handled
+//
 func (c *client) walkDirectoryWithConfig(ctx context.Context, dir string, depth, maxDepth int, repos *[]string, mu *sync.Mutex, logger Logger, config walkDirectoryConfig) error {
 	// Check depth limit
 	if depth > maxDepth {
@@ -369,26 +392,26 @@ func (c *client) walkDirectoryWithConfig(ctx context.Context, dir string, depth,
 		mu.Unlock()
 		logger.Debug("found repository", "path", dir)
 
-		// Check if we should continue scanning subdirectories
-		// Only continue if:
-		// 1. IncludeSubmodules is true, OR
-		// 2. This is depth 0 (root directory), OR
-		// 3. This is not a submodule (independent nested repo)
-		if config.includeSubmodules {
-			// Continue scanning to find submodules
-			logger.Debug("continuing scan for submodules", "path", dir)
-		} else if depth == 0 {
-			// This is the starting directory, scan its children
-			logger.Debug("scanning children of root repository", "path", dir)
-		} else if !isSubmodule(dir) {
-			// This is an independent nested repository, not a submodule
-			// Don't scan its subdirectories (to avoid double-processing)
-			logger.Debug("found independent nested repository", "path", dir)
-			return nil
+		// Determine if we should continue scanning subdirectories
+		// Skip scanning children in these cases:
+		// 1. This is a submodule AND IncludeSubmodules is false
+		// 2. This is depth > 0 AND is an independent nested repo (to avoid recursing into nested repo's children)
+
+		if isSubmodule(dir) {
+			if !config.includeSubmodules {
+				// Skip submodule and its children
+				logger.Debug("skipping submodule", "path", dir)
+				return nil
+			}
+			// Include submodules, continue scanning
+			logger.Debug("including submodule", "path", dir)
+		} else if depth > 0 {
+			// This is an independent nested repository at depth > 0
+			// Continue scanning its children to find more nested repos
+			logger.Debug("found independent nested repository, continuing scan", "path", dir)
 		} else {
-			// This is a submodule and we're not including submodules
-			logger.Debug("skipping submodule", "path", dir)
-			return nil
+			// This is the root directory (depth 0), always scan its children
+			logger.Debug("scanning children of root repository", "path", dir)
 		}
 	}
 

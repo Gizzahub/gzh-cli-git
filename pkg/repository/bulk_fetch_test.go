@@ -264,6 +264,128 @@ func TestBulkFetchContextCancellation(t *testing.T) {
 	}
 }
 
+func TestBulkFetchNestedRepositories(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create parent repository
+	parentPath := filepath.Join(tmpDir, "parent")
+	if err := os.MkdirAll(parentPath, 0755); err != nil {
+		t.Fatalf("Failed to create parent: %v", err)
+	}
+	if err := initGitRepo(parentPath); err != nil {
+		t.Skipf("Skipping test: git not available: %v", err)
+	}
+
+	// Create first nested independent repository (not a submodule)
+	nested1Path := filepath.Join(parentPath, "nested-repo1")
+	if err := os.MkdirAll(nested1Path, 0755); err != nil {
+		t.Fatalf("Failed to create nested repo1: %v", err)
+	}
+	if err := initGitRepo(nested1Path); err != nil {
+		t.Skipf("Skipping test: git not available: %v", err)
+	}
+
+	// Create second nested independent repository
+	nested2Path := filepath.Join(parentPath, "nested-repo2")
+	if err := os.MkdirAll(nested2Path, 0755); err != nil {
+		t.Fatalf("Failed to create nested repo2: %v", err)
+	}
+	if err := initGitRepo(nested2Path); err != nil {
+		t.Skipf("Skipping test: git not available: %v", err)
+	}
+
+	// Create deeply nested repository (inside nested-repo1)
+	deepNestedPath := filepath.Join(nested1Path, "deep-nested")
+	if err := os.MkdirAll(deepNestedPath, 0755); err != nil {
+		t.Fatalf("Failed to create deep nested: %v", err)
+	}
+	if err := initGitRepo(deepNestedPath); err != nil {
+		t.Skipf("Skipping test: git not available: %v", err)
+	}
+
+	ctx := context.Background()
+	client := NewClient()
+
+	t.Run("Find all nested repositories", func(t *testing.T) {
+		opts := BulkFetchOptions{
+			Directory:         tmpDir,
+			MaxDepth:          5,
+			DryRun:            true,
+			IncludeSubmodules: false,
+			Logger:            NewNoopLogger(),
+		}
+
+		result, err := client.BulkFetch(ctx, opts)
+		if err != nil {
+			t.Fatalf("BulkFetch failed: %v", err)
+		}
+
+		// Should find all 4: parent, nested-repo1, nested-repo2, deep-nested
+		if result.TotalScanned != 4 {
+			t.Errorf("Expected 4 repositories, got %d", result.TotalScanned)
+			for _, repo := range result.Repositories {
+				t.Logf("Found: %s", repo.RelativePath)
+			}
+		}
+
+		// Verify all repos were found
+		foundParent := false
+		foundNested1 := false
+		foundNested2 := false
+		foundDeepNested := false
+
+		for _, repo := range result.Repositories {
+			base := filepath.Base(repo.Path)
+			switch base {
+			case "parent":
+				foundParent = true
+			case "nested-repo1":
+				foundNested1 = true
+			case "nested-repo2":
+				foundNested2 = true
+			case "deep-nested":
+				foundDeepNested = true
+			}
+		}
+
+		if !foundParent {
+			t.Error("Expected to find parent repo")
+		}
+		if !foundNested1 {
+			t.Error("Expected to find nested-repo1")
+		}
+		if !foundNested2 {
+			t.Error("Expected to find nested-repo2")
+		}
+		if !foundDeepNested {
+			t.Error("Expected to find deep-nested repo")
+		}
+	})
+
+	t.Run("Respect max depth limit", func(t *testing.T) {
+		opts := BulkFetchOptions{
+			Directory:         tmpDir,
+			MaxDepth:          2, // Should stop before reaching deep-nested
+			DryRun:            true,
+			IncludeSubmodules: false,
+			Logger:            NewNoopLogger(),
+		}
+
+		result, err := client.BulkFetch(ctx, opts)
+		if err != nil {
+			t.Fatalf("BulkFetch failed: %v", err)
+		}
+
+		// Should find parent, nested-repo1, nested-repo2 but NOT deep-nested (depth 3)
+		if result.TotalScanned != 3 {
+			t.Errorf("Expected 3 repositories with max-depth 2, got %d", result.TotalScanned)
+			for _, repo := range result.Repositories {
+				t.Logf("Found: %s", repo.RelativePath)
+			}
+		}
+	})
+}
+
 func TestBulkFetchEmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 

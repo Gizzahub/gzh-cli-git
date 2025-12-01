@@ -15,7 +15,7 @@ import (
 var (
 	// Version is the current library version following semantic versioning.
 	// Format: vMAJOR.MINOR.PATCH[-PRERELEASE]
-	Version = "0.2.0"
+	Version = "0.3.0"
 
 	// GitCommit is the git commit SHA of the build.
 	// This is set during the build process.

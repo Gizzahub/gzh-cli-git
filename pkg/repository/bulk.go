@@ -39,6 +39,10 @@ type BulkFetchOptions struct {
 	// Tags fetches all tags from remote
 	Tags bool
 
+	// IncludeSubmodules includes git submodules in the scan (default: false)
+	// When false, only scans for independent nested repositories
+	IncludeSubmodules bool
+
 	// IncludePattern is a regex pattern for repositories to include
 	IncludePattern string
 
@@ -122,6 +126,10 @@ type BulkUpdateOptions struct {
 
 	// NoFetch skips fetching from remote
 	NoFetch bool
+
+	// IncludeSubmodules includes git submodules in the scan (default: false)
+	// When false, only scans for independent nested repositories
+	IncludeSubmodules bool
 
 	// IncludePattern is a regex pattern for repositories to include
 	IncludePattern string
@@ -233,7 +241,9 @@ func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkU
 	logger.Info("scanning for repositories", "directory", opts.Directory, "maxDepth", opts.MaxDepth)
 
 	// Scan for repositories
-	repos, err := c.scanRepositories(ctx, opts.Directory, opts.MaxDepth, logger)
+	repos, err := c.scanRepositoriesWithConfig(ctx, opts.Directory, opts.MaxDepth, logger, walkDirectoryConfig{
+		includeSubmodules: opts.IncludeSubmodules,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan repositories: %w", err)
 	}
@@ -280,10 +290,17 @@ func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkU
 
 // scanRepositories recursively finds Git repositories
 func (c *client) scanRepositories(ctx context.Context, dir string, maxDepth int, logger Logger) ([]string, error) {
+	return c.scanRepositoriesWithConfig(ctx, dir, maxDepth, logger, walkDirectoryConfig{
+		includeSubmodules: false,
+	})
+}
+
+// scanRepositoriesWithConfig recursively finds Git repositories with configuration
+func (c *client) scanRepositoriesWithConfig(ctx context.Context, dir string, maxDepth int, logger Logger, config walkDirectoryConfig) ([]string, error) {
 	var repos []string
 	var mu sync.Mutex
 
-	err := c.walkDirectory(ctx, dir, 0, maxDepth, &repos, &mu, logger)
+	err := c.walkDirectoryWithConfig(ctx, dir, 0, maxDepth, &repos, &mu, logger, config)
 	if err != nil {
 		return nil, err
 	}
@@ -294,8 +311,45 @@ func (c *client) scanRepositories(ctx context.Context, dir string, maxDepth int,
 	return repos, nil
 }
 
+// isSubmodule checks if a directory is a git submodule
+func isSubmodule(dir string) bool {
+	// Check if .git is a file (submodule) rather than a directory
+	gitPath := filepath.Join(dir, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return false
+	}
+
+	// If .git is a file, it's a submodule
+	if !info.IsDir() {
+		return true
+	}
+
+	// Also check if parent has .gitmodules and references this dir
+	parent := filepath.Dir(dir)
+	gitmodulesPath := filepath.Join(parent, ".gitmodules")
+	if _, err := os.Stat(gitmodulesPath); err == nil {
+		// .gitmodules exists in parent, likely a submodule
+		return true
+	}
+
+	return false
+}
+
+// walkDirectoryConfig holds configuration for walkDirectory
+type walkDirectoryConfig struct {
+	includeSubmodules bool
+}
+
 // walkDirectory recursively walks directories to find Git repositories
 func (c *client) walkDirectory(ctx context.Context, dir string, depth, maxDepth int, repos *[]string, mu *sync.Mutex, logger Logger) error {
+	return c.walkDirectoryWithConfig(ctx, dir, depth, maxDepth, repos, mu, logger, walkDirectoryConfig{
+		includeSubmodules: false,
+	})
+}
+
+// walkDirectoryWithConfig walks directories with configuration options
+func (c *client) walkDirectoryWithConfig(ctx context.Context, dir string, depth, maxDepth int, repos *[]string, mu *sync.Mutex, logger Logger, config walkDirectoryConfig) error {
 	// Check depth limit
 	if depth > maxDepth {
 		return nil
@@ -314,7 +368,28 @@ func (c *client) walkDirectory(ctx context.Context, dir string, depth, maxDepth 
 		*repos = append(*repos, dir)
 		mu.Unlock()
 		logger.Debug("found repository", "path", dir)
-		return nil // Don't scan subdirectories of Git repos
+
+		// Check if we should continue scanning subdirectories
+		// Only continue if:
+		// 1. IncludeSubmodules is true, OR
+		// 2. This is depth 0 (root directory), OR
+		// 3. This is not a submodule (independent nested repo)
+		if config.includeSubmodules {
+			// Continue scanning to find submodules
+			logger.Debug("continuing scan for submodules", "path", dir)
+		} else if depth == 0 {
+			// This is the starting directory, scan its children
+			logger.Debug("scanning children of root repository", "path", dir)
+		} else if !isSubmodule(dir) {
+			// This is an independent nested repository, not a submodule
+			// Don't scan its subdirectories (to avoid double-processing)
+			logger.Debug("found independent nested repository", "path", dir)
+			return nil
+		} else {
+			// This is a submodule and we're not including submodules
+			logger.Debug("skipping submodule", "path", dir)
+			return nil
+		}
 	}
 
 	// Read directory entries
@@ -339,7 +414,7 @@ func (c *client) walkDirectory(ctx context.Context, dir string, depth, maxDepth 
 		}
 
 		subDir := filepath.Join(dir, name)
-		if err := c.walkDirectory(ctx, subDir, depth+1, maxDepth, repos, mu, logger); err != nil {
+		if err := c.walkDirectoryWithConfig(ctx, subDir, depth+1, maxDepth, repos, mu, logger, config); err != nil {
 			return err
 		}
 	}
@@ -610,7 +685,9 @@ func (c *client) BulkFetch(ctx context.Context, opts BulkFetchOptions) (*BulkFet
 	logger.Info("scanning for repositories", "directory", opts.Directory, "maxDepth", opts.MaxDepth)
 
 	// Scan for repositories
-	repos, err := c.scanRepositories(ctx, opts.Directory, opts.MaxDepth, logger)
+	repos, err := c.scanRepositoriesWithConfig(ctx, opts.Directory, opts.MaxDepth, logger, walkDirectoryConfig{
+		includeSubmodules: opts.IncludeSubmodules,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan repositories: %w", err)
 	}

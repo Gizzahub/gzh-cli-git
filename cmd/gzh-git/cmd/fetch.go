@@ -11,15 +11,16 @@ import (
 )
 
 var (
-	fetchMaxDepth   int
-	fetchParallel   int
-	fetchDryRun     bool
-	fetchAllRemotes bool
-	fetchPrune      bool
-	fetchTags       bool
-	fetchInclude    string
-	fetchExclude    string
-	fetchFormat     string
+	fetchMaxDepth         int
+	fetchParallel         int
+	fetchDryRun           bool
+	fetchAllRemotes       bool
+	fetchPrune            bool
+	fetchTags             bool
+	fetchIncludeSubmodules bool
+	fetchInclude          string
+	fetchExclude          string
+	fetchFormat           string
 )
 
 // fetchCmd represents the fetch command
@@ -82,6 +83,7 @@ func init() {
 	fetchCmd.Flags().BoolVar(&fetchAllRemotes, "all", false, "fetch from all remotes (not just origin)")
 	fetchCmd.Flags().BoolVar(&fetchPrune, "prune", false, "prune remote-tracking branches that no longer exist")
 	fetchCmd.Flags().BoolVar(&fetchTags, "tags", false, "fetch all tags from remote")
+	fetchCmd.Flags().BoolVar(&fetchIncludeSubmodules, "include-submodules", false, "include git submodules in scan")
 	fetchCmd.Flags().StringVar(&fetchInclude, "include", "", "regex pattern to include repositories")
 	fetchCmd.Flags().StringVar(&fetchExclude, "exclude", "", "regex pattern to exclude repositories")
 	fetchCmd.Flags().StringVar(&fetchFormat, "format", "default", "output format: default, compact")
@@ -116,17 +118,18 @@ func runFetch(cmd *cobra.Command, args []string) error {
 
 	// Build options
 	opts := repository.BulkFetchOptions{
-		Directory:      directory,
-		Parallel:       fetchParallel,
-		MaxDepth:       fetchMaxDepth,
-		DryRun:         fetchDryRun,
-		Verbose:        verbose,
-		AllRemotes:     fetchAllRemotes,
-		Prune:          fetchPrune,
-		Tags:           fetchTags,
-		IncludePattern: fetchInclude,
-		ExcludePattern: fetchExclude,
-		Logger:         logger,
+		Directory:         directory,
+		Parallel:          fetchParallel,
+		MaxDepth:          fetchMaxDepth,
+		DryRun:            fetchDryRun,
+		Verbose:           verbose,
+		AllRemotes:        fetchAllRemotes,
+		Prune:             fetchPrune,
+		Tags:              fetchTags,
+		IncludeSubmodules: fetchIncludeSubmodules,
+		IncludePattern:    fetchInclude,
+		ExcludePattern:    fetchExclude,
+		Logger:            logger,
 		ProgressCallback: func(current, total int, repo string) {
 			if !quiet && fetchFormat != "compact" {
 				fmt.Printf("[%d/%d] Fetching %s...\n", current, total, repo)

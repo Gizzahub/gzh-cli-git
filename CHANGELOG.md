@@ -80,13 +80,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-**CLI Improvements**:
+**CLI Improvements** - Ergonomic Shorthand Flags:
 
-- Simplified `--max-depth` flag to `-d, --depth` for better ergonomics
+- **Simplified `--max-depth` flag to `-d, --depth`** for better ergonomics
   - Shorter, more intuitive flag for frequently used command
   - Consistent with Unix conventions (du -d, fd -d)
   - Breaking change: `--max-depth` flag removed (clean breaking change)
   - Affects: `fetch` and `pull` commands
+
+- **Added GNU/Git convention shorthand flags** for common operations:
+  - `-j, --parallel`: Parallel operations (make -j convention)
+  - `-n, --dry-run`: Preview without executing (GNU convention)
+  - `-t, --tags`: Fetch all tags (git fetch -t convention)
+  - `-p, --prune`: Prune deleted remote branches (git convention)
+  - `-r, --recursive`: Renamed from `--include-submodules` (GNU convention)
+
+- **Renamed `--include-submodules` to `--recursive`**:
+  - More intuitive and follows GNU conventions (cp -r, grep -r)
+  - Applies to both fetch and pull commands
+  - Breaking change for better consistency
 
 ### Fixed
 

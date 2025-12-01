@@ -89,12 +89,12 @@ func init() {
 
 	// Flags
 	fetchCmd.Flags().IntVarP(&fetchDepth, "depth", "d", 5, "directory depth to scan")
-	fetchCmd.Flags().IntVar(&fetchParallel, "parallel", 5, "number of parallel fetch operations")
-	fetchCmd.Flags().BoolVar(&fetchDryRun, "dry-run", false, "show what would be fetched without fetching")
+	fetchCmd.Flags().IntVarP(&fetchParallel, "parallel", "j", 5, "number of parallel fetch operations")
+	fetchCmd.Flags().BoolVarP(&fetchDryRun, "dry-run", "n", false, "show what would be fetched without fetching")
 	fetchCmd.Flags().BoolVar(&fetchAllRemotes, "all", false, "fetch from all remotes (not just origin)")
 	fetchCmd.Flags().BoolVar(&fetchPrune, "prune", false, "prune remote-tracking branches that no longer exist")
-	fetchCmd.Flags().BoolVar(&fetchTags, "tags", false, "fetch all tags from remote")
-	fetchCmd.Flags().BoolVar(&fetchIncludeSubmodules, "include-submodules", false, "include git submodules in scan")
+	fetchCmd.Flags().BoolVarP(&fetchTags, "tags", "t", false, "fetch all tags from remote")
+	fetchCmd.Flags().BoolVarP(&fetchIncludeSubmodules, "recursive", "r", false, "recursively include nested repositories and submodules")
 	fetchCmd.Flags().StringVar(&fetchInclude, "include", "", "regex pattern to include repositories")
 	fetchCmd.Flags().StringVar(&fetchExclude, "exclude", "", "regex pattern to exclude repositories")
 	fetchCmd.Flags().StringVar(&fetchFormat, "format", "default", "output format: default, compact")

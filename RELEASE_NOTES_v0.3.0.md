@@ -72,7 +72,7 @@ Improved repository discovery with intelligent submodule handling:
 
 ## 🔄 Breaking Changes
 
-### CLI Flag Simplification
+### 1. CLI Flag Simplification
 
 **Changed:** `--max-depth` → `-d, --depth`
 
@@ -90,6 +90,41 @@ gz-git fetch -d 2
 - Clean breaking change with no deprecated flag support
 
 **Impact:** Affects `fetch` and `pull` commands
+
+### 2. Added Ergonomic Shorthand Flags
+
+Following GNU and Git conventions, we've added shorthand flags for frequently used options:
+
+**New Shorthand Flags:**
+
+| Flag | Short | Convention | Commands |
+|------|-------|-----------|----------|
+| `--parallel` | `-j` | make -j, xargs -P | fetch, pull |
+| `--dry-run` | `-n` | make -n, apt -s | fetch, pull |
+| `--tags` | `-t` | git fetch -t | fetch, pull |
+| `--prune` | `-p` | git prune | pull |
+| `--recursive` | `-r` | cp -r, grep -r | fetch, pull |
+
+**Examples:**
+
+```bash
+# Before (verbose)
+gz-git pull --parallel 10 --dry-run --tags --prune --recursive -d 2 ~/work
+
+# After (concise)
+gz-git pull -j 10 -n -t -p -r -d 2 ~/work
+```
+
+### 3. Renamed Flag for Consistency
+
+**Changed:** `--include-submodules` → `--recursive` (with `-r` shorthand)
+
+**Why:**
+- More intuitive and follows GNU conventions (cp -r, grep -r)
+- Shorter and more memorable
+- Consistent with industry-standard naming
+
+**Impact:** Affects both `fetch` and `pull` commands
 
 ## 🐛 Bug Fixes
 

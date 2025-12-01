@@ -93,13 +93,13 @@ func init() {
 
 	// Flags
 	pullCmd.Flags().IntVarP(&pullDepth, "depth", "d", 5, "directory depth to scan")
-	pullCmd.Flags().IntVar(&pullParallel, "parallel", 5, "number of parallel pull operations")
-	pullCmd.Flags().BoolVar(&pullDryRun, "dry-run", false, "show what would be pulled without pulling")
+	pullCmd.Flags().IntVarP(&pullParallel, "parallel", "j", 5, "number of parallel pull operations")
+	pullCmd.Flags().BoolVarP(&pullDryRun, "dry-run", "n", false, "show what would be pulled without pulling")
 	pullCmd.Flags().StringVarP(&pullStrategy, "strategy", "s", "merge", "pull strategy: merge, rebase, ff-only")
-	pullCmd.Flags().BoolVar(&pullPrune, "prune", false, "prune remote-tracking branches that no longer exist")
-	pullCmd.Flags().BoolVar(&pullTags, "tags", false, "fetch all tags from remote")
+	pullCmd.Flags().BoolVarP(&pullPrune, "prune", "p", false, "prune remote-tracking branches that no longer exist")
+	pullCmd.Flags().BoolVarP(&pullTags, "tags", "t", false, "fetch all tags from remote")
 	pullCmd.Flags().BoolVar(&pullStash, "stash", false, "automatically stash local changes before pull")
-	pullCmd.Flags().BoolVar(&pullIncludeSubmodules, "include-submodules", false, "include git submodules in scan")
+	pullCmd.Flags().BoolVarP(&pullIncludeSubmodules, "recursive", "r", false, "recursively include nested repositories and submodules")
 	pullCmd.Flags().StringVar(&pullInclude, "include", "", "regex pattern to include repositories")
 	pullCmd.Flags().StringVar(&pullExclude, "exclude", "", "regex pattern to exclude repositories")
 	pullCmd.Flags().StringVar(&pullFormat, "format", "default", "output format: default, compact")

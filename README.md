@@ -165,8 +165,8 @@ gz-git fetch -d 1
 # Fetch repositories up to 2 levels deep
 gz-git fetch -d 2 ~/projects
 
-# Fetch with custom parallelism
-gz-git fetch --parallel 10 ~/workspace
+# Fetch with custom parallelism (short: -j)
+gz-git fetch -j 10 ~/workspace
 
 # Fetch from all remotes (not just origin)
 gz-git fetch --all ~/projects
@@ -174,18 +174,18 @@ gz-git fetch --all ~/projects
 # Fetch and prune deleted remote branches
 gz-git fetch --prune ~/repos
 
-# Dry run to see what would be fetched
-gz-git fetch --dry-run ~/projects
+# Fetch all tags (short: -t)
+gz-git fetch -t ~/repos
+
+# Dry run to see what would be fetched (short: -n)
+gz-git fetch -n ~/projects
 
 # Filter by pattern
 gz-git fetch --include "myproject.*" ~/workspace
 gz-git fetch --exclude "test.*" ~/projects
 
-# Include git submodules in scan (default: exclude submodules)
-gz-git fetch --include-submodules ~/projects
-
-# Exclude submodules (default behavior)
-gz-git fetch ~/projects
+# Recursively include nested repositories and submodules (short: -r)
+gz-git fetch -r ~/projects
 
 # Watch mode: continuously fetch at intervals
 gz-git fetch -d 2 --watch --interval 5m ~/projects
@@ -200,23 +200,29 @@ gz-git pull -d 1
 # Pull repositories up to 2 levels deep
 gz-git pull -d 2 ~/projects
 
-# Pull with rebase strategy
-gz-git pull --strategy rebase -d 2 ~/projects
+# Pull with rebase strategy (short: -s)
+gz-git pull -s rebase -d 2 ~/projects
 
 # Pull with fast-forward only (fail if can't fast-forward)
-gz-git pull --strategy ff-only ~/projects
+gz-git pull -s ff-only ~/projects
 
-# Pull with custom parallelism
-gz-git pull --parallel 10 ~/workspace
+# Pull with custom parallelism (short: -j)
+gz-git pull -j 10 ~/workspace
 
 # Pull and automatically stash local changes
 gz-git pull --stash -d 2 ~/projects
 
-# Pull and prune deleted remote branches
-gz-git pull --prune ~/repos
+# Pull and prune deleted remote branches (short: -p)
+gz-git pull -p ~/repos
 
-# Dry run to see what would be pulled
-gz-git pull --dry-run ~/projects
+# Fetch all tags (short: -t)
+gz-git pull -t ~/repos
+
+# Dry run to see what would be pulled (short: -n)
+gz-git pull -n ~/projects
+
+# Recursively include nested repositories and submodules (short: -r)
+gz-git pull -r ~/projects
 
 # Filter by pattern
 gz-git pull --include "myproject.*" ~/workspace
@@ -228,7 +234,22 @@ gz-git pull --format compact ~/projects
 # Watch mode: continuously pull at intervals (default: 1m)
 gz-git pull -d 2 --watch ~/projects
 gz-git pull --watch --interval 5m ~/work
+
+# Combined example with multiple shorthand flags
+gz-git pull -s rebase -j 10 -n -t -p -r -d 2 ~/projects
 ```
+
+**Shorthand Flags Reference:**
+
+| Flag | Short | Description | Commands |
+|------|-------|-------------|----------|
+| `--depth` | `-d` | Directory depth to scan | fetch, pull |
+| `--parallel` | `-j` | Parallel operations (make -j convention) | fetch, pull |
+| `--dry-run` | `-n` | Preview without executing (GNU convention) | fetch, pull |
+| `--strategy` | `-s` | Pull strategy (merge/rebase/ff-only) | pull |
+| `--tags` | `-t` | Fetch all tags (git convention) | fetch, pull |
+| `--prune` | `-p` | Prune deleted remote branches (git convention) | pull |
+| `--recursive` | `-r` | Include nested repos/submodules (GNU convention) | fetch, pull |
 
 **Global Options:**
 ```bash

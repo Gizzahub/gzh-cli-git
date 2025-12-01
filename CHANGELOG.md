@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Bulk Pull Command** - Parallel Repository Pull with Merge Strategies:
+
+- `gz-git pull` command for bulk pulling from multiple repositories
+  - Three merge strategies: `merge` (default), `rebase`, `ff-only`
+  - Smart detection of remote and upstream configuration
+  - Automatic stash/pop for local changes with `--stash` flag
+  - Context-aware operations with ahead/behind tracking
+- CLI Features:
+  - `-d, --depth` flag for directory depth scanning
+  - `--strategy` flag: merge, rebase, ff-only
+  - `--stash` flag: auto-stash local changes before pull
+  - `--watch` mode: continuous pulling at intervals (default: 10m)
+  - `--dry-run`: preview without actual pull
+  - `--parallel`: concurrent pull operations (default: 5)
+  - `--include/--exclude`: regex filtering
+  - `--format`: default or compact output
+- Status icons: ✓ success, ✗ error, = up-to-date, ⚠ no-remote/no-upstream
+- Fills functionality gap between `fetch` (download only) and `update` (single repo)
+- Respects Git semantics: pull = fetch + merge/rebase
+
+**Watch Mode for Fetch** - Continuous Remote Monitoring:
+
+- `--watch` and `--interval` flags for fetch command
+  - Continuously fetches from multiple repositories at intervals
+  - Default interval: 5 minutes (appropriate for remote operations)
+  - Performs initial fetch immediately
+  - Graceful shutdown with Ctrl+C signal handling
+  - Continues watching even if individual fetch operations error
+- Usage:
+  - `gz-git fetch -d 2 --watch --interval 5m ~/projects`
+  - `gz-git fetch --watch --interval 1m ~/work`
+
 **Nested Repository Scanning** - Intelligent Multi-Level Repository Discovery:
 
 - `--include-submodules` flag for bulk fetch operations
@@ -43,6 +75,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tests max-depth limiting (stops at configured depth)
   - All nested repos correctly found and processed
 - Integration with existing 8 bulk fetch tests (all passing)
+
+### Changed
+
+**CLI Improvements**:
+
+- Simplified `--max-depth` flag to `-d, --depth` for better ergonomics
+  - Shorter, more intuitive flag for frequently used command
+  - Consistent with Unix conventions (du -d, fd -d)
+  - Breaking change: `--max-depth` flag removed (clean breaking change)
+  - Affects: `fetch` and `pull` commands
 
 ### Fixed
 

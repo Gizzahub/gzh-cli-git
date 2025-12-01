@@ -2,7 +2,7 @@
 
 > **Purpose**: Provide LLM with essential project context for code assistance and development
 > **Last Updated**: 2025-12-01
-> **Version**: v0.1.0-alpha
+> **Version**: v0.2.0
 
 ## Project Identity
 
@@ -34,9 +34,9 @@
 
 ## Current Implementation Status
 
-### ✅ Fully Implemented (v0.1.0-alpha)
+### ✅ Fully Implemented (v0.2.0)
 
-**ALL major features are implemented despite alpha versioning.**
+**ALL major features are implemented and functional.**
 
 **Repository Operations** (`pkg/repository/`):
 - `Open(ctx, path)` - Open existing repository
@@ -80,8 +80,6 @@ All commands functional - status, info, clone, update, branch, commit, history, 
 - 69.1% code coverage
 - Comprehensive integration tests
 
-> **Note**: Documentation previously marked these as "planned" but all are implemented. See docs/IMPLEMENTATION_STATUS.md
-
 ## Project Structure
 
 ```
@@ -92,10 +90,10 @@ gzh-cli-git/
 │   │   ├── client.go         # Implementation
 │   │   └── types.go          # Repository, Info, Status
 │   ├── operations/           # Git operations (clone, pull, fetch)
-│   ├── commit/               # [PLANNED] Commit automation
-│   ├── branch/               # [PLANNED] Branch management
-│   ├── history/              # [PLANNED] History analysis
-│   └── merge/                # [PLANNED] Merge/rebase
+│   ├── commit/               # Commit automation ✅
+│   ├── branch/               # Branch management ✅
+│   ├── history/              # History analysis ✅
+│   └── merge/                # Merge/rebase ✅
 │
 ├── internal/                 # INTERNAL (not exposed)
 │   ├── gitcmd/              # Git command execution
@@ -303,8 +301,8 @@ docs/
 ## Known Limitations
 
 1. **Git CLI Dependency**: Requires Git 2.30+ installed
-2. **Alpha Status**: API may change before v1.0.0
-3. **Limited Features**: Many features still in planning phase
+2. **Pre-v1.0.0 Status**: API may change before v1.0.0
+3. **Test Coverage**: 69.1% (target: 90% for v1.0.0)
 4. **No Windows Testing**: Primary development on macOS/Linux
 
 ## Development Workflow
@@ -329,8 +327,8 @@ docs/
 
 **When NOT to use:**
 - ❌ Need pure Go solution (no Git dependency)
-- ❌ Need production-stable library (wait for v1.0.0)
-- ❌ Advanced Git features not yet implemented
+- ❌ Need production-stable library with API guarantees (wait for v1.0.0)
+- ❌ Need Windows-tested code (primary development on macOS/Linux)
 
 ---
 

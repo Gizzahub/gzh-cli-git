@@ -22,7 +22,7 @@ gzh-cli-git doesn't replace Git—it enhances it:
 
 ### What features are currently available?
 
-**All Major Features Implemented (v0.1.0-alpha):**
+**All Major Features Implemented (v0.2.0):**
 
 ✅ **Repository Operations**
 - Clone with advanced options (branch, depth, single-branch, recursive)
@@ -57,7 +57,7 @@ gzh-cli-git doesn't replace Git—it enhances it:
 - Clean APIs with zero CLI dependencies
 - Context-aware operations
 
-> **Note**: Despite the v0.1.0-alpha version number, all major planned features are implemented. See [IMPLEMENTATION_STATUS](../../IMPLEMENTATION_STATUS.md) for details.
+> **Note**: Version v0.2.0 accurately reflects feature completeness. See [IMPLEMENTATION_STATUS](../../IMPLEMENTATION_STATUS.md) for historical context.
 
 ## Installation & Setup
 
@@ -211,10 +211,10 @@ See [Library Integration Guide](../LIBRARY.md) for more examples.
 
 ### Is the library API stable?
 
-Current status (v0.1.0-alpha):
+Current status (v0.2.0):
 - **All major APIs**: Implemented and functional
 - **Core packages**: repository, operations, commit, branch, history, merge
-- **Stability**: Alpha - API may change before v1.0.0
+- **Stability**: Pre-release - API may change before v1.0.0
 
 API stability guarantees:
 - Patch versions (0.1.x): No breaking changes
@@ -227,12 +227,12 @@ See [API Stability Policy](../API_STABILITY.md) for details.
 
 ### Can I use this in production?
 
-**Current version (v0.1.0-alpha)**: Use with caution
+**Current version (v0.2.0)**: Use with caution
 - ✅ All major features implemented and functional
 - ✅ Good test coverage (69.1%, 141 tests passing)
 - ✅ Comprehensive error handling
 - ⚠️ API may change before v1.0.0
-- ⚠️ Alpha versioning indicates ongoing development
+- ⚠️ Pre-release version indicates ongoing stabilization
 
 **Considerations:**
 - **For personal/internal projects**: Generally safe to use

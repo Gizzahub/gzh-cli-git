@@ -121,6 +121,11 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory does not exist: %s", directory)
 	}
 
+	// Validate depth
+	if cmd.Flags().Changed("depth") && pullDepth == 0 {
+		return fmt.Errorf("depth must be at least 1 (use --depth 1 to scan current directory and immediate subdirectories)")
+	}
+
 	// Create client
 	client := repository.NewClient()
 

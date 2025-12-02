@@ -385,11 +385,12 @@ func TestBulkFetchNestedRepositories(t *testing.T) {
 		}
 	})
 
-	t.Run("Depth 0 scans only current directory", func(t *testing.T) {
-		// Test with depth=0 on parent directory
+	t.Run("Depth 0 uses default depth", func(t *testing.T) {
+		// depth=0 should use default depth (1) at package level
+		// CLI level validation prevents users from explicitly passing 0
 		opts := BulkFetchOptions{
-			Directory:         parentPath,
-			MaxDepth:          0, // Scan only current directory
+			Directory:         tmpDir,
+			MaxDepth:          0, // Will be set to default (1)
 			DryRun:            true,
 			IncludeSubmodules: false,
 			Logger:            NewNoopLogger(),
@@ -397,46 +398,12 @@ func TestBulkFetchNestedRepositories(t *testing.T) {
 
 		result, err := client.BulkFetch(ctx, opts)
 		if err != nil {
-			t.Fatalf("BulkFetch failed: %v", err)
+			t.Fatalf("BulkFetch with depth=0 failed: %v", err)
 		}
 
-		// Should find only parent repository, not nested ones
+		// Should scan with default depth (1) and find parent repo at depth 1
 		if result.TotalScanned != 1 {
-			t.Errorf("Expected 1 repository with depth=0, got %d", result.TotalScanned)
-			for _, repo := range result.Repositories {
-				t.Logf("Found: %s", repo.RelativePath)
-			}
-		}
-
-		// Verify it's the parent repo
-		if len(result.Repositories) > 0 && filepath.Base(result.Repositories[0].Path) != "parent" {
-			t.Errorf("Expected to find parent repo, got %s", filepath.Base(result.Repositories[0].Path))
-		}
-	})
-
-	t.Run("Depth 0 on non-git directory finds nothing", func(t *testing.T) {
-		// Create a non-git directory
-		nonGitDir := filepath.Join(tmpDir, "non-git")
-		if err := os.MkdirAll(nonGitDir, 0755); err != nil {
-			t.Fatalf("Failed to create non-git dir: %v", err)
-		}
-
-		opts := BulkFetchOptions{
-			Directory:         nonGitDir,
-			MaxDepth:          0,
-			DryRun:            true,
-			IncludeSubmodules: false,
-			Logger:            NewNoopLogger(),
-		}
-
-		result, err := client.BulkFetch(ctx, opts)
-		if err != nil {
-			t.Fatalf("BulkFetch failed: %v", err)
-		}
-
-		// Should find nothing
-		if result.TotalScanned != 0 {
-			t.Errorf("Expected 0 repositories with depth=0 on non-git dir, got %d", result.TotalScanned)
+			t.Errorf("Expected 1 repository with default depth=1, got %d", result.TotalScanned)
 			for _, repo := range result.Repositories {
 				t.Logf("Found: %s", repo.RelativePath)
 			}

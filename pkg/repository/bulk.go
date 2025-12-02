@@ -424,7 +424,7 @@ func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkU
 	if opts.Parallel <= 0 {
 		opts.Parallel = DefaultBulkParallel
 	}
-	if opts.MaxDepth <= 0 {
+	if opts.MaxDepth < 0 {
 		opts.MaxDepth = DefaultBulkMaxDepth
 	}
 
@@ -891,7 +891,7 @@ func (c *client) BulkFetch(ctx context.Context, opts BulkFetchOptions) (*BulkFet
 	if opts.Parallel <= 0 {
 		opts.Parallel = DefaultBulkParallel
 	}
-	if opts.MaxDepth <= 0 {
+	if opts.MaxDepth < 0 {
 		opts.MaxDepth = DefaultBulkMaxDepth
 	}
 
@@ -1139,7 +1139,7 @@ func (c *client) BulkPull(ctx context.Context, opts BulkPullOptions) (*BulkPullR
 	if opts.Parallel <= 0 {
 		opts.Parallel = DefaultBulkParallel
 	}
-	if opts.MaxDepth <= 0 {
+	if opts.MaxDepth < 0 {
 		opts.MaxDepth = DefaultBulkMaxDepth
 	}
 	if opts.Strategy == "" {
@@ -1450,7 +1450,7 @@ func (c *client) BulkPush(ctx context.Context, opts BulkPushOptions) (*BulkPushR
 	if opts.Parallel <= 0 {
 		opts.Parallel = DefaultBulkParallel
 	}
-	if opts.MaxDepth <= 0 {
+	if opts.MaxDepth < 0 {
 		opts.MaxDepth = DefaultBulkMaxDepth
 	}
 

@@ -478,3 +478,41 @@ func TestContributorAnalyzer_ParseContributorStats_CommitsPerWeek(t *testing.T) 
 		t.Error("LastCommit should be after FirstCommit")
 	}
 }
+
+func TestEscapeRegexChars(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no special chars",
+			input: "user@example.com",
+			want:  "user@example.com",
+		},
+		{
+			name:  "bot email with brackets",
+			input: "49699333+dependabot[bot]@users.noreply.github.com",
+			want:  "49699333+dependabot\\[bot\\]@users.noreply.github.com",
+		},
+		{
+			name:  "multiple brackets",
+			input: "test[foo][bar]@example.com",
+			want:  "test\\[foo\\]\\[bar\\]@example.com",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := escapeRegexChars(tt.input)
+			if got != tt.want {
+				t.Errorf("escapeRegexChars(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

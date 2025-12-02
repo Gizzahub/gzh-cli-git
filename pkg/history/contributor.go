@@ -138,9 +138,26 @@ func (c *contributorAnalyzer) parseNameEmail(nameEmail string) (string, string) 
 	return name, email
 }
 
+// escapeRegexChars escapes regex special characters for git --author matching.
+// Git uses regex patterns for author matching, so emails containing [, ] etc.
+// (common in bot accounts like dependabot[bot]) need to be escaped.
+// Note: We only escape brackets since they cause matching failures with bot emails.
+// Characters like +, . work fine without escaping in git's author matching.
+func escapeRegexChars(s string) string {
+	// Only escape brackets - the main issue with bot emails like dependabot[bot]
+	result := strings.ReplaceAll(s, "[", "\\[")
+	result = strings.ReplaceAll(result, "]", "\\]")
+	return result
+}
+
 func (c *contributorAnalyzer) enrichContributor(ctx context.Context, repo *repository.Repository, contributor *Contributor, opts ContributorOptions) error {
+	// Escape regex special characters in email for git --author matching
+	// Git uses regex patterns, so [, ], etc. need escaping
+	escapedEmail := escapeRegexChars(contributor.Email)
+
 	// Build git log command for this contributor
-	args := []string{"log", "--author=" + contributor.Email, "--format=%ct", "--numstat"}
+	// Use --all to include commits from all branches (matches shortlog --all behavior)
+	args := []string{"log", "--all", "--author=" + escapedEmail, "--format=%ct", "--numstat"}
 
 	if !opts.Since.IsZero() {
 		args = append(args, fmt.Sprintf("--since=%s", opts.Since.Format(time.RFC3339)))

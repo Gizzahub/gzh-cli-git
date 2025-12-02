@@ -66,7 +66,7 @@ func TestBulkPush(t *testing.T) {
 	opts := BulkPushOptions{
 		Directory: tmpDir,
 		Parallel:  2,
-		MaxDepth:  1,
+		MaxDepth:  2, // Scan tmpDir (depth 0) + immediate children (depth 1)
 		DryRun:    true, // Use dry-run for test
 		Verbose:   false,
 		Logger:    NewNoopLogger(),
@@ -123,7 +123,7 @@ func TestBulkPushWithFilters(t *testing.T) {
 	t.Run("Include pattern", func(t *testing.T) {
 		opts := BulkPushOptions{
 			Directory:      tmpDir,
-			MaxDepth:       1,
+			MaxDepth:       2,
 			DryRun:         true,
 			IncludePattern: "myproject.*",
 			Logger:         NewNoopLogger(),
@@ -142,7 +142,7 @@ func TestBulkPushWithFilters(t *testing.T) {
 	t.Run("Exclude pattern", func(t *testing.T) {
 		opts := BulkPushOptions{
 			Directory:      tmpDir,
-			MaxDepth:       1,
+			MaxDepth:       2,
 			DryRun:         true,
 			ExcludePattern: "test.*",
 			Logger:         NewNoopLogger(),
@@ -179,7 +179,7 @@ func TestBulkPushOptions(t *testing.T) {
 	t.Run("Empty directory uses current directory", func(t *testing.T) {
 		opts := BulkPushOptions{
 			Directory: "",
-			MaxDepth:  1,
+			MaxDepth:  2,
 			DryRun:    true,
 		}
 
@@ -212,7 +212,7 @@ func TestBulkPushProgressCallback(t *testing.T) {
 	callbackCalled := false
 	opts := BulkPushOptions{
 		Directory: tmpDir,
-		MaxDepth:  1,
+		MaxDepth:  2,
 		DryRun:    true,
 		Logger:    NewNoopLogger(),
 		ProgressCallback: func(current, total int, repo string) {
@@ -253,7 +253,7 @@ func TestBulkPushContextCancellation(t *testing.T) {
 
 	opts := BulkPushOptions{
 		Directory: tmpDir,
-		MaxDepth:  1,
+		MaxDepth:  2,
 		DryRun:    true,
 		Logger:    NewNoopLogger(),
 	}
@@ -365,9 +365,18 @@ func TestBulkPushNestedRepositories(t *testing.T) {
 	})
 
 	t.Run("Respect max depth limit", func(t *testing.T) {
+		// Directory structure from tmpDir:
+		// tmpDir/                    (depth 0, not a repo)
+		// └── parent/                (depth 1, repo)
+		//     ├── nested-repo1/      (depth 2, repo)
+		//     │   └── deep-nested/   (depth 3, repo)
+		//     └── nested-repo2/      (depth 2, repo)
+		//
+		// maxDepth=3 should find: parent (d1), nested-repo1 (d2), nested-repo2 (d2)
+		// but NOT deep-nested (d3) because we only scan UP TO depth 2 (maxDepth-1)
 		opts := BulkPushOptions{
 			Directory:         tmpDir,
-			MaxDepth:          2, // Should stop before reaching deep-nested
+			MaxDepth:          3, // Scan depths 0, 1, 2 (not 3)
 			DryRun:            true,
 			IncludeSubmodules: false,
 			Logger:            NewNoopLogger(),
@@ -378,9 +387,9 @@ func TestBulkPushNestedRepositories(t *testing.T) {
 			t.Fatalf("BulkPush failed: %v", err)
 		}
 
-		// Should find parent, nested-repo1, nested-repo2 but NOT deep-nested (depth 3)
+		// Should find parent, nested-repo1, nested-repo2 but NOT deep-nested
 		if result.TotalScanned != 3 {
-			t.Errorf("Expected 3 repositories with max-depth 2, got %d", result.TotalScanned)
+			t.Errorf("Expected 3 repositories with max-depth 3, got %d", result.TotalScanned)
 			for _, repo := range result.Repositories {
 				t.Logf("Found: %s", repo.RelativePath)
 			}
@@ -388,11 +397,12 @@ func TestBulkPushNestedRepositories(t *testing.T) {
 	})
 
 	t.Run("Depth 0 uses default depth", func(t *testing.T) {
-		// depth=0 should use default depth (1) at package level
+		// depth=0 should use default depth at package level (DefaultBulkMaxDepth=2)
 		// CLI level validation prevents users from explicitly passing 0
+		// maxDepth=2 scans depths 0 and 1, so finds parent repo at depth 1
 		opts := BulkPushOptions{
 			Directory:         tmpDir,
-			MaxDepth:          0, // Will be set to default (1)
+			MaxDepth:          0, // Will be set to default (DefaultBulkMaxDepth=2)
 			DryRun:            true,
 			IncludeSubmodules: false,
 			Logger:            NewNoopLogger(),
@@ -403,9 +413,10 @@ func TestBulkPushNestedRepositories(t *testing.T) {
 			t.Fatalf("BulkPush with depth=0 failed: %v", err)
 		}
 
-		// Should scan with default depth (1) and find parent repo at depth 1
+		// depth=0 is set to DefaultBulkMaxDepth (2), which scans depths 0 and 1
+		// parent repo is at depth 1, so 1 repo is found
 		if result.TotalScanned != 1 {
-			t.Errorf("Expected 1 repository with default depth=1, got %d", result.TotalScanned)
+			t.Errorf("Expected 1 repository with default depth=2, got %d", result.TotalScanned)
 			for _, repo := range result.Repositories {
 				t.Logf("Found: %s", repo.RelativePath)
 			}
@@ -421,7 +432,7 @@ func TestBulkPushEmptyDirectory(t *testing.T) {
 
 	opts := BulkPushOptions{
 		Directory: tmpDir,
-		MaxDepth:  1,
+		MaxDepth:  2,
 		DryRun:    true,
 		Logger:    NewNoopLogger(),
 	}
@@ -524,7 +535,7 @@ func TestBulkPushNoRemote(t *testing.T) {
 
 	opts := BulkPushOptions{
 		Directory: tmpDir,
-		MaxDepth:  1,
+		MaxDepth:  2,
 		DryRun:    false, // Try actual push
 		Logger:    NewNoopLogger(),
 	}
@@ -562,7 +573,7 @@ func BenchmarkBulkPushSingleRepo(b *testing.B) {
 
 	opts := BulkPushOptions{
 		Directory: tmpDir,
-		MaxDepth:  1,
+		MaxDepth:  2,
 		DryRun:    true,
 		Logger:    NewNoopLogger(),
 	}
@@ -595,7 +606,7 @@ func BenchmarkBulkPushMultipleRepos(b *testing.B) {
 
 	opts := BulkPushOptions{
 		Directory: tmpDir,
-		MaxDepth:  1,
+		MaxDepth:  2,
 		DryRun:    true,
 		Parallel:  5,
 		Logger:    NewNoopLogger(),
@@ -678,7 +689,7 @@ func BenchmarkPushParallelProcessing(b *testing.B) {
 		b.Run("Parallel"+string(rune('0'+parallel/10))+string(rune('0'+parallel%10)), func(b *testing.B) {
 			opts := BulkPushOptions{
 				Directory: tmpDir,
-				MaxDepth:  1,
+				MaxDepth:  2,
 				DryRun:    true,
 				Parallel:  parallel,
 				Logger:    NewNoopLogger(),

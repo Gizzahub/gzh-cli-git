@@ -9,7 +9,10 @@ const (
 	DefaultBulkParallel = 5
 
 	// DefaultBulkMaxDepth is the default maximum directory depth to scan
-	DefaultBulkMaxDepth = 1
+	// maxDepth=1 scans only the root directory (depth 0)
+	// maxDepth=2 scans root + immediate children (depth 0, 1)
+	// Default is 2 to find repositories in immediate subdirectories
+	DefaultBulkMaxDepth = 2
 )
 
 // OperationType represents the type of Git operation being performed.

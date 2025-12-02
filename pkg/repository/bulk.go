@@ -615,9 +615,11 @@ func (c *client) walkDirectoryWithConfig(ctx context.Context, dir string, depth,
 	}
 
 	// Check depth limit before scanning subdirectories
-	// This allows scanning the current directory even at maxDepth,
-	// but prevents descending into subdirectories beyond maxDepth
-	if depth >= maxDepth {
+	// depth starts at 0 (root directory)
+	// maxDepth=1 means only scan the root directory (depth 0)
+	// maxDepth=2 means scan root (depth 0) + immediate children (depth 1)
+	// So we stop scanning children when depth+1 >= maxDepth
+	if depth+1 >= maxDepth {
 		return nil
 	}
 

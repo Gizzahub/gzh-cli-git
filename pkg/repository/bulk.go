@@ -673,7 +673,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 	// Open repository
 	repo, err := c.Open(ctx, repoPath)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to open repository"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -683,7 +683,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 	// Get repository info
 	info, err := c.GetInfo(ctx, repo)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to get repository info"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -698,7 +698,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 	// Get status
 	status, err := c.GetStatus(ctx, repo)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to get repository status"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -709,21 +709,21 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 
 	// Check if update is safe
 	if result.HasUncommittedChanges {
-		result.Status = "skipped"
+		result.Status = StatusSkipped
 		result.Message = "Has uncommitted changes - manual intervention required"
 		result.Duration = time.Since(startTime)
 		return result
 	}
 
 	if info.BehindBy == 0 {
-		result.Status = "up-to-date"
+		result.Status = StatusUpToDate
 		result.Message = "Already up to date"
 		result.Duration = time.Since(startTime)
 		return result
 	}
 
 	if info.Upstream == "" {
-		result.Status = "no-upstream"
+		result.Status = StatusNoUpstream
 		result.Message = "No upstream branch configured"
 		result.Duration = time.Since(startTime)
 		return result
@@ -731,7 +731,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 
 	// Dry run - don't actually update
 	if opts.DryRun {
-		result.Status = "would-update"
+		result.Status = StatusWouldUpdate
 		result.Message = fmt.Sprintf("Would pull %d commits", info.BehindBy)
 		result.Duration = time.Since(startTime)
 		return result
@@ -740,7 +740,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 	// Perform pull --rebase
 	pullResult, err := c.executor.Run(ctx, repoPath, "pull", "--rebase")
 	if err != nil || pullResult.ExitCode != 0 {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Pull failed"
 		if err != nil {
 			result.Error = err
@@ -751,7 +751,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 		return result
 	}
 
-	result.Status = "updated"
+	result.Status = StatusUpdated
 	result.Message = fmt.Sprintf("Successfully pulled %d commits", info.BehindBy)
 	result.Duration = time.Since(startTime)
 
@@ -912,7 +912,7 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 	// Open repository
 	repo, err := c.Open(ctx, repoPath)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to open repository"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -922,7 +922,7 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 	// Get repository info
 	info, err := c.GetInfo(ctx, repo)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to get repository info"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -934,7 +934,7 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 
 	// Check if repository has remote
 	if info.RemoteURL == "" {
-		result.Status = "no-remote"
+		result.Status = StatusNoRemote
 		result.Message = "No remote configured"
 		result.Duration = time.Since(startTime)
 		return result
@@ -942,7 +942,7 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 
 	// Dry run - don't actually fetch
 	if opts.DryRun {
-		result.Status = "would-fetch"
+		result.Status = StatusWouldFetch
 		result.Message = "Would fetch from remote"
 		result.Duration = time.Since(startTime)
 		return result
@@ -972,7 +972,7 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 	// Perform fetch
 	fetchResult, err := c.executor.Run(ctx, repoPath, fetchArgs...)
 	if err != nil || fetchResult.ExitCode != 0 {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Fetch failed"
 		if err != nil {
 			result.Error = err
@@ -991,22 +991,22 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 
 		// Update status based on behind/ahead state
 		if result.CommitsBehind > 0 {
-			result.Status = "updated"
+			result.Status = StatusUpdated
 			if result.CommitsAhead > 0 {
 				result.Message = fmt.Sprintf("Fetched updates: %d behind, %d ahead", result.CommitsBehind, result.CommitsAhead)
 			} else {
 				result.Message = fmt.Sprintf("Fetched updates: %d behind", result.CommitsBehind)
 			}
 		} else if result.CommitsAhead > 0 {
-			result.Status = "up-to-date"
+			result.Status = StatusUpToDate
 			result.Message = fmt.Sprintf("Up to date: %d ahead", result.CommitsAhead)
 		} else {
-			result.Status = "up-to-date"
+			result.Status = StatusUpToDate
 			result.Message = "Already up to date"
 		}
 	} else {
 		// Fallback if GetInfo fails
-		result.Status = "success"
+		result.Status = StatusSuccess
 		result.Message = "Successfully fetched from remote"
 	}
 
@@ -1173,7 +1173,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	// Open repository
 	repo, err := c.Open(ctx, repoPath)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to open repository"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -1183,7 +1183,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	// Get repository info
 	info, err := c.GetInfo(ctx, repo)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to get repository info"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -1197,7 +1197,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 
 	// Check if repository has remote
 	if info.RemoteURL == "" {
-		result.Status = "no-remote"
+		result.Status = StatusNoRemote
 		result.Message = "No remote configured"
 		result.Duration = time.Since(startTime)
 		return result
@@ -1205,7 +1205,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 
 	// Check if repository has upstream
 	if info.Upstream == "" {
-		result.Status = "no-upstream"
+		result.Status = StatusNoUpstream
 		result.Message = "No upstream branch configured"
 		result.Duration = time.Since(startTime)
 		return result
@@ -1214,7 +1214,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	// Check repository status
 	status, err := c.GetStatus(ctx, repo)
 	if err != nil {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Failed to get repository status"
 		result.Error = err
 		result.Duration = time.Since(startTime)
@@ -1226,7 +1226,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 		stashArgs := []string{"stash", "push", "-m", "Auto-stash by gz-git pull"}
 		stashResult, err := c.executor.Run(ctx, repoPath, stashArgs...)
 		if err != nil || stashResult.ExitCode != 0 {
-			result.Status = "error"
+			result.Status = StatusError
 			result.Message = "Failed to stash local changes"
 			if err != nil {
 				result.Error = err
@@ -1243,10 +1243,10 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	// Dry run - don't actually pull
 	if opts.DryRun {
 		if result.CommitsBehind > 0 {
-			result.Status = "would-pull"
+			result.Status = StatusWouldPull
 			result.Message = fmt.Sprintf("Would pull %d commit(s) from remote", result.CommitsBehind)
 		} else {
-			result.Status = "up-to-date"
+			result.Status = StatusUpToDate
 			result.Message = "Already up to date"
 		}
 		result.Duration = time.Since(startTime)
@@ -1255,7 +1255,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 
 	// Check if already up to date
 	if result.CommitsBehind == 0 {
-		result.Status = "up-to-date"
+		result.Status = StatusUpToDate
 		result.Message = "Already up to date"
 		result.Duration = time.Since(startTime)
 		return result
@@ -1289,7 +1289,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	// Perform pull
 	pullResult, err := c.executor.Run(ctx, repoPath, pullArgs...)
 	if err != nil || pullResult.ExitCode != 0 {
-		result.Status = "error"
+		result.Status = StatusError
 		result.Message = "Pull failed"
 		if err != nil {
 			result.Error = err
@@ -1307,7 +1307,7 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 		return result
 	}
 
-	result.Status = "success"
+	result.Status = StatusSuccess
 	result.Message = fmt.Sprintf("Successfully pulled %d commit(s) from remote", result.CommitsBehind)
 	result.Duration = time.Since(startTime)
 

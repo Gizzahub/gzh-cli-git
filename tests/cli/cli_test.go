@@ -1,5 +1,5 @@
-// Package integration provides end-to-end integration tests for gzh-git CLI.
-package integration
+// Package cli provides CLI binary integration tests for gzh-git.
+package cli
 
 import (
 	"os"
@@ -9,9 +9,14 @@ import (
 	"testing"
 )
 
+func getBinaryPath() string {
+	// Get the module root directory
+	return filepath.Join("..", "..", "gzh-git")
+}
+
 // TestCLIVersion tests the version command.
 func TestCLIVersion(t *testing.T) {
-	cmd := exec.Command("../../gzh-git", "--version")
+	cmd := exec.Command(getBinaryPath(), "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run version command: %v\nOutput: %s", err, output)
@@ -25,7 +30,7 @@ func TestCLIVersion(t *testing.T) {
 
 // TestCLIHelp tests the help command.
 func TestCLIHelp(t *testing.T) {
-	cmd := exec.Command("../../gzh-git", "--help")
+	cmd := exec.Command(getBinaryPath(), "--help")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run help command: %v\nOutput: %s", err, output)
@@ -50,7 +55,7 @@ func TestCLIHelp(t *testing.T) {
 func TestCLIStatus(t *testing.T) {
 	// Change to repository root
 	repoRoot := filepath.Join("..", "..")
-	cmd := exec.Command("../../gzh-git", "status", repoRoot)
+	cmd := exec.Command(getBinaryPath(), "status", repoRoot)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run status command: %v\nOutput: %s", err, output)
@@ -67,7 +72,7 @@ func TestCLIStatus(t *testing.T) {
 func TestCLIInfo(t *testing.T) {
 	// Change to repository root
 	repoRoot := filepath.Join("..", "..")
-	cmd := exec.Command("../../gzh-git", "info", repoRoot)
+	cmd := exec.Command(getBinaryPath(), "info", repoRoot)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to run info command: %v\nOutput: %s", err, output)
@@ -94,7 +99,7 @@ func TestCLIClone(t *testing.T) {
 	destination := filepath.Join(tmpDir, "test-clone")
 
 	// Clone a small, well-known repository
-	cmd := exec.Command("../../gzh-git", "clone",
+	cmd := exec.Command(getBinaryPath(), "clone",
 		"--depth", "1",
 		"--single-branch",
 		"https://github.com/golang/example.git",
@@ -161,7 +166,7 @@ func TestCLIStatusQuietClean(t *testing.T) {
 	}
 
 	// Run status command with --quiet flag
-	cmd := exec.Command("../../gzh-git", "status", "--quiet", tmpDir)
+	cmd := exec.Command(getBinaryPath(), "status", "--quiet", tmpDir)
 	output, err := cmd.CombinedOutput()
 
 	// For a clean repository, exit code should be 0
@@ -196,7 +201,7 @@ func TestCLIStatusQuietDirty(t *testing.T) {
 	}
 
 	// Run status command with --quiet flag
-	cmd := exec.Command("../../gzh-git", "status", "--quiet", tmpDir)
+	cmd := exec.Command(getBinaryPath(), "status", "--quiet", tmpDir)
 	output, err := cmd.CombinedOutput()
 
 	// For a dirty repository, exit code should be 1
@@ -212,7 +217,7 @@ func TestCLIStatusQuietDirty(t *testing.T) {
 
 // TestCLIInvalidCommand tests behavior with invalid command.
 func TestCLIInvalidCommand(t *testing.T) {
-	cmd := exec.Command("../../gzh-git", "invalid-command")
+	cmd := exec.Command(getBinaryPath(), "invalid-command")
 	output, err := cmd.CombinedOutput()
 
 	// Should fail with non-zero exit code
@@ -231,7 +236,7 @@ func TestCLICloneInvalidURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	destination := filepath.Join(tmpDir, "invalid-clone")
 
-	cmd := exec.Command("../../gzh-git", "clone", "not-a-valid-url", destination)
+	cmd := exec.Command(getBinaryPath(), "clone", "not-a-valid-url", destination)
 	output, err := cmd.CombinedOutput()
 
 	// Should fail with non-zero exit code

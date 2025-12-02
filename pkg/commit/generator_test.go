@@ -196,20 +196,20 @@ func TestGenerator_InferScope(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "pkg directory - top level",
+			name: "pkg directory - second level wins alphabetically",
 			changes: &DiffSummary{
 				FilesChanged:  2,
 				ModifiedFiles: []string{"pkg/commit/template.go", "pkg/commit/validator.go"},
 			},
-			want: "pkg", // Top-level directory wins in count
+			want: "commit", // "commit" < "pkg" alphabetically, both have count 2
 		},
 		{
-			name: "cmd directory - top level",
+			name: "cmd directory - alphabetically first wins when equal count",
 			changes: &DiffSummary{
 				FilesChanged:  2,
 				ModifiedFiles: []string{"cmd/cli/main.go", "cmd/cli/flags.go"},
 			},
-			want: "cmd", // Top-level directory wins in count
+			want: "cli", // "cli" < "cmd" alphabetically, both have count 2
 		},
 		{
 			name: "simple directory",

@@ -290,11 +290,11 @@ func (g *generator) inferScope(changes *DiffSummary) string {
 		}
 	}
 
-	// Find most common directory
+	// Find most common directory (prefer alphabetically first when counts equal for determinism)
 	maxCount := 0
 	scope := ""
 	for dir, count := range dirCount {
-		if count > maxCount {
+		if count > maxCount || (count == maxCount && (scope == "" || dir < scope)) {
 			maxCount = count
 			scope = dir
 		}

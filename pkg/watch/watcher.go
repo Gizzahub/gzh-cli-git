@@ -144,30 +144,32 @@ func (w *watcher) Errors() <-chan error {
 
 // Stop stops the watcher and closes all channels.
 func (w *watcher) Stop() error {
+	// Cancel context and close fsnotify first (under lock)
 	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if w.cancel != nil {
 		w.cancel()
 	}
 
 	// Close fsnotify
+	var closeErr error
 	if w.fswatch != nil {
 		if err := w.fswatch.Close(); err != nil {
-			return fmt.Errorf("failed to close file watcher: %w", err)
+			closeErr = fmt.Errorf("failed to close file watcher: %w", err)
 		}
 	}
+	w.mu.Unlock()
 
-	// Wait for event loop to finish
+	// Wait for event loop to finish (without holding lock to avoid deadlock)
+	// The eventLoop may call findRepoForPath which needs RLock
 	w.wg.Wait()
 
-	// Close channels
+	// Close channels (safe after eventLoop is done)
 	close(w.events)
 	close(w.errors)
 
 	w.logger.Info("Stopped watching all repositories")
 
-	return nil
+	return closeErr
 }
 
 // eventLoop is the main event processing loop.

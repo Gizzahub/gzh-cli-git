@@ -386,6 +386,31 @@ func TestBulkPushNestedRepositories(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("Depth 0 uses default depth", func(t *testing.T) {
+		// depth=0 should use default depth (1) at package level
+		// CLI level validation prevents users from explicitly passing 0
+		opts := BulkPushOptions{
+			Directory:         tmpDir,
+			MaxDepth:          0, // Will be set to default (1)
+			DryRun:            true,
+			IncludeSubmodules: false,
+			Logger:            NewNoopLogger(),
+		}
+
+		result, err := client.BulkPush(ctx, opts)
+		if err != nil {
+			t.Fatalf("BulkPush with depth=0 failed: %v", err)
+		}
+
+		// Should scan with default depth (1) and find parent repo at depth 1
+		if result.TotalScanned != 1 {
+			t.Errorf("Expected 1 repository with default depth=1, got %d", result.TotalScanned)
+			for _, repo := range result.Repositories {
+				t.Logf("Found: %s", repo.RelativePath)
+			}
+		}
+	})
 }
 
 func TestBulkPushEmptyDirectory(t *testing.T) {

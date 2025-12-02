@@ -381,3 +381,276 @@ func TestRemoveOptions_Defaults(t *testing.T) {
 		t.Error("Force should default to false")
 	}
 }
+
+func TestWorktreeManager_ParseWorktreeList_BareRepo(t *testing.T) {
+	mgr := &worktreeManager{}
+
+	// Bare repo output
+	output := `worktree /home/user/projects/myapp.git
+HEAD abc1234567890
+bare
+
+`
+
+	worktrees, err := mgr.parseWorktreeList(output)
+	if err != nil {
+		t.Fatalf("parseWorktreeList() error = %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("len(worktrees) = %d, want 1", len(worktrees))
+	}
+
+	if !worktrees[0].IsBare {
+		t.Error("worktrees[0].IsBare should be true")
+	}
+}
+
+func TestWorktreeManager_ParseWorktreeList_LockedWithReason(t *testing.T) {
+	mgr := &worktreeManager{}
+
+	output := `worktree /home/user/work/locked
+HEAD abc1234567890
+branch refs/heads/feature/x
+locked reason: being used elsewhere
+
+`
+
+	worktrees, err := mgr.parseWorktreeList(output)
+	if err != nil {
+		t.Fatalf("parseWorktreeList() error = %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("len(worktrees) = %d, want 1", len(worktrees))
+	}
+
+	if !worktrees[0].IsLocked {
+		t.Error("worktrees[0].IsLocked should be true")
+	}
+}
+
+func TestWorktreeManager_ParseWorktreeList_LockedSimple(t *testing.T) {
+	mgr := &worktreeManager{}
+
+	output := `worktree /home/user/work/locked
+HEAD abc1234567890
+branch refs/heads/feature/x
+locked
+
+`
+
+	worktrees, err := mgr.parseWorktreeList(output)
+	if err != nil {
+		t.Fatalf("parseWorktreeList() error = %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("len(worktrees) = %d, want 1", len(worktrees))
+	}
+
+	if !worktrees[0].IsLocked {
+		t.Error("worktrees[0].IsLocked should be true")
+	}
+}
+
+func TestWorktreeManager_ParseWorktreeList_PrunableWithReason(t *testing.T) {
+	mgr := &worktreeManager{}
+
+	output := `worktree /home/user/work/orphan
+HEAD abc1234567890
+branch refs/heads/feature/orphan
+prunable reason: gitdir file points to non-existent location
+
+`
+
+	worktrees, err := mgr.parseWorktreeList(output)
+	if err != nil {
+		t.Fatalf("parseWorktreeList() error = %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("len(worktrees) = %d, want 1", len(worktrees))
+	}
+
+	if !worktrees[0].IsPrunable {
+		t.Error("worktrees[0].IsPrunable should be true")
+	}
+}
+
+func TestWorktreeManager_ParseWorktreeList_MultipleWorktrees(t *testing.T) {
+	mgr := &worktreeManager{}
+
+	output := `worktree /home/user/projects/main
+HEAD abc1234567890
+branch refs/heads/main
+
+worktree /home/user/work/feature-a
+HEAD def4567890123
+branch refs/heads/feature/a
+
+worktree /home/user/work/feature-b
+HEAD ghi7890123456
+branch refs/heads/feature/b
+locked
+
+worktree /home/user/work/detached
+HEAD jkl0123456789
+detached
+
+worktree /home/user/work/orphan
+HEAD mno3456789012
+branch refs/heads/feature/orphan
+prunable
+
+`
+
+	worktrees, err := mgr.parseWorktreeList(output)
+	if err != nil {
+		t.Fatalf("parseWorktreeList() error = %v", err)
+	}
+
+	if len(worktrees) != 5 {
+		t.Fatalf("len(worktrees) = %d, want 5", len(worktrees))
+	}
+
+	// Check main worktree
+	if !worktrees[0].IsMain {
+		t.Error("first worktree should be main")
+	}
+
+	// Check locked worktree (feature-b)
+	if !worktrees[2].IsLocked {
+		t.Error("feature-b should be locked")
+	}
+
+	// Check detached worktree
+	if !worktrees[3].IsDetached {
+		t.Error("detached worktree should have IsDetached=true")
+	}
+
+	// Check prunable worktree
+	if !worktrees[4].IsPrunable {
+		t.Error("orphan worktree should be prunable")
+	}
+}
+
+func TestWorktree_AllFields(t *testing.T) {
+	wt := &Worktree{
+		Path:       "/home/user/work/test",
+		Branch:     "feature/test",
+		Ref:        "abc123def456",
+		IsMain:     true,
+		IsLocked:   true,
+		IsPrunable: true,
+		IsBare:     true,
+		IsDetached: true,
+	}
+
+	if wt.Path != "/home/user/work/test" {
+		t.Errorf("Path = %q, want %q", wt.Path, "/home/user/work/test")
+	}
+
+	if wt.Branch != "feature/test" {
+		t.Errorf("Branch = %q, want %q", wt.Branch, "feature/test")
+	}
+
+	if wt.Ref != "abc123def456" {
+		t.Errorf("Ref = %q, want %q", wt.Ref, "abc123def456")
+	}
+
+	if !wt.IsMain {
+		t.Error("IsMain should be true")
+	}
+
+	if !wt.IsLocked {
+		t.Error("IsLocked should be true")
+	}
+
+	if !wt.IsPrunable {
+		t.Error("IsPrunable should be true")
+	}
+
+	if !wt.IsBare {
+		t.Error("IsBare should be true")
+	}
+
+	if !wt.IsDetached {
+		t.Error("IsDetached should be true")
+	}
+}
+
+func TestAddOptions_AllFields(t *testing.T) {
+	opts := AddOptions{
+		Path:         "/home/user/work/new",
+		Branch:       "feature/new",
+		CreateBranch: true,
+		Force:        true,
+		Detach:       true,
+		Checkout:     "abc123",
+	}
+
+	if opts.Path != "/home/user/work/new" {
+		t.Errorf("Path = %q, want %q", opts.Path, "/home/user/work/new")
+	}
+
+	if opts.Branch != "feature/new" {
+		t.Errorf("Branch = %q, want %q", opts.Branch, "feature/new")
+	}
+
+	if !opts.CreateBranch {
+		t.Error("CreateBranch should be true")
+	}
+
+	if !opts.Force {
+		t.Error("Force should be true")
+	}
+
+	if !opts.Detach {
+		t.Error("Detach should be true")
+	}
+
+	if opts.Checkout != "abc123" {
+		t.Errorf("Checkout = %q, want %q", opts.Checkout, "abc123")
+	}
+}
+
+func TestRemoveOptions_AllFields(t *testing.T) {
+	opts := RemoveOptions{
+		Path:  "/home/user/work/old",
+		Force: true,
+	}
+
+	if opts.Path != "/home/user/work/old" {
+		t.Errorf("Path = %q, want %q", opts.Path, "/home/user/work/old")
+	}
+
+	if !opts.Force {
+		t.Error("Force should be true")
+	}
+}
+
+func TestValidateWorktreePath_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{"valid with spaces", "/home/user/my work", false},
+		{"valid unicode", "/home/user/工作", false},
+		{"valid with dots", "/home/user/work/../other", false},
+		{"null at start", "\x00/path", true},
+		{"null at end", "/path\x00", true},
+		{"null in middle", "/pa\x00th", true},
+		{"whitespace only", "   ", false}, // Not explicitly rejected
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateWorktreePath(tt.path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateWorktreePath(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
+			}
+		})
+	}
+}

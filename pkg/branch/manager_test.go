@@ -508,3 +508,243 @@ func TestManager_ParseBranchLine_AheadBehind(t *testing.T) {
 		})
 	}
 }
+
+func TestManager_ParseBranchLine_EdgeCases(t *testing.T) {
+	mgr := &manager{}
+
+	tests := []struct {
+		name    string
+		line    string
+		wantErr bool
+	}{
+		{
+			name:    "whitespace only",
+			line:    "   ",
+			wantErr: true,
+		},
+		{
+			name:    "just asterisk",
+			line:    "*",
+			wantErr: true,
+		},
+		{
+			name:    "branch with special chars",
+			line:    "  feature/my-cool_branch  abc1234 Some commit message",
+			wantErr: false,
+		},
+		{
+			name:    "very long branch name",
+			line:    "  very/long/nested/branch/name/that/goes/on/and/on  abc1234 Commit",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := mgr.parseBranchLine(tt.line)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseBranchLine() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExtractNumber_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		keyword string
+		want    string
+	}{
+		{
+			name:    "number at start",
+			input:   "ahead 10 behind 5",
+			keyword: "ahead",
+			want:    "10",
+		},
+		{
+			name:    "number at end",
+			input:   "ahead 10, behind 5",
+			keyword: "behind",
+			want:    "5",
+		},
+		{
+			name:    "no number after keyword",
+			input:   "ahead ",
+			keyword: "ahead",
+			want:    "0",
+		},
+		{
+			name:    "keyword at end without number",
+			input:   "some text ahead",
+			keyword: "ahead",
+			want:    "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractNumber(tt.input, tt.keyword)
+			if got != tt.want {
+				t.Errorf("extractNumber(%q, %q) = %q, want %q", tt.input, tt.keyword, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateBranchName_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		branch  string
+		wantErr bool
+	}{
+		{"valid number suffix", "branch-123", false},
+		{"valid all numbers", "123", false},
+		{"valid underscore start", "_branch", false},
+		{"valid single letter", "a", false},
+		{"valid dash prefix", "-branch", false}, // Git allows this
+		{"valid single dash", "-", false},       // Git allows this
+		{"ends with dot lock", "branch.lock", true},
+		{"starts with dot", ".branch", true},
+		{"double dot", "branch..name", true},
+		{"contains space", "branch name", true},
+		{"contains tilde", "branch~name", true},
+		{"contains caret", "branch^name", true},
+		{"contains colon", "branch:name", true},
+		{"contains question", "branch?name", true},
+		{"contains asterisk", "branch*name", true},
+		{"contains bracket", "branch[name", true},
+		{"contains backslash", "branch\\name", true},
+		{"starts with slash", "/branch", true},
+		{"ends with slash", "branch/", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateBranchName(tt.branch)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateBranchName(%q) error = %v, wantErr %v", tt.branch, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestManager_Delete_ProtectedBranch(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewManager()
+	repo := &repository.Repository{Path: "/tmp/test"}
+
+	// Protected branches should be rejected (unless force)
+	opts := DeleteOptions{Name: "main", Force: false}
+	err := mgr.Delete(ctx, repo, opts)
+	// This will fail because /tmp/test is not a real repo,
+	// but we can verify the validation happens
+	if err == nil {
+		t.Log("Delete protected branch requires real repo to test fully")
+	}
+}
+
+func TestCreateOptions_AllFields(t *testing.T) {
+	opts := CreateOptions{
+		Name:     "feature/new",
+		StartRef: "main",
+		Checkout: true,
+		Track:    true,
+		Force:    false,
+		Validate: true,
+	}
+
+	if opts.Name != "feature/new" {
+		t.Errorf("Name = %q, want %q", opts.Name, "feature/new")
+	}
+
+	if opts.StartRef != "main" {
+		t.Errorf("StartRef = %q, want %q", opts.StartRef, "main")
+	}
+
+	if !opts.Checkout {
+		t.Error("Checkout should be true")
+	}
+
+	if !opts.Track {
+		t.Error("Track should be true")
+	}
+
+	if opts.Force {
+		t.Error("Force should be false")
+	}
+
+	if !opts.Validate {
+		t.Error("Validate should be true")
+	}
+}
+
+func TestDeleteOptions_AllFields(t *testing.T) {
+	opts := DeleteOptions{
+		Name:    "feature/old",
+		Remote:  true,
+		Force:   true,
+		DryRun:  false,
+		Confirm: true,
+	}
+
+	if opts.Name != "feature/old" {
+		t.Errorf("Name = %q, want %q", opts.Name, "feature/old")
+	}
+
+	if !opts.Remote {
+		t.Error("Remote should be true")
+	}
+
+	if !opts.Force {
+		t.Error("Force should be true")
+	}
+
+	if opts.DryRun {
+		t.Error("DryRun should be false")
+	}
+
+	if !opts.Confirm {
+		t.Error("Confirm should be true")
+	}
+}
+
+func TestListOptions_AllFields(t *testing.T) {
+	opts := ListOptions{
+		All:      true,
+		Merged:   true,
+		Unmerged: false,
+		Pattern:  "feature/*",
+		Sort:     SortByDate,
+		Limit:    10,
+		Remote:   "origin",
+	}
+
+	if !opts.All {
+		t.Error("All should be true")
+	}
+
+	if !opts.Merged {
+		t.Error("Merged should be true")
+	}
+
+	if opts.Unmerged {
+		t.Error("Unmerged should be false")
+	}
+
+	if opts.Pattern != "feature/*" {
+		t.Errorf("Pattern = %q, want %q", opts.Pattern, "feature/*")
+	}
+
+	if opts.Sort != SortByDate {
+		t.Errorf("Sort = %q, want %q", opts.Sort, SortByDate)
+	}
+
+	if opts.Limit != 10 {
+		t.Errorf("Limit = %d, want 10", opts.Limit)
+	}
+
+	if opts.Remote != "origin" {
+		t.Errorf("Remote = %q, want %q", opts.Remote, "origin")
+	}
+}

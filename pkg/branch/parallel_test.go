@@ -367,3 +367,188 @@ func TestParallelStatus_Struct(t *testing.T) {
 		t.Errorf("len(Contexts) = %d, want 3", len(status.Contexts))
 	}
 }
+
+func TestParallelWorkflow_DetermineConflictSeverity_EdgeCases(t *testing.T) {
+	pw := &parallelWorkflow{}
+
+	tests := []struct {
+		name      string
+		file      string
+		worktrees []string
+		want      ConflictSeverity
+	}{
+		{
+			name:      "empty worktrees",
+			file:      "src/main.go",
+			worktrees: []string{},
+			want:      SeverityLow,
+		},
+		{
+			name:      "three worktrees - still high",
+			file:      "src/main.go",
+			worktrees: []string{"/work/a", "/work/b", "/work/c"},
+			want:      SeverityHigh,
+		},
+		{
+			name:      "exactly two worktrees",
+			file:      "config.yaml",
+			worktrees: []string{"/work/x", "/work/y"},
+			want:      SeverityHigh,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pw.determineConflictSeverity(tt.file, tt.worktrees)
+			if got != tt.want {
+				t.Errorf("determineConflictSeverity() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWorkContext_AllFields(t *testing.T) {
+	ctx := &WorkContext{
+		Path:          "/work/feature-branch",
+		Branch:        "feature/user-auth",
+		IsMain:        false,
+		HasChanges:    true,
+		ModifiedFiles: []string{"auth.go", "user.go", "test.go"},
+	}
+
+	// Test all fields
+	if ctx.Path != "/work/feature-branch" {
+		t.Errorf("Path = %q, want %q", ctx.Path, "/work/feature-branch")
+	}
+
+	if ctx.Branch != "feature/user-auth" {
+		t.Errorf("Branch = %q, want %q", ctx.Branch, "feature/user-auth")
+	}
+
+	if ctx.IsMain {
+		t.Error("IsMain should be false")
+	}
+
+	if !ctx.HasChanges {
+		t.Error("HasChanges should be true")
+	}
+
+	if len(ctx.ModifiedFiles) != 3 {
+		t.Errorf("len(ModifiedFiles) = %d, want 3", len(ctx.ModifiedFiles))
+	}
+}
+
+func TestWorkContext_MainContext(t *testing.T) {
+	ctx := &WorkContext{
+		Path:          "/project",
+		Branch:        "main",
+		IsMain:        true,
+		HasChanges:    false,
+		ModifiedFiles: []string{},
+	}
+
+	if !ctx.IsMain {
+		t.Error("IsMain should be true for main context")
+	}
+
+	if ctx.HasChanges {
+		t.Error("HasChanges should be false")
+	}
+
+	if len(ctx.ModifiedFiles) != 0 {
+		t.Errorf("len(ModifiedFiles) = %d, want 0", len(ctx.ModifiedFiles))
+	}
+}
+
+func TestSwitchInfo_AllFields(t *testing.T) {
+	info := &SwitchInfo{
+		FromPath:   "/work/current",
+		ToPath:     "/work/target",
+		ToBranch:   "feature/new",
+		Command:    "cd /work/target && git checkout feature/new",
+		HasChanges: false,
+	}
+
+	if info.FromPath != "/work/current" {
+		t.Errorf("FromPath = %q, want %q", info.FromPath, "/work/current")
+	}
+
+	if info.ToPath != "/work/target" {
+		t.Errorf("ToPath = %q, want %q", info.ToPath, "/work/target")
+	}
+
+	if info.ToBranch != "feature/new" {
+		t.Errorf("ToBranch = %q, want %q", info.ToBranch, "feature/new")
+	}
+
+	if info.Command == "" {
+		t.Error("Command should not be empty")
+	}
+
+	if info.HasChanges {
+		t.Error("HasChanges should be false")
+	}
+}
+
+func TestConflict_AllFields(t *testing.T) {
+	conflict := &Conflict{
+		File:      "src/database/connection.go",
+		Worktrees: []string{"/work/feature-a", "/work/feature-b", "/work/feature-c"},
+		Severity:  SeverityHigh,
+	}
+
+	if conflict.File != "src/database/connection.go" {
+		t.Errorf("File = %q, want specific path", conflict.File)
+	}
+
+	if len(conflict.Worktrees) != 3 {
+		t.Errorf("len(Worktrees) = %d, want 3", len(conflict.Worktrees))
+	}
+
+	if conflict.Severity != SeverityHigh {
+		t.Errorf("Severity = %v, want %v", conflict.Severity, SeverityHigh)
+	}
+}
+
+func TestParallelStatus_EmptyContexts(t *testing.T) {
+	status := &ParallelStatus{
+		TotalWorktrees:  0,
+		ActiveWorktrees: 0,
+		Conflicts:       0,
+		Contexts:        []*WorkContext{},
+	}
+
+	if status.HasConflicts() {
+		t.Error("HasConflicts() should be false for zero conflicts")
+	}
+
+	if status.IsActive() {
+		t.Error("IsActive() should be false for zero active worktrees")
+	}
+
+	if main := status.GetMainContext(); main != nil {
+		t.Error("GetMainContext() should return nil for empty contexts")
+	}
+
+	active := status.GetActiveContexts()
+	if len(active) != 0 {
+		t.Errorf("len(GetActiveContexts()) = %d, want 0", len(active))
+	}
+}
+
+func TestParallelStatus_NilContexts(t *testing.T) {
+	status := &ParallelStatus{
+		Contexts: nil,
+	}
+
+	// Should not panic
+	main := status.GetMainContext()
+	if main != nil {
+		t.Error("GetMainContext() should return nil for nil contexts")
+	}
+
+	active := status.GetActiveContexts()
+	if len(active) != 0 {
+		t.Errorf("len(GetActiveContexts()) = %d, want 0", len(active))
+	}
+}

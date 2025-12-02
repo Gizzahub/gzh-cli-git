@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(No unreleased changes)
+
+## [0.3.0] - 2025-12-02
+
 ### Added
 
 **Improved CLI Output** - Enhanced Status Display:
@@ -24,20 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pull`: Compact one-line output with status indicators
   - Shows pulled commits count
   - `[stash]` indicator when auto-stash was used
-
-### Fixed
-
-- **History contributors**: Fixed Additions/Deletions showing 0
-  - Root cause: Parser broke on empty line between timestamp and numstat
-  - Now correctly parses `git log --format=%ct --numstat` output
-
-### Testing
-
-- Added 16 unit tests for branch ahead/behind parsing functions
-
-## [0.3.0] - 2025-12-02
-
-### Added
 
 **Bulk Pull Command** - Parallel Repository Pull with Merge Strategies:
 
@@ -138,6 +128,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `walkDirectoryWithConfig()` early return preventing nested repo discovery
   - Previous: Returned early when finding independent nested repos, preventing child scanning
   - Fixed: Continues scanning to find deeply nested structures
+- Fixed `inferScope()` flaky test due to Go map iteration randomness
+  - Added alphabetical tiebreaker for deterministic scope selection
+- Fixed deadlock in `pkg/watch` Stop() method
+  - Released mutex before calling wg.Wait() to avoid deadlock with eventLoop goroutine
+- Fixed history contributors showing 0 for Additions/Deletions
+  - Root cause: Parser broke on empty line between timestamp and numstat
+  - Now correctly parses `git log --format=%ct --numstat` output
+- Fixed example files to match current API
+  - Updated `examples/commit/main.go`, `examples/branch/main.go`, `examples/history/main.go`, `examples/merge/main.go`
+
+**Refactoring**:
+
+- Extracted status constants in `pkg/repository/status.go`
+  - 10 constants: StatusError, StatusSkipped, StatusUpToDate, StatusUpdated, StatusSuccess, StatusNoRemote, StatusNoUpstream, StatusWouldUpdate, StatusWouldFetch, StatusWouldPull
+  - 3 helper functions: IsSuccessStatus(), IsDryRunStatus(), IsErrorStatus()
+  - Replaced 30 hardcoded status strings in bulk.go
+
+### Testing
+
+- Added 16 unit tests for branch ahead/behind parsing functions
+- Added unit tests for `inferScope()` deterministic behavior
+- All watch package tests now passing (previously deadlocked)
 
 ### Documentation
 
@@ -147,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented `walkDirectoryWithConfig()` scanning strategy (13 lines)
 - Added README examples for `--include-submodules` flag usage
 - Clear explanation of design decisions and submodule detection logic
+- Added MIT LICENSE file for pkg.go.dev compliance
 
 ### Performance
 

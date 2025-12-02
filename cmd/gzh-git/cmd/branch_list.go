@@ -143,14 +143,29 @@ func runBranchList(cmd *cobra.Command, args []string) error {
 			name = fmt.Sprintf("remotes/%s", name)
 		}
 
-		// Show branch info
-		fmt.Printf("%s%s\n", indicator, name)
+		// Build status string with ahead/behind info
+		statusStr := ""
+		if b.Upstream != "" {
+			if b.AheadBy > 0 && b.BehindBy > 0 {
+				statusStr = fmt.Sprintf("(%s) %d↑ %d↓", b.Upstream, b.AheadBy, b.BehindBy)
+			} else if b.AheadBy > 0 {
+				statusStr = fmt.Sprintf("(%s) %d↑", b.Upstream, b.AheadBy)
+			} else if b.BehindBy > 0 {
+				statusStr = fmt.Sprintf("(%s) %d↓", b.Upstream, b.BehindBy)
+			} else {
+				statusStr = fmt.Sprintf("(%s) ✓", b.Upstream)
+			}
+		}
+
+		// Show branch info in compact format
+		if statusStr != "" {
+			fmt.Printf("%s%-30s %s\n", indicator, name, statusStr)
+		} else {
+			fmt.Printf("%s%s\n", indicator, name)
+		}
 
 		// Show additional info in verbose mode
 		if verbose {
-			if b.Upstream != "" {
-				fmt.Printf("    Tracks: %s\n", b.Upstream)
-			}
 			if b.IsMerged {
 				fmt.Println("    Status: Merged")
 			}

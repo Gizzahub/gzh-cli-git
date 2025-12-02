@@ -354,6 +354,7 @@ func (m *manager) parseBranchList(output string) ([]*Branch, error) {
 // parseBranchLine parses a single line from git branch -vv output.
 func (m *manager) parseBranchLine(line string) (*Branch, error) {
 	// Format: "* main  abc1234 [origin/main] Commit message"
+	// Format: "* main  abc1234 [origin/main: ahead 2, behind 3] Commit message"
 	// Format: "  feature/x abc1234 Commit message"
 
 	branch := &Branch{}
@@ -385,22 +386,78 @@ func (m *manager) parseBranchLine(line string) (*Branch, error) {
 
 	// Parse upstream (if present, in brackets)
 	if len(parts) > 2 && strings.HasPrefix(parts[2], "[") {
-		upstream := parts[2]
-		if strings.HasSuffix(upstream, "]") {
-			branch.Upstream = strings.Trim(upstream, "[]")
-		} else {
-			// Upstream might span multiple parts
-			for i := 3; i < len(parts); i++ {
-				upstream += " " + parts[i]
-				if strings.HasSuffix(parts[i], "]") {
-					branch.Upstream = strings.Trim(upstream, "[]")
-					break
-				}
+		// Find the complete bracket content
+		bracketContent := ""
+		for i := 2; i < len(parts); i++ {
+			if bracketContent != "" {
+				bracketContent += " "
 			}
+			bracketContent += parts[i]
+			if strings.HasSuffix(parts[i], "]") {
+				break
+			}
+		}
+
+		// Remove brackets
+		bracketContent = strings.Trim(bracketContent, "[]")
+
+		// Parse upstream and ahead/behind info
+		// Format: "origin/main" or "origin/main: ahead 2" or "origin/main: ahead 2, behind 3"
+		if colonIdx := strings.Index(bracketContent, ":"); colonIdx != -1 {
+			branch.Upstream = strings.TrimSpace(bracketContent[:colonIdx])
+			statusPart := bracketContent[colonIdx+1:]
+
+			// Parse ahead/behind counts
+			branch.AheadBy, branch.BehindBy = parseAheadBehindFromStatus(statusPart)
+		} else {
+			branch.Upstream = bracketContent
 		}
 	}
 
 	return branch, nil
+}
+
+// parseAheadBehindFromStatus parses "ahead 2, behind 3" or "ahead 2" or "behind 3".
+func parseAheadBehindFromStatus(status string) (ahead, behind int) {
+	status = strings.TrimSpace(status)
+
+	// Parse "ahead N"
+	if strings.Contains(status, "ahead") {
+		fmt.Sscanf(extractNumber(status, "ahead"), "%d", &ahead)
+	}
+
+	// Parse "behind N"
+	if strings.Contains(status, "behind") {
+		fmt.Sscanf(extractNumber(status, "behind"), "%d", &behind)
+	}
+
+	return ahead, behind
+}
+
+// extractNumber extracts the number following a keyword.
+func extractNumber(s, keyword string) string {
+	idx := strings.Index(s, keyword)
+	if idx == -1 {
+		return "0"
+	}
+
+	// Skip the keyword and any spaces
+	rest := strings.TrimSpace(s[idx+len(keyword):])
+
+	// Extract digits
+	var num strings.Builder
+	for _, c := range rest {
+		if c >= '0' && c <= '9' {
+			num.WriteRune(c)
+		} else if num.Len() > 0 {
+			break
+		}
+	}
+
+	if num.Len() == 0 {
+		return "0"
+	}
+	return num.String()
 }
 
 // validateBranchName validates branch name against Git rules.

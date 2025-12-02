@@ -11,6 +11,8 @@ type Branch struct {
 	IsMerged   bool       // Fully merged into base branch
 	IsRemote   bool       // Remote branch
 	Upstream   string     // Upstream branch (if set)
+	AheadBy    int        // Commits ahead of upstream
+	BehindBy   int        // Commits behind upstream
 	LastCommit *Commit    // Last commit on this branch
 	CreatedAt  *time.Time // Creation time (if available)
 	UpdatedAt  *time.Time // Last update time

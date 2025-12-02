@@ -176,7 +176,7 @@ func (c *contributorAnalyzer) parseContributorStats(contributor *Contributor, ou
 			continue
 		}
 
-		// Parse timestamp line
+		// Parse timestamp line (Unix timestamp - all digits)
 		timestamp, err := strconv.ParseInt(line, 10, 64)
 		if err != nil {
 			i++
@@ -190,19 +190,33 @@ func (c *contributorAnalyzer) parseContributorStats(contributor *Contributor, ou
 		dateKey := commitTime.Format("2006-01-02")
 		uniqueDays[dateKey] = true
 
-		// Move to numstat lines
+		// Move past timestamp line
 		i++
+
+		// Skip empty line after timestamp (git format has empty line between timestamp and numstat)
+		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+			i++
+		}
+
+		// Parse numstat lines until we hit another timestamp or end
 		for i < len(lines) {
 			statLine := strings.TrimSpace(lines[i])
+
+			// Empty line or new timestamp signals end of numstat for this commit
 			if statLine == "" {
-				i++
+				break
+			}
+
+			// Check if this is a new timestamp (all digits)
+			if _, err := strconv.ParseInt(statLine, 10, 64); err == nil {
+				// This is the next commit's timestamp, don't increment i
 				break
 			}
 
 			// Parse numstat line: "additions deletions filename"
 			fields := strings.Fields(statLine)
 			if len(fields) >= 3 {
-				// Track additions/deletions
+				// Track additions/deletions (handle binary files which show "-")
 				additions, _ := strconv.Atoi(fields[0])
 				deletions, _ := strconv.Atoi(fields[1])
 				filename := fields[2]

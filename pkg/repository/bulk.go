@@ -576,11 +576,6 @@ func (c *client) walkDirectory(ctx context.Context, dir string, depth, maxDepth 
 //   - Deeply nested repository structures are properly handled
 //
 func (c *client) walkDirectoryWithConfig(ctx context.Context, dir string, depth, maxDepth int, repos *[]string, mu *sync.Mutex, logger Logger, config walkDirectoryConfig) error {
-	// Check depth limit
-	if depth > maxDepth {
-		return nil
-	}
-
 	// Check context cancellation
 	select {
 	case <-ctx.Done():
@@ -616,6 +611,13 @@ func (c *client) walkDirectoryWithConfig(ctx context.Context, dir string, depth,
 			// This is the root directory (depth 0), always scan its children
 			logger.Debug("scanning children of root repository", "path", dir)
 		}
+	}
+
+	// Check depth limit before scanning subdirectories
+	// This allows scanning the current directory even at maxDepth,
+	// but prevents descending into subdirectories beyond maxDepth
+	if depth >= maxDepth {
+		return nil
 	}
 
 	// Read directory entries

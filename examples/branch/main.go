@@ -23,6 +23,7 @@ func main() {
 	// Create clients
 	repoClient := repository.NewClient()
 	branchManager := branch.NewManager()
+	worktreeManager := branch.NewWorktreeManager()
 
 	// Open repository
 	repo, err := repoClient.Open(ctx, repoPath)
@@ -45,7 +46,7 @@ func main() {
 	for _, b := range branches {
 		if !b.IsRemote {
 			current := ""
-			if b.IsCurrent {
+			if b.IsHead {
 				current = " (current)"
 			}
 			fmt.Printf("  %s%s\n", b.Name, current)
@@ -53,7 +54,7 @@ func main() {
 	}
 	fmt.Println()
 
-	remoteBranches := []branch.Branch{}
+	remoteBranches := []*branch.Branch{}
 	for _, b := range branches {
 		if b.IsRemote {
 			remoteBranches = append(remoteBranches, b)
@@ -70,7 +71,7 @@ func main() {
 
 	// Example 2: Get current branch
 	fmt.Println("=== Example 2: Current Branch ===")
-	current, err := branchManager.GetCurrent(ctx, repo)
+	current, err := branchManager.Current(ctx, repo)
 	if err != nil {
 		log.Fatalf("Failed to get current branch: %v", err)
 	}
@@ -99,8 +100,8 @@ func main() {
 	fmt.Println()
 	fmt.Println("Using gzh-cli-git library:")
 	fmt.Println("  err := branchManager.Create(ctx, repo, branch.CreateOptions{")
-	fmt.Println("      Name:       \"feature/example-branch\",")
-	fmt.Println("      StartPoint: \"main\",")
+	fmt.Println("      Name:     \"feature/example-branch\",")
+	fmt.Println("      StartRef: \"main\",")
 	fmt.Println("  })")
 	fmt.Println()
 	fmt.Println("Using CLI:")
@@ -109,13 +110,13 @@ func main() {
 
 	// Example 5: List worktrees (if any)
 	fmt.Println("=== Example 5: List Worktrees ===")
-	worktrees, err := branchManager.ListWorktrees(ctx, repo)
+	worktrees, err := worktreeManager.List(ctx, repo)
 	if err != nil {
 		log.Printf("Warning: Failed to list worktrees: %v", err)
 	} else if len(worktrees) > 0 {
 		fmt.Println("Active worktrees:")
 		for _, wt := range worktrees {
-			fmt.Printf("  %s -> %s (branch: %s)\n", wt.Path, wt.Branch, wt.Commit)
+			fmt.Printf("  %s -> %s (branch: %s)\n", wt.Path, wt.Ref, wt.Branch)
 		}
 	} else {
 		fmt.Println("No additional worktrees (only main working tree)")

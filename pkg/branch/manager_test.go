@@ -322,3 +322,189 @@ func isError(err, target error) bool {
 	// Simple check for wrapped error
 	return err.Error() != "" && target.Error() != ""
 }
+
+func TestParseAheadBehindFromStatus(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      string
+		wantAhead   int
+		wantBehind  int
+	}{
+		{
+			name:       "ahead only",
+			status:     "ahead 3",
+			wantAhead:  3,
+			wantBehind: 0,
+		},
+		{
+			name:       "behind only",
+			status:     "behind 5",
+			wantAhead:  0,
+			wantBehind: 5,
+		},
+		{
+			name:       "ahead and behind",
+			status:     "ahead 2, behind 3",
+			wantAhead:  2,
+			wantBehind: 3,
+		},
+		{
+			name:       "empty string",
+			status:     "",
+			wantAhead:  0,
+			wantBehind: 0,
+		},
+		{
+			name:       "no status",
+			status:     "up-to-date",
+			wantAhead:  0,
+			wantBehind: 0,
+		},
+		{
+			name:       "large numbers",
+			status:     "ahead 100, behind 50",
+			wantAhead:  100,
+			wantBehind: 50,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ahead, behind := parseAheadBehindFromStatus(tt.status)
+			if ahead != tt.wantAhead {
+				t.Errorf("ahead = %d, want %d", ahead, tt.wantAhead)
+			}
+			if behind != tt.wantBehind {
+				t.Errorf("behind = %d, want %d", behind, tt.wantBehind)
+			}
+		})
+	}
+}
+
+func TestExtractNumber(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		keyword string
+		want    string
+	}{
+		{
+			name:    "simple ahead",
+			input:   "ahead 5",
+			keyword: "ahead",
+			want:    "5",
+		},
+		{
+			name:    "keyword not found",
+			input:   "behind 3",
+			keyword: "ahead",
+			want:    "0",
+		},
+		{
+			name:    "multi-digit",
+			input:   "ahead 123",
+			keyword: "ahead",
+			want:    "123",
+		},
+		{
+			name:    "with comma after",
+			input:   "ahead 2, behind 3",
+			keyword: "ahead",
+			want:    "2",
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			keyword: "ahead",
+			want:    "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractNumber(tt.input, tt.keyword)
+			if got != tt.want {
+				t.Errorf("extractNumber(%q, %q) = %q, want %q", tt.input, tt.keyword, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestManager_ParseBranchLine_AheadBehind(t *testing.T) {
+	mgr := &manager{}
+
+	tests := []struct {
+		name        string
+		line        string
+		wantName    string
+		wantUpstream string
+		wantAhead   int
+		wantBehind  int
+	}{
+		{
+			name:         "branch ahead of upstream",
+			line:         "* main  abc1234 [origin/main: ahead 3] Latest commit",
+			wantName:     "main",
+			wantUpstream: "origin/main",
+			wantAhead:    3,
+			wantBehind:   0,
+		},
+		{
+			name:         "branch behind upstream",
+			line:         "  feature/x  def5678 [origin/feature/x: behind 5] Work in progress",
+			wantName:     "feature/x",
+			wantUpstream: "origin/feature/x",
+			wantAhead:    0,
+			wantBehind:   5,
+		},
+		{
+			name:         "branch ahead and behind",
+			line:         "  develop  ghi9012 [origin/develop: ahead 2, behind 4] Diverged",
+			wantName:     "develop",
+			wantUpstream: "origin/develop",
+			wantAhead:    2,
+			wantBehind:   4,
+		},
+		{
+			name:         "branch up-to-date (no status)",
+			line:         "  release/v1  jkl3456 [origin/release/v1] Release ready",
+			wantName:     "release/v1",
+			wantUpstream: "origin/release/v1",
+			wantAhead:    0,
+			wantBehind:   0,
+		},
+		{
+			name:         "branch without upstream",
+			line:         "  local-only  mno7890 Local branch",
+			wantName:     "local-only",
+			wantUpstream: "",
+			wantAhead:    0,
+			wantBehind:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			branch, err := mgr.parseBranchLine(tt.line)
+			if err != nil {
+				t.Fatalf("parseBranchLine() error = %v", err)
+			}
+
+			if branch.Name != tt.wantName {
+				t.Errorf("Name = %q, want %q", branch.Name, tt.wantName)
+			}
+
+			if branch.Upstream != tt.wantUpstream {
+				t.Errorf("Upstream = %q, want %q", branch.Upstream, tt.wantUpstream)
+			}
+
+			if branch.AheadBy != tt.wantAhead {
+				t.Errorf("AheadBy = %d, want %d", branch.AheadBy, tt.wantAhead)
+			}
+
+			if branch.BehindBy != tt.wantBehind {
+				t.Errorf("BehindBy = %d, want %d", branch.BehindBy, tt.wantBehind)
+			}
+		})
+	}
+}

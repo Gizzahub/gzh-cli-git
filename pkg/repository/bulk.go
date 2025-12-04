@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -1249,6 +1250,48 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 		return result
 	}
 
+	// Check detailed repository state
+	repoState, err := c.checkRepositoryState(ctx, repoPath)
+	if err != nil {
+		result.Status = StatusError
+		result.Message = "Failed to check repository state"
+		result.Error = err
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	// Handle repositories with conflicts
+	if repoState.HasConflicts {
+		result.Status = StatusConflict
+		result.Message = fmt.Sprintf("Repository has conflicts in %d file(s): %s",
+			len(repoState.ConflictedFiles),
+			strings.Join(repoState.ConflictedFiles, ", "))
+		result.Error = fmt.Errorf("cannot pull: repository has unresolved conflicts")
+		result.Duration = time.Since(startTime)
+		logger.Warn("repository has conflicts", "path", result.RelativePath, "files", repoState.ConflictedFiles)
+		return result
+	}
+
+	// Handle repositories with ongoing rebase
+	if repoState.RebaseInProgress {
+		result.Status = StatusRebaseInProgress
+		result.Message = "Repository has rebase in progress - skipping"
+		result.Error = fmt.Errorf("rebase in progress, run 'git rebase --continue' or 'git rebase --abort'")
+		result.Duration = time.Since(startTime)
+		logger.Warn("rebase in progress", "path", result.RelativePath)
+		return result
+	}
+
+	// Handle repositories with ongoing merge
+	if repoState.MergeInProgress {
+		result.Status = StatusMergeInProgress
+		result.Message = "Repository has merge in progress - skipping"
+		result.Error = fmt.Errorf("merge in progress, resolve conflicts and commit")
+		result.Duration = time.Since(startTime)
+		logger.Warn("merge in progress", "path", result.RelativePath)
+		return result
+	}
+
 	// Handle local changes with stash
 	if !status.IsClean && opts.Stash {
 		stashArgs := []string{"stash", "push", "-m", "Auto-stash by gz-git pull"}
@@ -1317,12 +1360,43 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	// Perform pull
 	pullResult, err := c.executor.Run(ctx, repoPath, pullArgs...)
 	if err != nil || pullResult.ExitCode != 0 {
-		result.Status = StatusError
-		result.Message = "Pull failed"
-		if err != nil {
-			result.Error = err
+		// Check if pull failed due to conflicts
+		postPullState, stateErr := c.checkRepositoryState(ctx, repoPath)
+		if stateErr == nil {
+			if postPullState.HasConflicts {
+				// Conflicts detected - abort rebase/merge to restore clean state
+				if opts.Strategy == "rebase" && postPullState.RebaseInProgress {
+					logger.Warn("rebase created conflicts, aborting", "path", result.RelativePath)
+					if abortErr := c.abortRebaseIfNeeded(ctx, repoPath); abortErr != nil {
+						logger.Error("failed to abort rebase", "path", result.RelativePath, "error", abortErr)
+					} else {
+						logger.Info("rebase aborted, repository restored to clean state", "path", result.RelativePath)
+					}
+				}
+				result.Status = StatusConflict
+				result.Message = fmt.Sprintf("Pull failed: conflicts in %d file(s) - %s",
+					len(postPullState.ConflictedFiles),
+					strings.Join(postPullState.ConflictedFiles, ", "))
+				result.Error = fmt.Errorf("pull created conflicts, repository restored to previous state")
+			} else {
+				// Non-conflict error
+				result.Status = StatusError
+				result.Message = "Pull failed"
+				if err != nil {
+					result.Error = err
+				} else {
+					result.Error = fmt.Errorf("pull exited with code %d: %s", pullResult.ExitCode, pullResult.Error)
+				}
+			}
 		} else {
-			result.Error = fmt.Errorf("pull exited with code %d: %s", pullResult.ExitCode, pullResult.Error)
+			// Couldn't check state, report general error
+			result.Status = StatusError
+			result.Message = "Pull failed"
+			if err != nil {
+				result.Error = err
+			} else {
+				result.Error = fmt.Errorf("pull exited with code %d: %s", pullResult.ExitCode, pullResult.Error)
+			}
 		}
 		result.Duration = time.Since(startTime)
 
@@ -1365,6 +1439,75 @@ func calculatePullSummary(results []RepositoryPullResult) map[string]int {
 	}
 
 	return summary
+}
+
+// repositoryState represents the current state of a git repository
+type repositoryState struct {
+	HasConflicts      bool
+	RebaseInProgress  bool
+	MergeInProgress   bool
+	IsDirty           bool
+	ConflictedFiles   []string
+	UncommittedFiles  int
+}
+
+// checkRepositoryState checks the detailed state of a repository
+func (c *client) checkRepositoryState(ctx context.Context, repoPath string) (*repositoryState, error) {
+	state := &repositoryState{}
+
+	// Check for rebase in progress
+	rebaseDir := filepath.Join(repoPath, ".git", "rebase-merge")
+	if _, err := os.Stat(rebaseDir); err == nil {
+		state.RebaseInProgress = true
+	}
+	rebaseApplyDir := filepath.Join(repoPath, ".git", "rebase-apply")
+	if _, err := os.Stat(rebaseApplyDir); err == nil {
+		state.RebaseInProgress = true
+	}
+
+	// Check for merge in progress
+	mergeHead := filepath.Join(repoPath, ".git", "MERGE_HEAD")
+	if _, err := os.Stat(mergeHead); err == nil {
+		state.MergeInProgress = true
+	}
+
+	// Check status for conflicts and uncommitted changes
+	statusResult, err := c.executor.Run(ctx, repoPath, "status", "--porcelain")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository status: %w", err)
+	}
+
+	if statusResult.ExitCode == 0 && statusResult.Stdout != "" {
+		lines := strings.Split(strings.TrimSpace(statusResult.Stdout), "\n")
+		state.UncommittedFiles = len(lines)
+
+		// Check for conflicts (lines starting with "UU", "AA", "DD", "AU", "UA", "DU", "UD")
+		for _, line := range lines {
+			if len(line) >= 2 {
+				status := line[:2]
+				if strings.Contains(status, "U") || status == "AA" || status == "DD" {
+					state.HasConflicts = true
+					state.ConflictedFiles = append(state.ConflictedFiles, strings.TrimSpace(line[3:]))
+				}
+			}
+		}
+
+		state.IsDirty = state.UncommittedFiles > 0
+	}
+
+	return state, nil
+}
+
+// abortRebaseIfNeeded aborts an ongoing rebase operation
+func (c *client) abortRebaseIfNeeded(ctx context.Context, repoPath string) error {
+	result, err := c.executor.Run(ctx, repoPath, "rebase", "--abort")
+	if err != nil {
+		return fmt.Errorf("failed to abort rebase: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("rebase abort failed: %s", result.Error)
+	}
+	return nil
 }
 
 // BulkPush scans for repositories and pushes them in parallel

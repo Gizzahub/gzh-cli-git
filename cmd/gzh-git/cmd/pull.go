@@ -276,7 +276,9 @@ func displayPullResults(result *repository.BulkPullResult) {
 	if pullFormat == "compact" {
 		hasIssues := false
 		for _, repo := range result.Repositories {
-			if repo.Status == "error" || repo.Status == "no-remote" || repo.Status == "no-upstream" {
+			if repo.Status == "error" || repo.Status == "no-remote" || repo.Status == "no-upstream" ||
+				repo.Status == "conflict" || repo.Status == "rebase-in-progress" || repo.Status == "merge-in-progress" ||
+				repo.Status == "dirty" {
 				if !hasIssues {
 					fmt.Println("Issues found:")
 					hasIssues = true
@@ -330,6 +332,14 @@ func displayPullRepositoryResult(repo repository.RepositoryPullResult) {
 		statusStr = "no remote"
 	case "no-upstream":
 		statusStr = "no upstream"
+	case "conflict":
+		statusStr = "CONFLICT"
+	case "rebase-in-progress":
+		statusStr = "REBASE"
+	case "merge-in-progress":
+		statusStr = "MERGE"
+	case "dirty":
+		statusStr = "dirty"
 	case "skipped":
 		statusStr = "skipped"
 	default:
@@ -369,6 +379,14 @@ func getPullStatusIcon(status string) string {
 		return "="
 	case "error":
 		return "✗"
+	case "conflict":
+		return "⚡"
+	case "rebase-in-progress":
+		return "↻"
+	case "merge-in-progress":
+		return "⇄"
+	case "dirty":
+		return "⚠"
 	case "skipped":
 		return "⊘"
 	case "would-pull":

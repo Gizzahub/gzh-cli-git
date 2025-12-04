@@ -39,6 +39,18 @@ const (
 
 	// StatusNothingToPush indicates there are no commits to push.
 	StatusNothingToPush = "nothing-to-push"
+
+	// StatusDirty indicates the repository has uncommitted changes.
+	StatusDirty = "dirty"
+
+	// StatusConflict indicates the repository has merge/rebase conflicts.
+	StatusConflict = "conflict"
+
+	// StatusRebaseInProgress indicates a rebase operation is in progress.
+	StatusRebaseInProgress = "rebase-in-progress"
+
+	// StatusMergeInProgress indicates a merge operation is in progress.
+	StatusMergeInProgress = "merge-in-progress"
 )
 
 // IsSuccessStatus returns true if the status indicates a successful operation.

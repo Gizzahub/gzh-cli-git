@@ -411,62 +411,36 @@ type RepositoryUpdateResult struct {
 func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkUpdateResult, error) {
 	startTime := time.Now()
 
-	// Validate options
-	if opts.Directory == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get current directory: %w", err)
-		}
-		opts.Directory = cwd
-	}
-
-	// Set defaults
-	if opts.Parallel <= 0 {
-		opts.Parallel = DefaultBulkParallel
-	}
-	if opts.MaxDepth <= 0 {
-		opts.MaxDepth = DefaultBulkMaxDepth
-	}
-
-
-	// Use logger
-	logger := opts.Logger
-	if logger == nil {
-		logger = &noopLogger{}
-	}
-
-	// Resolve absolute path
-	absPath, err := filepath.Abs(opts.Directory)
+	// Initialize common settings
+	common, err := initializeBulkOperation(
+		opts.Directory,
+		opts.Parallel,
+		opts.MaxDepth,
+		opts.IncludeSubmodules,
+		opts.IncludePattern,
+		opts.ExcludePattern,
+		opts.Logger,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+		return nil, err
 	}
-	opts.Directory = absPath
 
-	logger.Info("scanning for repositories", "directory", opts.Directory, "maxDepth", opts.MaxDepth)
+	// Update opts with initialized values
+	opts.Directory = common.Directory
+	opts.Parallel = common.Parallel
+	opts.MaxDepth = common.MaxDepth
+	opts.Logger = common.Logger
 
-	// Scan for repositories
-	repos, err := c.scanRepositoriesWithConfig(ctx, opts.Directory, opts.MaxDepth, logger, walkDirectoryConfig{
-		includeSubmodules: opts.IncludeSubmodules,
-	})
+	// Scan and filter repositories
+	filteredRepos, totalScanned, err := c.scanAndFilterRepositories(ctx, common)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan repositories: %w", err)
+		return nil, err
 	}
 
-	logger.Info("scan complete", "found", len(repos))
-
-	// Filter repositories
-	filteredRepos, err := filterRepositories(repos, opts.IncludePattern, opts.ExcludePattern, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter repositories: %w", err)
-	}
-
-	if len(filteredRepos) < len(repos) {
-		logger.Info("filtered repositories", "total", len(repos), "selected", len(filteredRepos))
-	}
-
+	// Handle empty result
 	if len(filteredRepos) == 0 {
 		return &BulkUpdateResult{
-			TotalScanned:   len(repos),
+			TotalScanned:   totalScanned,
 			TotalProcessed: 0,
 			Repositories:   []RepositoryUpdateResult{},
 			Duration:       time.Since(startTime),
@@ -475,7 +449,7 @@ func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkU
 	}
 
 	// Process repositories in parallel
-	results, err := c.processRepositories(ctx, opts.Directory, filteredRepos, opts, logger)
+	results, err := c.processRepositories(ctx, opts.Directory, filteredRepos, opts, common.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process repositories: %w", err)
 	}
@@ -484,7 +458,7 @@ func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkU
 	summary := calculateSummary(results)
 
 	return &BulkUpdateResult{
-		TotalScanned:   len(repos),
+		TotalScanned:   totalScanned,
 		TotalProcessed: len(filteredRepos),
 		Repositories:   results,
 		Duration:       time.Since(startTime),
@@ -886,62 +860,36 @@ func calculateSummary(results []RepositoryUpdateResult) map[string]int {
 func (c *client) BulkFetch(ctx context.Context, opts BulkFetchOptions) (*BulkFetchResult, error) {
 	startTime := time.Now()
 
-	// Validate options
-	if opts.Directory == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get current directory: %w", err)
-		}
-		opts.Directory = cwd
-	}
-
-	// Set defaults
-	if opts.Parallel <= 0 {
-		opts.Parallel = DefaultBulkParallel
-	}
-	if opts.MaxDepth <= 0 {
-		opts.MaxDepth = DefaultBulkMaxDepth
-	}
-
-
-	// Use logger
-	logger := opts.Logger
-	if logger == nil {
-		logger = &noopLogger{}
-	}
-
-	// Resolve absolute path
-	absPath, err := filepath.Abs(opts.Directory)
+	// Initialize common settings
+	common, err := initializeBulkOperation(
+		opts.Directory,
+		opts.Parallel,
+		opts.MaxDepth,
+		opts.IncludeSubmodules,
+		opts.IncludePattern,
+		opts.ExcludePattern,
+		opts.Logger,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+		return nil, err
 	}
-	opts.Directory = absPath
 
-	logger.Info("scanning for repositories", "directory", opts.Directory, "maxDepth", opts.MaxDepth)
+	// Update opts with initialized values
+	opts.Directory = common.Directory
+	opts.Parallel = common.Parallel
+	opts.MaxDepth = common.MaxDepth
+	opts.Logger = common.Logger
 
-	// Scan for repositories
-	repos, err := c.scanRepositoriesWithConfig(ctx, opts.Directory, opts.MaxDepth, logger, walkDirectoryConfig{
-		includeSubmodules: opts.IncludeSubmodules,
-	})
+	// Scan and filter repositories
+	filteredRepos, totalScanned, err := c.scanAndFilterRepositories(ctx, common)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan repositories: %w", err)
+		return nil, err
 	}
 
-	logger.Info("scan complete", "found", len(repos))
-
-	// Filter repositories
-	filteredRepos, err := filterRepositories(repos, opts.IncludePattern, opts.ExcludePattern, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter repositories: %w", err)
-	}
-
-	if len(filteredRepos) < len(repos) {
-		logger.Info("filtered repositories", "total", len(repos), "selected", len(filteredRepos))
-	}
-
+	// Handle empty result
 	if len(filteredRepos) == 0 {
 		return &BulkFetchResult{
-			TotalScanned:   len(repos),
+			TotalScanned:   totalScanned,
 			TotalProcessed: 0,
 			Repositories:   []RepositoryFetchResult{},
 			Duration:       time.Since(startTime),
@@ -950,7 +898,7 @@ func (c *client) BulkFetch(ctx context.Context, opts BulkFetchOptions) (*BulkFet
 	}
 
 	// Process repositories in parallel
-	results, err := c.processFetchRepositories(ctx, opts.Directory, filteredRepos, opts, logger)
+	results, err := c.processFetchRepositories(ctx, opts.Directory, filteredRepos, opts, common.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process repositories: %w", err)
 	}
@@ -959,7 +907,7 @@ func (c *client) BulkFetch(ctx context.Context, opts BulkFetchOptions) (*BulkFet
 	summary := calculateFetchSummary(results)
 
 	return &BulkFetchResult{
-		TotalScanned:   len(repos),
+		TotalScanned:   totalScanned,
 		TotalProcessed: len(filteredRepos),
 		Repositories:   results,
 		Duration:       time.Since(startTime),
@@ -1135,26 +1083,10 @@ func calculateFetchSummary(results []RepositoryFetchResult) map[string]int {
 func (c *client) BulkPull(ctx context.Context, opts BulkPullOptions) (*BulkPullResult, error) {
 	startTime := time.Now()
 
-	// Validate options
-	if opts.Directory == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get current directory: %w", err)
-		}
-		opts.Directory = cwd
-	}
-
-	// Set defaults
-	if opts.Parallel <= 0 {
-		opts.Parallel = DefaultBulkParallel
-	}
-	if opts.MaxDepth <= 0 {
-		opts.MaxDepth = DefaultBulkMaxDepth
-	}
+	// Set strategy default
 	if opts.Strategy == "" {
-		opts.Strategy = "merge" // Default to merge strategy
+		opts.Strategy = "merge"
 	}
-
 
 	// Validate strategy
 	validStrategies := map[string]bool{
@@ -1166,44 +1098,36 @@ func (c *client) BulkPull(ctx context.Context, opts BulkPullOptions) (*BulkPullR
 		return nil, fmt.Errorf("invalid strategy: %s (valid: merge, rebase, ff-only)", opts.Strategy)
 	}
 
-	// Use logger
-	logger := opts.Logger
-	if logger == nil {
-		logger = &noopLogger{}
-	}
-
-	// Resolve absolute path
-	absPath, err := filepath.Abs(opts.Directory)
+	// Initialize common settings
+	common, err := initializeBulkOperation(
+		opts.Directory,
+		opts.Parallel,
+		opts.MaxDepth,
+		opts.IncludeSubmodules,
+		opts.IncludePattern,
+		opts.ExcludePattern,
+		opts.Logger,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+		return nil, err
 	}
-	opts.Directory = absPath
 
-	logger.Info("scanning for repositories", "directory", opts.Directory, "maxDepth", opts.MaxDepth)
+	// Update opts with initialized values
+	opts.Directory = common.Directory
+	opts.Parallel = common.Parallel
+	opts.MaxDepth = common.MaxDepth
+	opts.Logger = common.Logger
 
-	// Scan for repositories
-	repos, err := c.scanRepositoriesWithConfig(ctx, opts.Directory, opts.MaxDepth, logger, walkDirectoryConfig{
-		includeSubmodules: opts.IncludeSubmodules,
-	})
+	// Scan and filter repositories
+	filteredRepos, totalScanned, err := c.scanAndFilterRepositories(ctx, common)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan repositories: %w", err)
+		return nil, err
 	}
 
-	logger.Info("scan complete", "found", len(repos))
-
-	// Filter repositories
-	filteredRepos, err := filterRepositories(repos, opts.IncludePattern, opts.ExcludePattern, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter repositories: %w", err)
-	}
-
-	if len(filteredRepos) < len(repos) {
-		logger.Info("filtered repositories", "total", len(repos), "selected", len(filteredRepos))
-	}
-
+	// Handle empty result
 	if len(filteredRepos) == 0 {
 		return &BulkPullResult{
-			TotalScanned:   len(repos),
+			TotalScanned:   totalScanned,
 			TotalProcessed: 0,
 			Repositories:   []RepositoryPullResult{},
 			Duration:       time.Since(startTime),
@@ -1212,7 +1136,7 @@ func (c *client) BulkPull(ctx context.Context, opts BulkPullOptions) (*BulkPullR
 	}
 
 	// Process repositories in parallel
-	results, err := c.processPullRepositories(ctx, opts.Directory, filteredRepos, opts, logger)
+	results, err := c.processPullRepositories(ctx, opts.Directory, filteredRepos, opts, common.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process repositories: %w", err)
 	}
@@ -1221,7 +1145,7 @@ func (c *client) BulkPull(ctx context.Context, opts BulkPullOptions) (*BulkPullR
 	summary := calculatePullSummary(results)
 
 	return &BulkPullResult{
-		TotalScanned:   len(repos),
+		TotalScanned:   totalScanned,
 		TotalProcessed: len(filteredRepos),
 		Repositories:   results,
 		Duration:       time.Since(startTime),
@@ -1447,62 +1371,36 @@ func calculatePullSummary(results []RepositoryPullResult) map[string]int {
 func (c *client) BulkPush(ctx context.Context, opts BulkPushOptions) (*BulkPushResult, error) {
 	startTime := time.Now()
 
-	// Validate options
-	if opts.Directory == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get current directory: %w", err)
-		}
-		opts.Directory = cwd
-	}
-
-	// Set defaults
-	if opts.Parallel <= 0 {
-		opts.Parallel = DefaultBulkParallel
-	}
-	if opts.MaxDepth <= 0 {
-		opts.MaxDepth = DefaultBulkMaxDepth
-	}
-
-
-	// Use logger
-	logger := opts.Logger
-	if logger == nil {
-		logger = &noopLogger{}
-	}
-
-	// Resolve absolute path
-	absPath, err := filepath.Abs(opts.Directory)
+	// Initialize common settings
+	common, err := initializeBulkOperation(
+		opts.Directory,
+		opts.Parallel,
+		opts.MaxDepth,
+		opts.IncludeSubmodules,
+		opts.IncludePattern,
+		opts.ExcludePattern,
+		opts.Logger,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+		return nil, err
 	}
-	opts.Directory = absPath
 
-	logger.Info("scanning for repositories", "directory", opts.Directory, "maxDepth", opts.MaxDepth)
+	// Update opts with initialized values
+	opts.Directory = common.Directory
+	opts.Parallel = common.Parallel
+	opts.MaxDepth = common.MaxDepth
+	opts.Logger = common.Logger
 
-	// Scan for repositories
-	repos, err := c.scanRepositoriesWithConfig(ctx, opts.Directory, opts.MaxDepth, logger, walkDirectoryConfig{
-		includeSubmodules: opts.IncludeSubmodules,
-	})
+	// Scan and filter repositories
+	filteredRepos, totalScanned, err := c.scanAndFilterRepositories(ctx, common)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan repositories: %w", err)
+		return nil, err
 	}
 
-	logger.Info("scan complete", "found", len(repos))
-
-	// Filter repositories
-	filteredRepos, err := filterRepositories(repos, opts.IncludePattern, opts.ExcludePattern, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter repositories: %w", err)
-	}
-
-	if len(filteredRepos) < len(repos) {
-		logger.Info("filtered repositories", "total", len(repos), "selected", len(filteredRepos))
-	}
-
+	// Handle empty result
 	if len(filteredRepos) == 0 {
 		return &BulkPushResult{
-			TotalScanned:   len(repos),
+			TotalScanned:   totalScanned,
 			TotalProcessed: 0,
 			Repositories:   []RepositoryPushResult{},
 			Duration:       time.Since(startTime),
@@ -1511,7 +1409,7 @@ func (c *client) BulkPush(ctx context.Context, opts BulkPushOptions) (*BulkPushR
 	}
 
 	// Process repositories in parallel
-	results, err := c.processPushRepositories(ctx, opts.Directory, filteredRepos, opts, logger)
+	results, err := c.processPushRepositories(ctx, opts.Directory, filteredRepos, opts, common.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process repositories: %w", err)
 	}
@@ -1520,7 +1418,7 @@ func (c *client) BulkPush(ctx context.Context, opts BulkPushOptions) (*BulkPushR
 	summary := calculatePushSummary(results)
 
 	return &BulkPushResult{
-		TotalScanned:   len(repos),
+		TotalScanned:   totalScanned,
 		TotalProcessed: len(filteredRepos),
 		Repositories:   results,
 		Duration:       time.Since(startTime),
@@ -1692,4 +1590,102 @@ func calculatePushSummary(results []RepositoryPushResult) map[string]int {
 	}
 
 	return summary
+}
+
+// ============================================================================
+// Common Bulk Operation Helpers
+// ============================================================================
+
+// bulkOperationCommon holds common configuration for bulk operations
+type bulkOperationCommon struct {
+	Directory         string
+	Parallel          int
+	MaxDepth          int
+	IncludeSubmodules bool
+	IncludePattern    string
+	ExcludePattern    string
+	Logger            Logger
+}
+
+// initializeBulkOperation initializes common bulk operation settings
+// Returns initialized common config and absolute directory path
+func initializeBulkOperation(
+	directory string,
+	parallel int,
+	maxDepth int,
+	includeSubmodules bool,
+	includePattern string,
+	excludePattern string,
+	logger Logger,
+) (*bulkOperationCommon, error) {
+	// Set directory default
+	if directory == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current directory: %w", err)
+		}
+		directory = cwd
+	}
+
+	// Set parallel default
+	if parallel <= 0 {
+		parallel = DefaultBulkParallel
+	}
+
+	// Set maxDepth default
+	if maxDepth <= 0 {
+		maxDepth = DefaultBulkMaxDepth
+	}
+
+	// Set logger default
+	if logger == nil {
+		logger = &noopLogger{}
+	}
+
+	// Resolve absolute path
+	absPath, err := filepath.Abs(directory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	return &bulkOperationCommon{
+		Directory:         absPath,
+		Parallel:          parallel,
+		MaxDepth:          maxDepth,
+		IncludeSubmodules: includeSubmodules,
+		IncludePattern:    includePattern,
+		ExcludePattern:    excludePattern,
+		Logger:            logger,
+	}, nil
+}
+
+// scanAndFilterRepositories scans for repositories and applies filters
+func (c *client) scanAndFilterRepositories(
+	ctx context.Context,
+	common *bulkOperationCommon,
+) ([]string, int, error) {
+	common.Logger.Info("scanning for repositories", "directory", common.Directory, "maxDepth", common.MaxDepth)
+
+	// Scan for repositories
+	repos, err := c.scanRepositoriesWithConfig(ctx, common.Directory, common.MaxDepth, common.Logger, walkDirectoryConfig{
+		includeSubmodules: common.IncludeSubmodules,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to scan repositories: %w", err)
+	}
+
+	common.Logger.Info("scan complete", "found", len(repos))
+	totalScanned := len(repos)
+
+	// Filter repositories
+	filteredRepos, err := filterRepositories(repos, common.IncludePattern, common.ExcludePattern, common.Logger)
+	if err != nil {
+		return nil, totalScanned, fmt.Errorf("failed to filter repositories: %w", err)
+	}
+
+	if len(filteredRepos) < len(repos) {
+		common.Logger.Info("filtered repositories", "total", len(repos), "selected", len(filteredRepos))
+	}
+
+	return filteredRepos, totalScanned, nil
 }

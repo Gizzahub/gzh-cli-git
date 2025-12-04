@@ -252,17 +252,59 @@ gz-git pull --watch --interval 5m ~/work
 gz-git pull -s rebase -j 10 -n -t -p -r -d 2 ~/projects
 ```
 
+**Bulk Push Multiple Repositories:**
+```bash
+# Push all repositories with smart state detection
+# - Skips repos with conflicts, rebase/merge in progress, or uncommitted changes
+# - Shows clear status: ⚡ conflict, ↻ rebase, ⇄ merge, ⚠ dirty
+gz-git push -d 1
+
+# Push repositories up to 2 levels deep
+gz-git push -d 2 ~/projects
+
+# Push with custom parallelism (short: -j)
+gz-git push -j 10 ~/workspace
+
+# Force push (use with caution!)
+gz-git push --force ~/projects
+
+# Push with force-with-lease (safer than --force)
+gz-git push --force-with-lease ~/projects
+
+# Push and set upstream branch automatically
+gz-git push --set-upstream -d 2 ~/projects
+
+# Push all tags
+gz-git push --tags ~/repos
+
+# Dry run to see what would be pushed (short: -n)
+gz-git push -n ~/projects
+
+# Filter by pattern
+gz-git push --include "myproject.*" ~/workspace
+gz-git push --exclude "test.*" ~/projects
+
+# Recursively include nested repositories and submodules (short: -r)
+gz-git push -r ~/projects
+
+# Compact output format
+gz-git push --format compact ~/projects
+
+# Combined example with multiple flags
+gz-git push -j 10 -n --set-upstream -r -d 2 ~/projects
+```
+
 **Shorthand Flags Reference:**
 
 | Flag | Short | Description | Commands |
 |------|-------|-------------|----------|
-| `--depth` | `-d` | Directory depth to scan | fetch, pull |
-| `--parallel` | `-j` | Parallel operations (make -j convention) | fetch, pull |
-| `--dry-run` | `-n` | Preview without executing (GNU convention) | fetch, pull |
+| `--depth` | `-d` | Directory depth to scan | fetch, pull, push |
+| `--parallel` | `-j` | Parallel operations (make -j convention) | fetch, pull, push |
+| `--dry-run` | `-n` | Preview without executing (GNU convention) | fetch, pull, push |
 | `--strategy` | `-s` | Pull strategy (merge/rebase/ff-only) | pull |
-| `--tags` | `-t` | Fetch all tags (git convention) | fetch, pull |
+| `--tags` | `-t` | Fetch/push all tags (git convention) | fetch, pull, push |
 | `--prune` | `-p` | Prune deleted remote branches (git convention) | pull |
-| `--recursive` | `-r` | Include nested repos/submodules (GNU convention) | fetch, pull |
+| `--recursive` | `-r` | Include nested repos/submodules (GNU convention) | fetch, pull, push |
 
 **Global Options:**
 ```bash

@@ -38,10 +38,10 @@ Root Level:
 ### Issues with Current Structure
 
 1. **Mixed Audiences**: Human and LLM docs not clearly separated
-2. **Flat Hierarchy**: Most docs at root or `docs/` level
-3. **Inconsistent Naming**: Some docs user-focused, others dev-focused
-4. **Navigation Difficulty**: Hard to find specific information
-5. **Duplicate Content**: Information scattered across multiple files
+1. **Flat Hierarchy**: Most docs at root or `docs/` level
+1. **Inconsistent Naming**: Some docs user-focused, others dev-focused
+1. **Navigation Difficulty**: Hard to find specific information
+1. **Duplicate Content**: Information scattered across multiple files
 
 ## Proposed Structure
 
@@ -136,25 +136,28 @@ docs/
 ### Phase 1: Create New Structure (Week 1)
 
 1. Create new directory structure
-2. Add README.md to each major section
-3. Create navigation index documents
+1. Add README.md to each major section
+1. Create navigation index documents
 
 ### Phase 2: Move Existing Docs (Week 1-2)
 
 1. **User Docs**:
+
    - Move QUICKSTART.md → `docs/user/getting-started/README.md`
    - Move INSTALL.md → `docs/user/getting-started/installation.md`
    - Move TROUBLESHOOTING.md → `docs/user/guides/troubleshooting.md`
    - Move commands/README.md → `docs/user/reference/commands.md`
 
-2. **Developer Docs**:
+1. **Developer Docs**:
+
    - Move ARCHITECTURE.md → `docs/developer/architecture/detailed-spec.md`
    - Move PRD.md → `docs/developer/project/prd.md`
    - Move REQUIREMENTS.md → `docs/developer/project/requirements.md`
    - Move CONTRIBUTING.md → `docs/developer/contributing/README.md`
    - Move CHANGELOG.md → `docs/developer/project/changelog.md`
 
-3. **Library Docs**:
+1. **Library Docs**:
+
    - Move LIBRARY.md → `docs/developer/library/README.md`
    - Create quickstart guide
    - Create API reference pages
@@ -162,16 +165,19 @@ docs/
 ### Phase 3: Create New Content (Week 2-3)
 
 1. **User Documentation**:
+
    - Write workflows.md (common use cases)
    - Write example scenarios
    - Create configuration reference
 
-2. **Developer Documentation**:
+1. **Developer Documentation**:
+
    - Write architecture overview (condensed from ARCHITECTURE.md)
    - Write design decisions document
    - Write contribution workflow guide
 
-3. **LLM Documentation**:
+1. **LLM Documentation**:
+
    - Create API catalog
    - Create codebase map
    - Write implementation guide
@@ -179,33 +185,36 @@ docs/
 ### Phase 4: Update Links (Week 3)
 
 1. Update all internal links in documentation
-2. Update links in README.md
-3. Update links in code comments
-4. Add redirects for old paths (if needed)
+1. Update links in README.md
+1. Update links in code comments
+1. Add redirects for old paths (if needed)
 
 ### Phase 5: Cleanup (Week 3)
 
 1. Remove old documentation files
-2. Archive phase-* progress docs
-3. Update .gitignore if needed
+1. Archive phase-\* progress docs
+1. Update .gitignore if needed
 
 ## Documentation Guidelines
 
 ### Audience Separation
 
 **User Documentation** (`docs/user/`):
+
 - **Target**: End users of the CLI tool
 - **Focus**: How to use, practical examples, troubleshooting
 - **Tone**: Friendly, tutorial-style, step-by-step
 - **Format**: Short sections, lots of examples, visual aids
 
 **Developer Documentation** (`docs/developer/`):
+
 - **Target**: Go developers using the library, contributors
 - **Focus**: API reference, architecture, contribution process
 - **Tone**: Technical, precise, comprehensive
 - **Format**: Detailed explanations, code examples, design rationale
 
 **LLM Documentation** (`docs/llm/`):
+
 - **Target**: AI assistants (Claude, GitHub Copilot, etc.)
 - **Focus**: Project structure, APIs, implementation patterns
 - **Tone**: Structured, token-efficient, comprehensive
@@ -228,32 +237,36 @@ Per `~/.claude/CLAUDE.md` guidelines:
 ### Content Principles
 
 1. **DRY (Don't Repeat Yourself)**: Link instead of duplicating
-2. **Progressive Disclosure**: Start simple, link to details
-3. **Examples First**: Show code, then explain
-4. **Searchable**: Use clear headings and keywords
-5. **Up-to-date**: Mark outdated sections clearly
+1. **Progressive Disclosure**: Start simple, link to details
+1. **Examples First**: Show code, then explain
+1. **Searchable**: Use clear headings and keywords
+1. **Up-to-date**: Mark outdated sections clearly
 
 ## Navigation Strategy
 
 ### Main Entry Points
 
 1. **README.md** (Root):
+
    - Project overview
    - Quick links to main docs
    - Getting started link
    - Feature highlights
 
-2. **docs/user/getting-started/README.md**:
+1. **docs/user/getting-started/README.md**:
+
    - Installation
    - First steps tutorial
    - Common use cases
 
-3. **docs/developer/library/README.md**:
+1. **docs/developer/library/README.md**:
+
    - Library overview
    - Quick start
    - API reference index
 
-4. **docs/llm/CONTEXT.md**:
+1. **docs/llm/CONTEXT.md**:
+
    - Project context for AI
    - Quick reference
    - Implementation patterns
@@ -270,14 +283,15 @@ Per `~/.claude/CLAUDE.md` guidelines:
 ### Measurable Goals
 
 1. **Discoverability**: Users can find answers in < 3 clicks
-2. **Completeness**: All features documented
-3. **Accuracy**: < 5% documentation bugs reported
-4. **Maintenance**: Docs updated within 1 week of code changes
-5. **User Satisfaction**: Positive feedback on documentation
+1. **Completeness**: All features documented
+1. **Accuracy**: < 5% documentation bugs reported
+1. **Maintenance**: Docs updated within 1 week of code changes
+1. **User Satisfaction**: Positive feedback on documentation
 
 ### Quality Checklist
 
 For each document:
+
 - [ ] Clear audience identified
 - [ ] Appropriate level of detail
 - [ ] Working code examples (if applicable)
@@ -298,9 +312,9 @@ For each document:
 ## Open Questions
 
 1. Should we use a documentation generator (e.g., MkDocs, Docusaurus)?
-2. Do we need versioned documentation?
-3. Should we create video tutorials?
-4. Do we want interactive examples (e.g., runnable code snippets)?
+1. Do we need versioned documentation?
+1. Should we create video tutorials?
+1. Do we want interactive examples (e.g., runnable code snippets)?
 
 ## References
 
@@ -309,6 +323,6 @@ For each document:
 - File Size Limits: `~/.claude/ctx/FILE_SIZE_LIMITS.md`
 - LLM Writing Guide: `~/.claude/ctx/LLM_FRIENDLY_WRITING.md`
 
----
+______________________________________________________________________
 
 **Next Steps**: Get approval for structure, begin Phase 1 migration

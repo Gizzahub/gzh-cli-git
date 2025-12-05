@@ -2,25 +2,28 @@
 
 Project-wide conventions for all gzh-cli-git modules.
 
----
+______________________________________________________________________
 
 ## Naming Conventions
 
 ### Files
+
 - **Commands**: `{command}.go` (e.g., `clone.go`, `status.go`)
 - **Tests**: `{name}_test.go`
 - **Mocks**: `{name}_mock.go` or in `mocks/` directory
 
 ### Code
+
 - **Interfaces**: Noun (e.g., `Executor`, `Parser`, `Repository`)
 - **Implementations**: Adjective+Noun (e.g., `DefaultExecutor`, `SafeParser`)
 - **Constructors**: `New{Type}()` pattern
 
----
+______________________________________________________________________
 
 ## Error Handling
 
 ### Standard Pattern
+
 ```go
 if err != nil {
     return fmt.Errorf("{operation} failed: %w", err)
@@ -28,6 +31,7 @@ if err != nil {
 ```
 
 ### Git-Specific Errors
+
 ```go
 // For git command failures
 if err != nil {
@@ -35,11 +39,12 @@ if err != nil {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Git Safety Rules
 
 ### CRITICAL: Input Sanitization
+
 ```go
 // Always sanitize user inputs before git commands
 sanitized := sanitize.Path(userInput)
@@ -48,20 +53,23 @@ sanitized := sanitize.RemoteName(userInput)
 ```
 
 ### Forbidden Patterns
+
 - ❌ Direct shell execution with user input
 - ❌ `exec.Command("sh", "-c", userInput)`
 - ❌ Unsanitized paths in git commands
 
 ### Safe Patterns
+
 - ✅ Use `internal/gitcmd` for execution
 - ✅ Validate inputs before execution
 - ✅ Use argument arrays, not string concatenation
 
----
+______________________________________________________________________
 
 ## Testing Patterns
 
 ### Unit Test Structure
+
 ```go
 func TestFunctionName(t *testing.T) {
     tests := []struct {
@@ -88,6 +96,7 @@ func TestFunctionName(t *testing.T) {
 ```
 
 ### Git Test Helpers
+
 ```go
 // Use t.TempDir() for git repository tests
 dir := t.TempDir()
@@ -95,23 +104,25 @@ dir := t.TempDir()
 exec.Command("git", "init", dir).Run()
 ```
 
----
+______________________________________________________________________
 
 ## Logging
 
 ### Levels
+
 - **Debug**: Detailed git command output
 - **Info**: Operation progress
 - **Warn**: Non-fatal issues (dirty working tree, etc.)
 - **Error**: Operation failures
 
 ### Format
+
 ```go
 log.Info("cloning repository", "url", url, "path", path)
 log.Error("clone failed", "error", err)
 ```
 
----
+______________________________________________________________________
 
 ## Commit Message Format
 
@@ -125,6 +136,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 ### Types
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation
@@ -133,6 +145,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - `chore`: Maintenance
 
 ### Scopes
+
 - `cmd`: CLI commands
 - `internal`: Internal packages
 - `pkg/branch`: Branch operations
@@ -140,26 +153,29 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - `pkg/merge`: Merge operations
 - etc.
 
----
+______________________________________________________________________
 
 ## Forbidden Patterns
 
 ### Code
+
 - ❌ Global state
 - ❌ `init()` with side effects
 - ❌ Hardcoded paths
 - ❌ Unsanitized shell execution
 
 ### Git Operations
+
 - ❌ Force push without confirmation
 - ❌ Destructive operations without backup
 - ❌ Operations on detached HEAD without warning
 
----
+______________________________________________________________________
 
 ## Quality Standards
 
 ### Coverage Targets
+
 | Package | Target |
 |---------|--------|
 | internal/ | 80%+ |
@@ -167,10 +183,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 | cmd/ | 70%+ |
 
 ### Before Commit
+
 ```bash
 make quality  # REQUIRED
 ```
 
----
+______________________________________________________________________
 
 **Last Updated**: 2024-12-05

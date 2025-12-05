@@ -11,13 +11,14 @@
 
 **gzh-cli-git** is a Git-specialized CLI tool and Go library that provides advanced Git automation capabilities. It serves dual purposes: a powerful standalone CLI for developers and a reusable library for embedding in other Go projects.
 
----
+______________________________________________________________________
 
 ## Features
 
 ### ✅ Fully Implemented & Available (v0.3.0)
 
 📦 **Repository Operations**
+
 - Clone repositories with advanced options (branch, depth, single-branch, recursive)
 - Check repository status (clean/dirty, modified/staged/untracked files)
 - Get repository information (branch, remote, upstream, ahead/behind counts)
@@ -31,30 +32,35 @@
   - Clear error messages with actionable guidance
 
 🚀 **Commit Automation**
+
 - Template-based commit messages (Conventional Commits support)
 - Auto-generate commit messages from code changes
 - Validate commit messages against templates
 - Built-in template management (list, show, validate)
 
 🌿 **Branch Management**
+
 - Create, list, and delete branches
 - Worktree-based parallel development
 - Branch creation with linked worktrees
 - Local and remote branch operations
 
 📊 **History Analysis**
+
 - Commit statistics and trends
 - Contributor analysis with metrics
 - File change tracking and history
 - Multiple output formats (Table, JSON, CSV)
 
 🔀 **Advanced Merge/Rebase**
+
 - Pre-merge conflict detection
 - Execute merge with multiple strategies
 - Abort and rebase operations
 - Interactive conflict assistance
 
 📚 **Go Library API**
+
 - Clean, stable public APIs (all `pkg/*` packages)
 - Zero CLI dependencies in library code
 - Context-aware operations (cancellation, timeouts)
@@ -62,6 +68,7 @@
 - Full implementations: `repository`, `operations`, `commit`, `branch`, `history`, `merge`
 
 🔧 **Quality & Testing**
+
 - 141 tests passing
 - 69.1% code coverage
 - Comprehensive integration tests
@@ -69,23 +76,26 @@
 
 > **Note**: Version v0.2.0 reflects the actual feature completeness of this project. All major planned features are implemented and tested. See [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for details.
 
----
+______________________________________________________________________
 
 ## Quick Start
 
 ### Installation
 
 **Via Go Install:**
+
 ```bash
 go install github.com/gizzahub/gzh-cli-git/cmd/gzh-git@latest
 ```
 
 **Via Homebrew (macOS/Linux):**
+
 ```bash
 brew install gz-git  # Coming soon
 ```
 
 **From Source:**
+
 ```bash
 git clone https://github.com/gizzahub/gzh-cli-git.git
 cd gzh-cli-git
@@ -98,13 +108,14 @@ make install  # Installs to $GOPATH/bin
 - Git 2.30+
 - Go 1.24+ (for building from source)
 
----
+______________________________________________________________________
 
 ## Usage
 
 ### As CLI Tool
 
 **Check Repository Status:**
+
 ```bash
 # Show working tree status with smart state detection
 gz-git status
@@ -123,6 +134,7 @@ gz-git status -q
 ```
 
 **Monitor Repositories for Changes:**
+
 ```bash
 # Watch current directory for changes
 gz-git watch
@@ -141,6 +153,7 @@ gz-git watch --format json
 ```
 
 **View Repository Information:**
+
 ```bash
 # Show detailed repository information
 gz-git info
@@ -150,6 +163,7 @@ gz-git info /path/to/repo
 ```
 
 **Clone Repositories:**
+
 ```bash
 # Basic clone
 gz-git clone https://github.com/user/repo.git
@@ -168,6 +182,7 @@ gz-git clone https://github.com/user/repo.git my-project
 ```
 
 **Bulk Fetch Multiple Repositories:**
+
 ```bash
 # Fetch all repositories in current directory (1-depth)
 gz-git fetch -d 1
@@ -203,6 +218,7 @@ gz-git fetch --watch --interval 1m ~/work
 ```
 
 **Bulk Pull Multiple Repositories:**
+
 ```bash
 # Pull all repositories with smart state detection
 # - Skips repos with conflicts, rebase/merge in progress
@@ -253,6 +269,7 @@ gz-git pull -s rebase -j 10 -n -t -p -r -d 2 ~/projects
 ```
 
 **Bulk Push Multiple Repositories:**
+
 ```bash
 # Push all repositories with smart state detection
 # - Skips repos with conflicts, rebase/merge in progress, or uncommitted changes
@@ -307,6 +324,7 @@ gz-git push -j 10 -n --set-upstream -r -d 2 ~/projects
 | `--recursive` | `-r` | Include nested repos/submodules (GNU convention) | fetch, pull, push |
 
 **Global Options:**
+
 ```bash
 # Verbose output
 gz-git -v status
@@ -321,11 +339,12 @@ gz-git --version
 gz-git --help
 ```
 
----
+______________________________________________________________________
 
 ### Advanced Features Usage
 
 **Commit Automation:**
+
 ```bash
 # Auto-generate and create commit
 gz-git commit auto
@@ -341,6 +360,7 @@ gz-git commit template show conventional
 ```
 
 **Branch & Worktree Management:**
+
 ```bash
 # List all branches
 gz-git branch list --all
@@ -356,6 +376,7 @@ gz-git branch delete old-feature
 ```
 
 **History Analysis:**
+
 ```bash
 # Show commit statistics
 gz-git history stats --since "1 month ago"
@@ -368,6 +389,7 @@ gz-git history file src/main.go
 ```
 
 **Advanced Merge/Rebase:**
+
 ```bash
 # Detect conflicts before merging
 gz-git merge detect feature/new-feature main
@@ -385,6 +407,7 @@ gz-git merge rebase main
 ### As Go Library
 
 **Basic Repository Operations:**
+
 ```go
 package main
 
@@ -431,6 +454,7 @@ func main() {
 ```
 
 **Clone Repository:**
+
 ```go
 package main
 
@@ -470,6 +494,7 @@ func main() {
 All major packages are fully implemented. See [Library Documentation](docs/LIBRARY.md) for comprehensive examples.
 
 **Available Packages:**
+
 - `pkg/repository` - Repository operations
 - `pkg/operations` - Clone, pull, fetch operations
 - `pkg/commit` - Commit automation and validation
@@ -478,11 +503,12 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
 - `pkg/merge` - Merge and rebase operations
 
 **For detailed examples, see:**
+
 - [Library Guide](docs/LIBRARY.md) - Complete library documentation
 - [examples/](examples/) directory - Working code samples
 - [API Reference](https://pkg.go.dev/github.com/gizzahub/gzh-cli-git) - Full API documentation
 
----
+______________________________________________________________________
 
 ## Documentation
 
@@ -500,7 +526,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
 - [History Analysis](specs/30-history-analysis.md) *(coming soon)*
 - [Advanced Merge/Rebase](specs/40-advanced-merge.md) *(coming soon)*
 
----
+______________________________________________________________________
 
 ## Project Status
 
@@ -510,6 +536,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
 ### Roadmap
 
 - [x] **Phase 1-5**: Core Features *(Completed - v0.2.0)*
+
   - [x] Project structure and architecture
   - [x] Core documentation (PRD, REQUIREMENTS, ARCHITECTURE)
   - [x] Repository operations (clone, status, info, update)
@@ -521,6 +548,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
   - [x] Test infrastructure (141 tests, 69.1% coverage)
 
 - [ ] **Phase 6**: Documentation & Examples *(In Progress)*
+
   - [x] Implementation status report
   - [ ] Comprehensive usage examples
   - [ ] Complete API documentation
@@ -528,6 +556,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
   - [ ] Migration guides from other tools
 
 - [ ] **Phase 7**: Production Readiness *(Target: v1.0.0)*
+
   - [ ] 90%+ test coverage
   - [ ] Performance benchmarks and optimization
   - [ ] Security audit
@@ -539,7 +568,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
 
 **See full roadmap in [PRD.md](PRD.md)**
 
----
+______________________________________________________________________
 
 ## Architecture
 
@@ -579,6 +608,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
 ```
 
 **Key Principles:**
+
 - **Library-First**: Clean APIs with zero CLI dependencies
 - **Interface-Driven**: All components via well-defined interfaces
 - **Context Propagation**: Cancellation and timeout support
@@ -586,7 +616,7 @@ All major packages are fully implemented. See [Library Documentation](docs/LIBRA
 
 **See detailed architecture in [ARCHITECTURE.md](ARCHITECTURE.md)**
 
----
+______________________________________________________________________
 
 ## Development
 
@@ -652,7 +682,7 @@ gzh-cli-git/
 └── .make/                # Modular Makefiles
 ```
 
----
+______________________________________________________________________
 
 ## Integration with gzh-cli
 
@@ -668,7 +698,7 @@ client := repository.NewClient(logger)
 repo, _ := client.Open(ctx, repoPath)
 ```
 
----
+______________________________________________________________________
 
 ## Contributing
 
@@ -677,12 +707,12 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 ### Development Workflow
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests and linters (`make quality`)
-5. Commit using conventional commits
-6. Push to your fork
-7. Open a Pull Request
+1. Create a feature branch (`git checkout -b feature/amazing-feature`)
+1. Make your changes
+1. Run tests and linters (`make quality`)
+1. Commit using conventional commits
+1. Push to your fork
+1. Open a Pull Request
 
 ### Commit Convention
 
@@ -699,6 +729,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 **Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `ci`
 
 **Example:**
+
 ```
 feat(commit): add auto-commit with template support
 
@@ -710,13 +741,13 @@ Implement auto-commit functionality that:
 Closes #123
 ```
 
----
+______________________________________________________________________
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+______________________________________________________________________
 
 ## Acknowledgments
 
@@ -724,7 +755,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Cobra](https://github.com/spf13/cobra) CLI framework
 - Follows [Conventional Commits](https://www.conventionalcommits.org/) specification
 
----
+______________________________________________________________________
 
 ## Support
 
@@ -732,7 +763,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 🐛 Issues: [GitHub Issues](https://github.com/gizzahub/gzh-cli-git/issues)
 - 💬 Discussions: [GitHub Discussions](https://github.com/gizzahub/gzh-cli-git/discussions)
 
----
+______________________________________________________________________
 
 <p align="center">
   Made with ❤️ by the Gizzahub team

@@ -5,9 +5,9 @@ This example demonstrates gzh-git merge and conflict detection features using th
 ## Features Demonstrated
 
 1. **Pre-Merge Conflict Detection**: Identify conflicts before attempting merge
-2. **Merge Execution**: Execute merges with various strategies
-3. **Merge Abort**: Safely abort in-progress merges
-4. **Rebase Operations**: Rebase branches interactively or non-interactively
+1. **Merge Execution**: Execute merges with various strategies
+1. **Merge Abort**: Safely abort in-progress merges
+1. **Rebase Operations**: Rebase branches interactively or non-interactively
 
 ## Usage
 

@@ -9,9 +9,9 @@
 The `gzh-git watch` command monitors repositories for changes in real-time. The challenge is presenting this information in a way that is:
 
 1. **Human-readable** for developers monitoring their work
-2. **Machine-parseable** for automation and integration
-3. **Concise** for terminal usage
-4. **Informative** with enough detail to be actionable
+1. **Machine-parseable** for automation and integration
+1. **Concise** for terminal usage
+1. **Informative** with enough detail to be actionable
 
 ## Requirements
 
@@ -38,6 +38,7 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Decision**: Provide three distinct formats via `--format` flag
 
 **Rationale**:
+
 - Different use cases have different needs
 - Human monitoring vs. machine parsing
 - Terminal real estate constraints
@@ -50,6 +51,7 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Target Audience**: Developers actively monitoring changes
 
 **Design**:
+
 ```
 [15:04:05] my-project ● Modified (3 files)
     src/main.go
@@ -58,18 +60,21 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 ```
 
 **Features**:
+
 - Color-coded change types
 - File list (limited to 5 by default)
 - Visual hierarchy with indentation
 - Timestamp for temporal tracking
 
 **Pros**:
+
 - Immediately understandable
 - Rich contextual information
 - Easy to scan visually
 - Color helps categorize changes
 
 **Cons**:
+
 - Verbose for high-frequency changes
 - More screen space usage
 - May scroll quickly with many events
@@ -79,24 +84,28 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Target Audience**: Users monitoring multiple repos or long sessions
 
 **Design**:
+
 ```
 [15:04:05] my-project: modified [3]
 [15:04:12] my-project: staged [2]
 ```
 
 **Features**:
+
 - Single line per event
 - File count indicator
 - Minimal formatting
 - No color (optional)
 
 **Pros**:
+
 - Efficient screen usage
 - Easy to grep/filter
 - Less visual noise
 - Suitable for logging
 
 **Cons**:
+
 - Less contextual detail
 - No file names shown
 - Requires mental mapping of counts
@@ -106,23 +115,27 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Target Audience**: Automation, CI/CD, integration scripts
 
 **Design**:
+
 ```json
 {"timestamp":"2025-12-01T15:04:05Z","path":"/path/to/repo","type":"modified","files":["src/main.go","pkg/handler.go","README.md"]}
 ```
 
 **Features**:
+
 - Structured data format
 - Machine-readable
 - One JSON object per line (JSONL)
 - ISO 8601 timestamps
 
 **Pros**:
+
 - Perfect for automation
 - Parseable by `jq`, Python, etc.
 - Structured data types
 - Timestamped for analytics
 
 **Cons**:
+
 - Not human-friendly
 - Verbose for manual reading
 - Requires parsing tools
@@ -132,6 +145,7 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Decision**: Use semantic colors for change types
 
 **Color Mapping**:
+
 - 🟡 **Yellow** (`\x1b[33m`) - Modified files (warning)
 - 🟢 **Green** (`\x1b[32m`) - Staged files (ready) / Clean state (success)
 - 🟣 **Purple** (`\x1b[35m`) - Untracked files (new)
@@ -140,6 +154,7 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 - ⚪ **Gray** (`\x1b[90m`) - Timestamps (muted)
 
 **Rationale**:
+
 - Follows common Git UI conventions
 - Intuitive semantic meaning
 - Accessible (avoids red-green only distinction)
@@ -149,6 +164,7 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Decision**: Show first 5 files, indicate if more exist
 
 **Example**:
+
 ```
 [15:04:05] my-project ● Modified (12 files)
     src/main.go
@@ -160,12 +176,14 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 ```
 
 **Rationale**:
+
 - Prevents screen overflow
-- Most common changes affect <5 files
+- Most common changes affect \<5 files
 - "... and N more" provides count context
 - Users can run `status` for full list
 
 **Alternative Considered**: `--max-files` flag
+
 - **Rejected**: Adds complexity for rare use case
 - **Future**: Could add if requested
 
@@ -174,10 +192,12 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Decision**: Use `HH:MM:SS` for default/compact, ISO 8601 for JSON
 
 **Examples**:
+
 - Default/Compact: `[15:04:05]`
 - JSON: `"2025-12-01T15:04:05Z"`
 
 **Rationale**:
+
 - Short time sufficient for same-day monitoring
 - Full date adds noise for real-time watch
 - JSON needs full timestamp for sorting/filtering
@@ -188,11 +208,13 @@ The `gzh-git watch` command monitors repositories for changes in real-time. The 
 **Decision**: Use Unicode symbols for visual distinction
 
 **Symbols**:
+
 - `●` (U+25CF) - Most change types
 - `✓` (U+2713) - Clean state
 - `→` (U+2192) - Branch name (future)
 
 **Rationale**:
+
 - Adds visual hierarchy
 - Internationally understood
 - Terminal-safe characters
@@ -242,6 +264,7 @@ TIME     REPO        TYPE      FILES
 ```
 
 **Rejected Because**:
+
 - Less information density
 - Difficult with variable-length repo names
 - No space for file lists
@@ -262,6 +285,7 @@ TIME     REPO        TYPE      FILES
 ```
 
 **Rejected Because**:
+
 - Incompatible with piping/automation
 - Cannot scroll back through history
 - Requires terminal control (not SSH-safe)
@@ -281,6 +305,7 @@ src/main.go:
 ```
 
 **Rejected Because**:
+
 - Extremely verbose
 - High CPU overhead (requires diffing)
 - Not useful for real-time monitoring
@@ -292,11 +317,13 @@ src/main.go:
 **Design**: Native OS notifications for each event
 
 **Partially Implemented**:
+
 - `--notify` flag added (placeholder)
 - macOS support planned
 - Cross-platform via `beeep` library
 
 **Deferred Because**:
+
 - Platform-specific complexity
 - Notification fatigue for high-frequency changes
 - Not useful for automation
@@ -307,6 +334,7 @@ src/main.go:
 ### Current Configuration
 
 Via CLI flags only:
+
 ```bash
 gzh-git watch --format compact --interval 5s
 ```
@@ -332,6 +360,7 @@ watch:
 **Scenario**: Developer coding in IDE, wants to see what changed
 
 **Command**:
+
 ```bash
 gzh-git watch
 ```
@@ -343,6 +372,7 @@ gzh-git watch
 **Scenario**: CI system triggers builds on staged files
 
 **Command**:
+
 ```bash
 gzh-git watch --format json | jq -r 'select(.type=="staged") | .path'
 ```
@@ -354,6 +384,7 @@ gzh-git watch --format json | jq -r 'select(.type=="staged") | .path'
 **Scenario**: Shared screen showing team activity
 
 **Command**:
+
 ```bash
 gzh-git watch --format compact ~/team/repos/*
 ```
@@ -365,6 +396,7 @@ gzh-git watch --format compact ~/team/repos/*
 **Scenario**: Audit trail of all repository changes
 
 **Command**:
+
 ```bash
 gzh-git watch --format json >> ~/logs/git-changes.jsonl
 ```
@@ -375,11 +407,11 @@ gzh-git watch --format json >> ~/logs/git-changes.jsonl
 
 ### Format Impact on Performance
 
-| Format  | CPU Overhead | Memory | Notes |
+| Format | CPU Overhead | Memory | Notes |
 |---------|--------------|--------|-------|
-| Default | ~0.5%        | 1KB/event | Color codes + formatting |
-| Compact | ~0.3%        | 500B/event | Minimal processing |
-| JSON    | ~0.4%        | 800B/event | JSON encoding |
+| Default | ~0.5% | 1KB/event | Color codes + formatting |
+| Compact | ~0.3% | 500B/event | Minimal processing |
+| JSON | ~0.4% | 800B/event | JSON encoding |
 
 **Conclusion**: All formats are lightweight enough for real-time use
 
@@ -408,16 +440,19 @@ gzh-git watch --format json >> ~/logs/git-changes.jsonl
 ### Planned for v0.3.0
 
 1. **Custom Format Strings**
+
    ```bash
    gzh-git watch --format='{time} {repo} {type} {count}'
    ```
 
-2. **Filter Options**
+1. **Filter Options**
+
    ```bash
    gzh-git watch --only=staged,modified
    ```
 
-3. **Sound Notifications**
+1. **Sound Notifications**
+
    - macOS: `afplay`
    - Linux: `paplay`
    - Windows: `Beep` API
@@ -425,16 +460,19 @@ gzh-git watch --format json >> ~/logs/git-changes.jsonl
 ### Planned for v1.0.0
 
 1. **TUI Dashboard Mode**
+
    ```bash
    gzh-git watch --tui
    ```
 
-2. **Webhook Notifications**
+1. **Webhook Notifications**
+
    ```bash
    gzh-git watch --webhook=https://api.example.com/git-changes
    ```
 
-3. **Configuration File Support**
+1. **Configuration File Support**
+
    - Per-repository watch settings
    - Default format preferences
    - Custom color schemes
@@ -451,7 +489,7 @@ The implemented multi-format approach provides:
 
 The design balances immediate usability with future extensibility, providing a solid foundation for real-time Git monitoring.
 
----
+______________________________________________________________________
 
 **Decision Status**: ✅ Implemented
 **Last Updated**: 2025-12-01

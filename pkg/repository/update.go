@@ -49,6 +49,11 @@ type CloneOrUpdateOptions struct {
 	// Force allows destructive operations even when not normally allowed
 	Force bool
 
+	// CreateBranch creates the branch if it doesn't exist on the remote
+	// If true and the specified branch doesn't exist, it will be created after cloning
+	// Only effective when Branch is specified
+	CreateBranch bool
+
 	// Logger is an optional logger for operation feedback
 	Logger Logger
 
@@ -175,12 +180,13 @@ func (c *client) CloneOrUpdate(ctx context.Context, opts CloneOrUpdateOptions) (
 // performCloneOperation executes a fresh clone
 func (c *client) performCloneOperation(ctx context.Context, opts CloneOrUpdateOptions, logger Logger) (*CloneOrUpdateResult, error) {
 	cloneOpts := CloneOptions{
-		URL:         opts.URL,
-		Destination: opts.Destination,
-		Branch:      opts.Branch,
-		Depth:       opts.Depth,
-		Logger:      logger,
-		Progress:    opts.Progress,
+		URL:          opts.URL,
+		Destination:  opts.Destination,
+		Branch:       opts.Branch,
+		Depth:        opts.Depth,
+		CreateBranch: opts.CreateBranch,
+		Logger:       logger,
+		Progress:     opts.Progress,
 	}
 
 	repo, err := c.Clone(ctx, cloneOpts)

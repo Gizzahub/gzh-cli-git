@@ -23,17 +23,19 @@ go run main.go
 ```
 
 **What it does:**
+
 - Opens the gzh-cli-git repository
 - Displays branch, remote URL, and upstream information
 - Shows working tree status (clean/dirty, file counts)
 
 **API Demonstrated:**
+
 - `repository.NewClient()`
 - `client.Open(ctx, path)`
 - `client.GetInfo(ctx, repo)`
 - `client.GetStatus(ctx, repo)`
 
----
+______________________________________________________________________
 
 ### 2. Clone Repository (`clone/`)
 
@@ -45,6 +47,7 @@ go run main.go <repository-url> [destination]
 ```
 
 **Examples:**
+
 ```bash
 # Clone to default location (/tmp/cloned-repo)
 go run main.go https://github.com/golang/example.git
@@ -54,15 +57,17 @@ go run main.go https://github.com/golang/example.git /tmp/my-repo
 ```
 
 **What it does:**
+
 - Clones a repository with shallow clone (depth=1) for speed
 - Uses single-branch mode to clone only the default branch
 - Displays clone progress and repository information
 
 **API Demonstrated:**
+
 - `repository.CloneOptions`
 - `client.Clone(ctx, options)`
 
----
+______________________________________________________________________
 
 ### 3. Commit Automation (`commit/`)
 
@@ -74,19 +79,21 @@ go run main.go [repository-path]
 ```
 
 **What it does:**
+
 - Validates commit messages against Conventional Commits format
 - Lists available commit message templates
 - Shows template details
 - Auto-generates commit messages from staged changes
 
 **API Demonstrated:**
+
 - `commit.NewManager()`
 - `manager.ValidateMessage(ctx, repo, message)`
 - `manager.ListTemplates(ctx)`
 - `manager.GetTemplate(ctx, name)`
 - `manager.AutoGenerateMessage(ctx, repo)`
 
----
+______________________________________________________________________
 
 ### 4. Branch Management (`branch/`)
 
@@ -98,6 +105,7 @@ go run main.go [repository-path]
 ```
 
 **What it does:**
+
 - Lists all branches (local and remote)
 - Gets current branch information
 - Checks branch existence
@@ -105,13 +113,14 @@ go run main.go [repository-path]
 - Shows examples of branch creation
 
 **API Demonstrated:**
+
 - `branch.NewManager()`
 - `manager.List(ctx, repo, options)`
 - `manager.GetCurrent(ctx, repo)`
 - `manager.Exists(ctx, repo, name)`
 - `manager.ListWorktrees(ctx, repo)`
 
----
+______________________________________________________________________
 
 ### 5. History Analysis (`history/`)
 
@@ -123,19 +132,21 @@ go run main.go [repository-path]
 ```
 
 **What it does:**
+
 - Gets commit statistics (last 30 days)
 - Analyzes top contributors
 - Shows file history
 - Lists recent commits
 
 **API Demonstrated:**
+
 - `history.NewAnalyzer()`
 - `analyzer.GetStats(ctx, repo, options)`
 - `analyzer.GetContributors(ctx, repo, options)`
 - `analyzer.GetFileHistory(ctx, repo, options)`
 - `analyzer.GetCommits(ctx, repo, options)`
 
----
+______________________________________________________________________
 
 ### 6. Merge & Conflict Detection (`merge/`)
 
@@ -147,6 +158,7 @@ go run main.go [repository-path]
 ```
 
 **What it does:**
+
 - Checks if merge is in progress
 - Detects potential conflicts before merging
 - Shows available merge strategies
@@ -154,13 +166,14 @@ go run main.go [repository-path]
 - Shows rebase operations
 
 **API Demonstrated:**
+
 - `merge.NewManager()`
 - `manager.InProgress(ctx, repo)`
 - `manager.DetectConflicts(ctx, repo, options)`
 - `manager.Execute(ctx, repo, options)` (example)
 - `manager.Rebase(ctx, repo, options)` (example)
 
----
+______________________________________________________________________
 
 ## Running All Examples
 
@@ -216,24 +229,30 @@ Then run them:
 ## Example Categories
 
 ### Repository Operations
+
 - `basic/` - Core repository operations (open, info, status)
 - `clone/` - Advanced cloning with options
 
 ### Commit Management
+
 - `commit/` - Commit automation, validation, templates
 
 ### Branch & Worktree
+
 - `branch/` - Branch management and worktrees
 
 ### Analysis & History
+
 - `history/` - Commit statistics and contributor analysis
 
 ### Merge & Rebase
+
 - `merge/` - Conflict detection and merge operations
 
 ## Learning More
 
 ### API Documentation
+
 - [Repository Client API](../pkg/repository/interfaces.go)
 - [Commit Manager API](../pkg/commit/interfaces.go)
 - [Branch Manager API](../pkg/branch/interfaces.go)
@@ -242,6 +261,7 @@ Then run them:
 - [Complete GoDoc](https://pkg.go.dev/github.com/gizzahub/gzh-cli-git)
 
 ### User Documentation
+
 - [Main README](../README.md)
 - [Quick Start Guide](../docs/QUICKSTART.md)
 - [Library Integration Guide](../docs/LIBRARY.md)
@@ -250,10 +270,12 @@ Then run them:
 ## Adding More Examples
 
 Want to contribute an example? Create a new directory under `examples/` with:
+
 - `main.go` - Your example code
 - `README.md` - Description and usage (optional but recommended)
 
 Make sure your example:
+
 - Has a clear, focused purpose
 - Includes comprehensive error handling
 - Uses `context.Context` properly

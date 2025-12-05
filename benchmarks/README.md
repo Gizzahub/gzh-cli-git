@@ -36,26 +36,31 @@ All commands meet or exceed performance targets:
 ### Benchmark Categories
 
 #### Fast Operations (< 10ms)
+
 - `commit validate`: 4.4ms - Message validation is instant
 - `commit template list`: 5.0ms - Template listing is very fast
 
 #### Quick Operations (10-50ms)
+
 - `history file`: 24.2ms - File history lookup
 - `history blame`: 25.2ms - File blame attribution
 - `info`: 38.6ms - Repository information
 
 #### Standard Operations (50-100ms)
+
 - `history stats`: 55.9ms - Repository statistics
 - `status`: 62.1ms - Working tree status
 - `history contributors`: 68.3ms - Contributor analysis
 
 #### Complex Operations (> 100ms)
+
 - `branch list`: 107.4ms - Branch listing (includes remote refs)
 - `history stats (200 commits)`: 83.6ms - Stats on large repository
 
 ### Scalability
 
 Performance scales well with repository size:
+
 - Status with 100 commits: 61.5ms (vs 62.1ms baseline)
 - Stats with 200 commits: 83.6ms (vs 55.9ms for 50 commits)
 
@@ -64,6 +69,7 @@ Performance scales well with repository size:
 ### Memory Efficiency
 
 All operations use minimal memory:
+
 - Average allocation: ~20KB per operation
 - Allocation count: 41-46 allocs per operation
 - No memory leaks observed
@@ -114,12 +120,14 @@ go tool pprof mem.prof
 ## Benchmark Implementation
 
 Each benchmark:
+
 1. Sets up a temporary Git repository
-2. Executes the CLI command
-3. Measures execution time and memory usage
-4. Cleans up temporary resources
+1. Executes the CLI command
+1. Measures execution time and memory usage
+1. Cleans up temporary resources
 
 The benchmarks test realistic scenarios:
+
 - Small repositories (single commit)
 - Medium repositories (50 commits)
 - Large repositories (100-200 commits)
@@ -128,12 +136,14 @@ The benchmarks test realistic scenarios:
 ## Performance Optimization Notes
 
 ### What We Did Well
+
 - ✅ Fast validation operations (< 5ms)
 - ✅ Efficient memory usage (< 1MB)
 - ✅ Good scalability with repository size
 - ✅ Minimal allocations per operation
 
 ### Areas for Future Optimization
+
 - ⚠️ Branch list could be faster (currently 107ms)
 - Consider caching for repeated operations
 - Potential for parallel processing in stats
@@ -141,6 +151,7 @@ The benchmarks test realistic scenarios:
 ### Comparison with Git
 
 Our commands are designed to complement git, not replace it:
+
 - Similar performance characteristics
 - Minimal overhead above native git operations
 - Additional features (commit message generation, validation) add value

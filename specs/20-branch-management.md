@@ -8,7 +8,7 @@
 **Status**: Draft
 **Priority**: P0 (High)
 
----
+______________________________________________________________________
 
 ## 1. Overview
 
@@ -30,31 +30,35 @@ This specification defines the branch management features for gzh-cli-git, inclu
 - Remote branch synchronization automation (basic support only)
 - GUI branch visualization (CLI only)
 
----
+______________________________________________________________________
 
 ## 2. Requirements
 
 ### 2.1 Functional Requirements
 
 **FR-1**: Branch Creation
+
 - Create new branches from any ref (commit, tag, branch)
 - Support branch naming conventions validation
 - Set upstream tracking automatically
 - Create and checkout in one operation
 
 **FR-2**: Branch Deletion
+
 - Delete local branches with safety checks
 - Delete remote branches with confirmation
 - Detect unmerged branches before deletion
 - Force delete with explicit flag
 
 **FR-3**: Branch Cleanup
+
 - Identify merged branches safe to delete
 - Identify stale branches (no recent activity)
 - Bulk delete with confirmation
-- Preserve protected branches (main, master, develop, release/*)
+- Preserve protected branches (main, master, develop, release/\*)
 
 **FR-4**: Worktree Management
+
 - Add worktrees for parallel development
 - Remove worktrees safely
 - List all worktrees with status
@@ -62,6 +66,7 @@ This specification defines the branch management features for gzh-cli-git, inclu
 - Clean up orphaned worktrees
 
 **FR-5**: Parallel Workflows
+
 - Switch between worktrees efficiently
 - Share configuration across worktrees
 - Independent operations per worktree
@@ -70,24 +75,27 @@ This specification defines the branch management features for gzh-cli-git, inclu
 ### 2.2 Non-Functional Requirements
 
 **NFR-1**: Performance
-- Branch creation: <50ms
-- Branch deletion: <100ms
-- Worktree add: <200ms
-- Cleanup scan: <500ms for 100 branches
+
+- Branch creation: \<50ms
+- Branch deletion: \<100ms
+- Worktree add: \<200ms
+- Cleanup scan: \<500ms for 100 branches
 
 **NFR-2**: Usability
+
 - Intuitive command names
 - Clear confirmation prompts
 - Helpful error messages
 - Progress indicators for slow operations
 
 **NFR-3**: Safety
+
 - Prevent data loss
 - Confirmation for destructive operations
 - Dry-run mode for cleanup
 - Undo capability where possible
 
----
+______________________________________________________________________
 
 ## 3. Design
 
@@ -124,30 +132,34 @@ This specification defines the branch management features for gzh-cli-git, inclu
 ### 3.2 Component Responsibilities
 
 **Branch Manager (`pkg/branch/manager.go`)**:
+
 - Core branch operations (create, delete, list)
 - Branch naming validation
 - Upstream tracking management
 - Merge status detection
 
 **Worktree Manager (`pkg/branch/worktree.go`)**:
+
 - Worktree lifecycle (add, remove, list)
 - Worktree validation and cleanup
 - Path management
 - Status tracking
 
 **Cleanup Service (`pkg/branch/cleanup.go`)**:
+
 - Branch analysis (merged, stale, orphaned)
 - Cleanup strategy execution
 - Safety checks and confirmations
 - Reporting
 
 **Parallel Workflow (`pkg/branch/parallel.go`)**:
+
 - Multi-worktree coordination
 - Conflict detection
 - Operation synchronization
 - Context switching helpers
 
----
+______________________________________________________________________
 
 ## 4. Detailed Design
 
@@ -156,6 +168,7 @@ This specification defines the branch management features for gzh-cli-git, inclu
 #### 4.1.1 Branch Creation
 
 **Interface**:
+
 ```go
 type BranchManager interface {
     // Create creates a new branch
@@ -188,6 +201,7 @@ type Branch struct {
 ```
 
 **Validation Rules**:
+
 - Branch name must match: `^[a-zA-Z0-9/_-]+$`
 - Recommended formats:
   - `feature/{name}` - New features
@@ -197,6 +211,7 @@ type Branch struct {
   - `experiment/{name}` - Experimental work
 
 **Error Handling**:
+
 - `ErrBranchExists` - Branch already exists (use --force)
 - `ErrInvalidName` - Branch name validation failed
 - `ErrInvalidRef` - Starting ref doesn't exist
@@ -205,6 +220,7 @@ type Branch struct {
 #### 4.1.2 Branch Deletion
 
 **Interface**:
+
 ```go
 type DeleteOptions struct {
     Name     string   // Branch name (required)
@@ -216,12 +232,14 @@ type DeleteOptions struct {
 ```
 
 **Safety Checks**:
+
 1. Cannot delete current branch (must checkout another first)
-2. Cannot delete protected branches without --force
-3. Warn if branch is unmerged
-4. Confirm if deleting remote branch
+1. Cannot delete protected branches without --force
+1. Warn if branch is unmerged
+1. Confirm if deleting remote branch
 
 **Protected Branches** (default):
+
 - `main`, `master`
 - `develop`, `development`
 - `release/*`, `hotfix/*`
@@ -230,6 +248,7 @@ type DeleteOptions struct {
 #### 4.1.3 Branch Cleanup
 
 **Interface**:
+
 ```go
 type CleanupService interface {
     // Analyze analyzes branches for cleanup
@@ -257,12 +276,14 @@ type CleanupReport struct {
 ```
 
 **Cleanup Strategies**:
+
 - **Merged**: Branches fully merged into main/master
 - **Stale**: No commits in last N days (default: 30)
 - **Orphaned**: Tracking branches with deleted remotes
 - **Combined**: Union of above strategies
 
 **Example Output**:
+
 ```
 🔍 Analyzing branches for cleanup...
 
@@ -286,6 +307,7 @@ Delete 7 branches? [y/N]
 #### 4.2.1 Worktree Operations
 
 **Interface**:
+
 ```go
 type WorktreeManager interface {
     // Add adds a new worktree
@@ -325,12 +347,14 @@ type Worktree struct {
 ```
 
 **Worktree Path Management**:
+
 - Default location: `~/.gzh-git/worktrees/{repo-name}/{branch-name}`
 - Custom paths supported
 - Validate path doesn't exist or is empty
 - Clean up on removal
 
 **Example Usage**:
+
 ```bash
 # Add worktree for new feature
 $ gzh-git worktree add ~/work/feature-auth feature/auth
@@ -354,13 +378,15 @@ $ gzh-git worktree prune
 #### 4.2.2 Worktree Safety
 
 **Safety Checks**:
+
 1. Verify path exists and is valid
-2. Check for uncommitted changes before removal
-3. Prevent removal of main worktree
-4. Lock worktrees during critical operations
-5. Validate branch isn't checked out in another worktree
+1. Check for uncommitted changes before removal
+1. Prevent removal of main worktree
+1. Lock worktrees during critical operations
+1. Validate branch isn't checked out in another worktree
 
 **Error Handling**:
+
 - `ErrWorktreeExists` - Path already exists
 - `ErrWorktreeDirty` - Uncommitted changes (use --force)
 - `ErrWorktreeMain` - Cannot remove main worktree
@@ -372,11 +398,13 @@ $ gzh-git worktree prune
 #### 4.3.1 Multi-Context Development
 
 **Use Case**: Developer needs to:
+
 1. Work on feature A
-2. Quickly switch to fix urgent bug
-3. Return to feature A without losing context
+1. Quickly switch to fix urgent bug
+1. Return to feature A without losing context
 
 **Solution with Worktrees**:
+
 ```bash
 # Setup
 gzh-git worktree add ~/work/feature-a feature/user-profile
@@ -394,6 +422,7 @@ cd ~/work/feature-a    # Back to Context A
 ```
 
 **Benefits**:
+
 - No `git stash` needed
 - Independent builds/tests
 - No context loss
@@ -402,16 +431,18 @@ cd ~/work/feature-a    # Back to Context A
 #### 4.3.2 Coordination
 
 **Shared Configuration**:
+
 - Git config (`.git/config`) shared across worktrees
 - User settings preserved
 - Hooks executed per worktree
 
 **Conflict Prevention**:
+
 - Detect operations on same files across worktrees
 - Warn on concurrent modifications
 - Lock shared resources during critical operations
 
----
+______________________________________________________________________
 
 ## 5. Implementation
 
@@ -434,17 +465,20 @@ pkg/branch/
 ### 5.2 Dependencies
 
 **Internal**:
+
 - `internal/gitcmd`: Git command execution
 - `internal/parser`: Parse git output
 - `pkg/repository`: Repository abstraction
 
 **External**:
+
 - Standard library only
 - No external dependencies
 
 ### 5.3 Testing Strategy
 
 **Unit Tests**:
+
 - Branch creation with various options
 - Branch deletion with safety checks
 - Cleanup analysis accuracy
@@ -452,6 +486,7 @@ pkg/branch/
 - Error handling paths
 
 **Integration Tests**:
+
 - End-to-end branch workflows
 - Worktree parallel operations
 - Cleanup with real repository
@@ -459,7 +494,7 @@ pkg/branch/
 
 **Coverage Target**: ≥85% for pkg/branch
 
----
+______________________________________________________________________
 
 ## 6. CLI Commands
 
@@ -513,7 +548,7 @@ gzh-git worktree prune
 gzh-git worktree prune --dry-run               # Preview only
 ```
 
----
+______________________________________________________________________
 
 ## 7. Success Criteria
 
@@ -538,7 +573,7 @@ gzh-git worktree prune --dry-run               # Preview only
 - ✅ Zero critical bugs
 - ✅ Documentation complete
 
----
+______________________________________________________________________
 
 ## 8. Risks & Mitigation
 
@@ -549,11 +584,12 @@ gzh-git worktree prune --dry-run               # Preview only
 | Performance with many branches | Low | Low | Efficient git commands, pagination |
 | Git version compatibility | Medium | Low | Version checks, feature detection |
 
----
+______________________________________________________________________
 
 ## 9. Future Enhancements
 
 **Phase 6+ Considerations**:
+
 - Branch protection rules configuration
 - Git Flow automation
 - Branch templates
@@ -563,7 +599,7 @@ gzh-git worktree prune --dry-run               # Preview only
 - Worktree templates
 - Cloud worktree sync
 
----
+______________________________________________________________________
 
 ## 10. References
 
@@ -584,7 +620,7 @@ gzh-git worktree prune --dry-run               # Preview only
 - [git-extras](https://github.com/tj/git-extras) - Similar branch tools
 - [git-town](https://github.com/git-town/git-town) - Branch workflow automation
 
----
+______________________________________________________________________
 
 **Specification Status**: Ready for Review
 **Next Steps**: Review → Approve → Implementation

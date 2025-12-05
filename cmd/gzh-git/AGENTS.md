@@ -4,7 +4,7 @@ Module-specific guidelines for the gzh-git CLI module.
 
 **Parent**: See `cmd/AGENTS_COMMON.md` for common rules.
 
----
+______________________________________________________________________
 
 ## Module Overview
 
@@ -12,7 +12,7 @@ Module-specific guidelines for the gzh-git CLI module.
 **Binary**: `gz-git`
 **Entry Point**: `main.go`
 
----
+______________________________________________________________________
 
 ## File Structure
 
@@ -29,7 +29,7 @@ cmd/gzh-git/
 └── ...             # Other git commands
 ```
 
----
+______________________________________________________________________
 
 ## Command Structure
 
@@ -42,6 +42,7 @@ cmd/gzh-git/
 ### Adding New Commands
 
 1. Create `{command}.go` file:
+
 ```go
 var myCmd = &cobra.Command{
     Use:   "mycommand",
@@ -61,7 +62,7 @@ func init() {
 
 2. Register in `init()` of the command file
 
----
+______________________________________________________________________
 
 ## Key Patterns
 
@@ -140,7 +141,7 @@ RunE: func(cmd *cobra.Command, args []string) error {
 - Use `fmt.Fprintln(os.Stderr, ...)` for errors
 - Consider `--json` flag for structured output
 
----
+______________________________________________________________________
 
 ## Testing
 
@@ -160,7 +161,7 @@ func TestCloneCommand(t *testing.T) {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Dependencies
 
@@ -169,6 +170,6 @@ func TestCloneCommand(t *testing.T) {
 - `internal/parser` - Output parsing
 - `pkg/*` - Business logic packages
 
----
+______________________________________________________________________
 
 **Last Updated**: 2024-12-05

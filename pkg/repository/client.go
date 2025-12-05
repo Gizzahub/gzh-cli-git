@@ -172,10 +172,63 @@ func (c *client) Clone(ctx context.Context, opts CloneOptions) (*Repository, err
 	}
 
 	if result.ExitCode != 0 {
-		return nil, &gitcmd.GitError{
-			Command:  "git " + strings.Join(args, " "),
-			ExitCode: result.ExitCode,
-			Stderr:   result.Stderr,
+		// Check if the error is due to branch not found
+		branchNotFound := strings.Contains(result.Stderr, "does not have any commits yet") ||
+			strings.Contains(result.Stderr, "Remote branch") && strings.Contains(result.Stderr, "not found") ||
+			strings.Contains(result.Stderr, "리모트의") && strings.Contains(result.Stderr, "브랜치가") && strings.Contains(result.Stderr, "없습니다")
+
+		if branchNotFound && opts.Branch != "" {
+			// Branch doesn't exist
+			if opts.CreateBranch {
+				c.logger.Info("Branch %s not found, will create it after cloning default branch", opts.Branch)
+				// Clone without branch specification (will use default branch)
+				argsWithoutBranch := []string{"clone"}
+				if opts.Depth > 0 {
+					argsWithoutBranch = append(argsWithoutBranch, "--depth", fmt.Sprintf("%d", opts.Depth))
+				}
+				if opts.Bare {
+					argsWithoutBranch = append(argsWithoutBranch, "--bare")
+				}
+				if opts.Mirror {
+					argsWithoutBranch = append(argsWithoutBranch, "--mirror")
+				}
+				if opts.Quiet {
+					argsWithoutBranch = append(argsWithoutBranch, "--quiet")
+				}
+				argsWithoutBranch = append(argsWithoutBranch, opts.URL, opts.Destination)
+
+				result, err = c.executor.Run(ctx, "", argsWithoutBranch...)
+				if err != nil {
+					return nil, fmt.Errorf("failed to clone repository without branch: %w", err)
+				}
+				if result.ExitCode != 0 {
+					return nil, &gitcmd.GitError{
+						Command:  "git " + strings.Join(argsWithoutBranch, " "),
+						ExitCode: result.ExitCode,
+						Stderr:   result.Stderr,
+					}
+				}
+
+				// Now create and checkout the new branch
+				c.logger.Info("Creating new branch %s", opts.Branch)
+				checkoutResult, err := c.executor.Run(ctx, opts.Destination, "checkout", "-b", opts.Branch)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create branch %s: %w", opts.Branch, err)
+				}
+				if checkoutResult.ExitCode != 0 {
+					return nil, fmt.Errorf("failed to create branch %s: %s", opts.Branch, checkoutResult.Stderr)
+				}
+			} else {
+				// Provide clear error message
+				return nil, fmt.Errorf("branch '%s' does not exist on remote repository. Use --create-branch flag to create it after cloning", opts.Branch)
+			}
+		} else {
+			// Other git error
+			return nil, &gitcmd.GitError{
+				Command:  "git " + strings.Join(args, " "),
+				ExitCode: result.ExitCode,
+				Stderr:   result.Stderr,
+			}
 		}
 	}
 

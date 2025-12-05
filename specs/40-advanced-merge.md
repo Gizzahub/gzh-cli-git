@@ -6,7 +6,7 @@
 **Created**: 2025-11-27
 **Dependencies**: Phase 3 (Branch Management), Phase 4 (History Analysis)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -15,10 +15,10 @@ Phase 5 implements advanced merge and rebase capabilities with intelligent confl
 ### Goals
 
 1. **Conflict Detection** - Proactively detect merge conflicts before attempting merge
-2. **Merge Strategies** - Support multiple merge strategies with intelligent selection
-3. **Interactive Rebase** - Safe, guided interactive rebase with conflict resolution
-4. **Auto-Resolution** - Automatically resolve simple conflicts when safe
-5. **Rollback Support** - Easy rollback mechanisms for failed operations
+1. **Merge Strategies** - Support multiple merge strategies with intelligent selection
+1. **Interactive Rebase** - Safe, guided interactive rebase with conflict resolution
+1. **Auto-Resolution** - Automatically resolve simple conflicts when safe
+1. **Rollback Support** - Easy rollback mechanisms for failed operations
 
 ### Non-Goals
 
@@ -27,7 +27,7 @@ Phase 5 implements advanced merge and rebase capabilities with intelligent confl
 - Stash management (deferred to Phase 6)
 - Patch operations
 
----
+______________________________________________________________________
 
 ## Architecture
 
@@ -78,7 +78,7 @@ type ConflictResolver interface {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 1: Conflict Detector
 
@@ -89,18 +89,21 @@ Detect potential merge conflicts before attempting a merge, allowing users to re
 ### Features
 
 1. **Pre-Merge Analysis**
+
    - Analyze changes in source and target branches
    - Identify files that have diverged
    - Detect overlapping modifications
    - Calculate conflict probability
 
-2. **Conflict Classification**
+1. **Conflict Classification**
+
    - Content conflicts (same lines modified)
    - Rename conflicts (file renamed in both branches)
    - Delete conflicts (file modified in one, deleted in other)
    - Binary conflicts (binary files modified in both)
 
-3. **Merge Preview**
+1. **Merge Preview**
+
    - Show what will happen during merge
    - List files that will be merged
    - Highlight potential conflict areas
@@ -229,7 +232,7 @@ func (c *conflictDetector) Detect(ctx context.Context, repo *repository.Reposito
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 2: Merge Strategy Manager
 
@@ -240,24 +243,29 @@ Execute merges using appropriate strategies based on branch structure and confli
 ### Merge Strategies
 
 1. **Fast-Forward (ff)**
+
    - No divergence, just move pointer
    - Cleanest history
    - Use when: Target is ancestor of source
 
-2. **Recursive (default)**
+1. **Recursive (default)**
+
    - Three-way merge with conflict detection
    - Creates merge commit
    - Use when: Standard merge needed
 
-3. **Ours**
+1. **Ours**
+
    - Prefer source changes in conflicts
    - Use when: Source has priority
 
-4. **Theirs**
+1. **Theirs**
+
    - Prefer target changes in conflicts
    - Use when: Target has priority
 
-5. **Octopus**
+1. **Octopus**
+
    - Merge multiple branches at once
    - Use when: Merging feature branches together
 
@@ -366,7 +374,7 @@ func (m *mergeStrategyManager) SelectStrategy(ctx context.Context, repo *reposit
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 3: Rebase Manager
 
@@ -377,23 +385,27 @@ Perform interactive and non-interactive rebases with conflict handling and rollb
 ### Features
 
 1. **Standard Rebase**
+
    - Rebase branch onto another
    - Preserve commit history
    - Handle conflicts interactively
 
-2. **Interactive Rebase**
+1. **Interactive Rebase**
+
    - Pick commits to include
    - Reorder commits
    - Squash commits
    - Edit commit messages
 
-3. **Conflict Resolution**
+1. **Conflict Resolution**
+
    - Detect conflicts during rebase
    - Pause for manual resolution
    - Continue after resolution
    - Skip problematic commits
 
-4. **Safety Features**
+1. **Safety Features**
+
    - Backup original branch
    - Easy abort mechanism
    - Preserve uncommitted changes
@@ -511,7 +523,7 @@ func (r *rebaseManager) Rebase(ctx context.Context, repo *repository.Repository,
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 4: Conflict Resolver
 
@@ -522,18 +534,22 @@ Automatically resolve simple, safe conflicts to reduce manual intervention.
 ### Auto-Resolution Rules
 
 1. **Whitespace-Only Conflicts**
+
    - Different whitespace, same content
    - Safe to normalize
 
-2. **Comment-Only Conflicts**
+1. **Comment-Only Conflicts**
+
    - Only comments differ
    - Can merge both
 
-3. **Import/Dependency Conflicts**
+1. **Import/Dependency Conflicts**
+
    - Different imports added
    - Can merge both lists
 
-4. **Non-Overlapping Changes**
+1. **Non-Overlapping Changes**
+
    - Changes in different parts of file
    - Can merge both
 
@@ -569,7 +585,7 @@ const (
 )
 ```
 
----
+______________________________________________________________________
 
 ## Error Handling
 
@@ -588,34 +604,38 @@ var (
 )
 ```
 
----
+______________________________________________________________________
 
 ## Testing Strategy
 
 ### Unit Tests
 
 1. **Conflict Detector Tests**
+
    - Detect content conflicts
    - Detect rename conflicts
    - Detect delete conflicts
    - Calculate merge difficulty
    - Handle no conflicts case
 
-2. **Merge Strategy Tests**
+1. **Merge Strategy Tests**
+
    - Fast-forward merge
    - Recursive merge
    - Strategy selection
    - Abort functionality
    - Invalid state handling
 
-3. **Rebase Manager Tests**
+1. **Rebase Manager Tests**
+
    - Standard rebase
    - Interactive rebase
    - Continue/skip/abort
    - Conflict handling
    - State validation
 
-4. **Conflict Resolver Tests**
+1. **Conflict Resolver Tests**
+
    - Auto-resolve safe conflicts
    - Skip unsafe conflicts
    - Resolution strategies
@@ -631,7 +651,7 @@ Deferred to Phase 6 (requires real Git repositories with conflicts).
 - Integration tests: ≥80%
 - Overall: ≥85%
 
----
+______________________________________________________________________
 
 ## Safety Mechanisms
 
@@ -687,7 +707,7 @@ func (m *mergeStrategyManager) createBackup(ctx context.Context, repo *repositor
 }
 ```
 
----
+______________________________________________________________________
 
 ## CLI Integration (Deferred to Phase 6)
 
@@ -713,7 +733,7 @@ gzh-git rebase continue
 gzh-git rebase abort
 ```
 
----
+______________________________________________________________________
 
 ## Dependencies
 
@@ -727,23 +747,24 @@ gzh-git rebase abort
 
 - Standard library only (no external dependencies)
 
----
+______________________________________________________________________
 
 ## Success Criteria
 
 1. ✅ All core interfaces implemented
-2. ✅ Comprehensive unit tests (≥85% coverage)
-3. ✅ Conflict detection accurate (>95%)
-4. ✅ Safe auto-resolution (zero data loss)
-5. ✅ Merge strategies work correctly
-6. ✅ Rebase operations safe and reliable
-7. ✅ Documentation and examples complete
+1. ✅ Comprehensive unit tests (≥85% coverage)
+1. ✅ Conflict detection accurate (>95%)
+1. ✅ Safe auto-resolution (zero data loss)
+1. ✅ Merge strategies work correctly
+1. ✅ Rebase operations safe and reliable
+1. ✅ Documentation and examples complete
 
----
+______________________________________________________________________
 
 ## Implementation Checklist
 
 ### Phase 5.1: Conflict Detector
+
 - [ ] Define types.go (Conflict, ConflictReport, DetectOptions)
 - [ ] Define errors.go (merge-specific errors)
 - [ ] Implement detector.go (ConflictDetector interface)
@@ -751,31 +772,35 @@ gzh-git rebase abort
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 5.2: Merge Strategy Manager
+
 - [ ] Add MergeStrategy types to types.go
 - [ ] Implement strategy.go (MergeStrategyManager interface)
 - [ ] Write strategy_test.go (unit tests)
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 5.3: Rebase Manager
+
 - [ ] Add Rebase types to types.go
 - [ ] Implement rebase.go (RebaseManager interface)
 - [ ] Write rebase_test.go (unit tests)
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 5.4: Conflict Resolver (Optional)
+
 - [ ] Add Resolution types to types.go
 - [ ] Implement resolver.go (ConflictResolver interface)
 - [ ] Write resolver_test.go (unit tests)
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 5.5: Integration
+
 - [ ] Update specs/00-overview.md
 - [ ] Update PROJECT_STATUS.md
 - [ ] Create docs/phase-5-completion.md
 - [ ] Run full test suite
 - [ ] Validation: All tests passing, documentation complete
 
----
+______________________________________________________________________
 
 ## Timeline
 
@@ -787,7 +812,7 @@ gzh-git rebase abort
 
 **Total Estimated**: 5-8 days
 
----
+______________________________________________________________________
 
 ## References
 
@@ -797,7 +822,7 @@ gzh-git rebase abort
 - Phase 3: Branch Management (Complete)
 - Phase 4: History Analysis (Complete)
 
----
+______________________________________________________________________
 
 **Last Updated**: 2025-11-27
 **Version**: 1.0

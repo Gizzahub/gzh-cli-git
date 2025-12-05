@@ -46,17 +46,21 @@ Examples:
   gzh-git update --strategy skip https://github.com/user/repo.git
 
   # Clone specific branch with shallow history
-  gzh-git update --branch develop --depth 1 https://github.com/user/repo.git`,
+  gzh-git update --branch develop --depth 1 https://github.com/user/repo.git
+
+  # Create branch if it doesn't exist on remote
+  gzh-git update --branch develop --create-branch https://github.com/user/repo.git`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runUpdate,
 }
 
 var updateOpts struct {
-	strategy string
-	branch   string
-	depth    int
-	force    bool
-	verbose  bool
+	strategy     string
+	branch       string
+	depth        int
+	force        bool
+	verbose      bool
+	createBranch bool
 }
 
 func init() {
@@ -70,6 +74,8 @@ func init() {
 		"Force operation even if it might be destructive")
 	updateCmd.Flags().BoolVarP(&updateOpts.verbose, "verbose", "v", false,
 		"Enable verbose logging")
+	updateCmd.Flags().BoolVarP(&updateOpts.createBranch, "create-branch", "c", false,
+		"Create branch if it doesn't exist on remote (only effective with --branch)")
 
 	rootCmd.AddCommand(updateCmd)
 }
@@ -104,13 +110,14 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 
 	// Prepare options
 	opts := repository.CloneOrUpdateOptions{
-		URL:         repoURL,
-		Destination: targetPath,
-		Strategy:    repository.UpdateStrategy(updateOpts.strategy),
-		Branch:      updateOpts.branch,
-		Depth:       updateOpts.depth,
-		Force:       updateOpts.force,
-		Logger:      logger,
+		URL:          repoURL,
+		Destination:  targetPath,
+		Strategy:     repository.UpdateStrategy(updateOpts.strategy),
+		Branch:       updateOpts.branch,
+		Depth:        updateOpts.depth,
+		Force:        updateOpts.force,
+		CreateBranch: updateOpts.createBranch,
+		Logger:       logger,
 	}
 
 	if updateOpts.verbose {

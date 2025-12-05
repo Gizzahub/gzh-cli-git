@@ -197,22 +197,26 @@ File System Changes
 ### Components
 
 1. **Watcher** (`pkg/watch/watcher.go`)
+
    - Core monitoring engine
    - File system event handling (fsnotify)
    - Periodic polling (configurable interval)
    - Event debouncing (prevents duplicates)
 
-2. **Repository State Tracking**
+1. **Repository State Tracking**
+
    - Maintains last known status for each repository
    - Compares current vs. previous state
    - Detects specific change types
 
-3. **Event Types** (`pkg/watch/interfaces.go`)
+1. **Event Types** (`pkg/watch/interfaces.go`)
+
    - Type-safe event definitions
    - Structured event data
    - Timestamp tracking
 
-4. **Formatters** (`cmd/gzh-git/cmd/watch.go`)
+1. **Formatters** (`cmd/gzh-git/cmd/watch.go`)
+
    - Default: Human-readable with colors
    - Compact: Single-line output
    - JSON: Machine-readable
@@ -305,9 +309,9 @@ Uses `fsnotify` for efficient file system monitoring:
 ### Current Limitations
 
 1. **Submodule tracking**: Does not track changes in submodules
-2. **Large repositories**: Performance may degrade with >10,000 files
-3. **Network filesystems**: May not work reliably on NFS/SMB mounts
-4. **Sound notifications**: macOS only (placeholder for other platforms)
+1. **Large repositories**: Performance may degrade with >10,000 files
+1. **Network filesystems**: May not work reliably on NFS/SMB mounts
+1. **Sound notifications**: macOS only (placeholder for other platforms)
 
 ### Future Enhancements
 
@@ -325,6 +329,7 @@ Uses `fsnotify` for efficient file system monitoring:
 **Problem**: Watch command uses excessive CPU
 
 **Solutions**:
+
 - Increase polling interval: `--interval 5s` or higher
 - Reduce number of monitored repositories
 - Check for very large repositories (>10k files)
@@ -334,6 +339,7 @@ Uses `fsnotify` for efficient file system monitoring:
 **Problem**: Some changes not detected
 
 **Solutions**:
+
 - Decrease polling interval: `--interval 1s`
 - Check file system event support (fsnotify)
 - Verify repository is not on network filesystem
@@ -343,6 +349,7 @@ Uses `fsnotify` for efficient file system monitoring:
 **Problem**: Same change reported multiple times
 
 **Solutions**:
+
 - Increase debounce duration (requires code change)
 - Use `--format compact` for less verbose output
 
@@ -377,7 +384,7 @@ go test ./pkg/watch/... -bench=.
 - ✅ File system integration (fsnotify)
 - ✅ Comprehensive tests
 
----
+______________________________________________________________________
 
 **Last Updated**: 2025-12-01
 **Status**: Ready for release in v0.3.0

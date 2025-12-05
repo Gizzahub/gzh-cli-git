@@ -16,16 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Improved CLI Output** - Enhanced Status Display:
 
 - `branch list`: Show upstream tracking status with `↑`/`↓` indicators
+
   - `(origin/main) ✓` - up-to-date with upstream
   - `(origin/main) 3↑` - 3 commits ahead
   - `(origin/main) 2↓` - 2 commits behind
   - `(origin/main) 3↑ 2↓` - diverged (ahead and behind)
 
 - `fetch`: Compact one-line output with behind/ahead status
+
   - Shows `N↓` for commits behind remote after fetch
   - Shows `N↑` for commits ahead of remote
 
 - `pull`: Compact one-line output with status indicators
+
   - Shows pulled commits count
   - `[stash]` indicator when auto-stash was used
 
@@ -101,12 +104,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **CLI Improvements** - Ergonomic Shorthand Flags:
 
 - **Simplified `--max-depth` flag to `-d, --depth`** for better ergonomics
+
   - Shorter, more intuitive flag for frequently used command
   - Consistent with Unix conventions (du -d, fd -d)
   - Breaking change: `--max-depth` flag removed (clean breaking change)
   - Affects: `fetch` and `pull` commands
 
 - **Added GNU/Git convention shorthand flags** for common operations:
+
   - `-j, --parallel`: Parallel operations (make -j convention)
   - `-n, --dry-run`: Preview without executing (GNU convention)
   - `-t, --tags`: Fetch all tags (git fetch -t convention)
@@ -114,6 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `-r, --recursive`: Renamed from `--include-submodules` (GNU convention)
 
 - **Renamed `--include-submodules` to `--recursive`**:
+
   - More intuitive and follows GNU conventions (cp -r, grep -r)
   - Applies to both fetch and pull commands
   - Breaking change for better consistency
@@ -199,6 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 **Watch Command** - Real-time Repository Monitoring:
+
 - `gzh-git watch` command for continuous repository monitoring
   - Multiple output formats:
     - **Default**: Colored, detailed output with file lists (max 5 files shown)
@@ -210,6 +217,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sound notification flag (`--notify`) with platform-specific TODO
 
 **Event Detection**:
+
 - Modified files (unstaged changes)
 - Staged files (ready to commit)
 - Untracked files (new files)
@@ -218,12 +226,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repository becoming clean
 
 **Multi-Repository Support**:
+
 - Monitor multiple repositories simultaneously
 - Independent state tracking per repository
 - Parallel event processing
 - Repository-specific event channels
 
 **Watch Package** (`pkg/watch`):
+
 - **Event-driven architecture**:
   - Channel-based event system (buffered: 100 events)
   - Non-blocking error reporting (buffered: 50 errors)
@@ -241,6 +251,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 
 **Integration Tests** (7 comprehensive scenarios):
+
 - Untracked file detection
 - Modified file detection
 - Staged file detection
@@ -250,6 +261,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Branch change detection (skipped - future enhancement)
 
 **Performance Benchmarks** (Apple M1 Ultra):
+
 - Watcher creation: 7.7µs per instance (11.6KB, 19 allocs)
 - Event detection: 152ns per change (272B, 2 allocs)
 - String comparison: 18ns (zero allocations)
@@ -260,20 +272,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 20 repos: 4.5µs (6.2KB, 100 allocs)
 
 **Quality Metrics**:
+
 - 6 integration tests passing (1 skipped with TODO)
 - 4 performance benchmarks establishing baselines
 - 8 unit tests for core functionality
 - Comprehensive helper functions for Git operations
-- All tests complete in <10 seconds
+- All tests complete in \<10 seconds
 
 ### Documentation
 
 **User Guides** (1,715 lines added):
+
 - `docs/features/WATCH_COMMAND.md`: Complete user guide with examples (369 lines)
 - `docs/design/WATCH_OUTPUT_FORMATS.md`: Output format design and rationale (597 lines)
 - `docs/design/WATCH_OUTPUT_IMPROVEMENTS.md`: Future enhancement proposals (749 lines)
 
 **Documentation Coverage**:
+
 - Usage examples for all output formats
 - Architecture diagrams and flow charts
 - Troubleshooting guide
@@ -285,6 +300,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 **Error Handling Improvements**:
+
 - Increased error channel buffer from 10 to 50
 - Added non-blocking error send with overflow warnings
 - Graceful degradation when error channel is full
@@ -292,9 +308,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 **Characteristics**:
+
 - Very fast change detection (~150ns per repository)
 - Linear scaling with repository count
-- Low memory overhead (<10KB for 20 repositories)
+- Low memory overhead (\<10KB for 20 repositories)
 - Zero-allocation string comparison
 - Sub-microsecond watcher creation
 - Minimal CPU usage (0.1% baseline)
@@ -302,11 +319,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Dependencies
 
 **New Dependencies**:
+
 - `github.com/fsnotify/fsnotify v1.9.0` - File system event notifications
 
 ### Architecture
 
 **Design Patterns**:
+
 - Event-driven architecture with Go channels
 - Context propagation for cancellation
 - Hybrid fsnotify + polling for reliability
@@ -315,6 +334,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Formatter pattern for output customization
 
 **Package Structure**:
+
 ```
 pkg/watch/
 ├── interfaces.go          # Public API (Watcher, Event, WatchOptions)
@@ -337,6 +357,7 @@ None - This is a new feature addition
 ## [0.2.0] - 2025-12-01
 
 ### Changed
+
 - **Version Update**: Updated from v0.1.0-alpha to v0.2.0 to reflect actual feature completeness
 - **Documentation Overhaul**: Complete rewrite of user-facing documentation to accurately represent implemented features
 - **Status Clarification**: All features previously marked as "Planned" (v0.2.0-v0.5.0) are now correctly documented as "Implemented"
@@ -344,6 +365,7 @@ None - This is a new feature addition
 ### Added
 
 **Documentation Improvements**:
+
 - `docs/IMPLEMENTATION_STATUS.md`: Comprehensive analysis documenting actual vs. claimed implementation status
 - `docs/user/guides/faq.md`: Complete FAQ with 400+ lines covering all implemented features
 - `docs/user/getting-started/first-steps.md`: 10-minute tutorial with working examples for all features
@@ -351,18 +373,21 @@ None - This is a new feature addition
 - `docs/DOCUMENTATION_PLAN.md`: Future documentation structure and migration strategy
 
 **Feature Documentation**:
+
 - All CLI commands now documented with working examples
 - Library usage examples for all 6 pkg/ packages
 - Production readiness guidance and API stability policy
 - Troubleshooting guide with common issues
 
 ### Fixed
+
 - **Critical Documentation Bug**: README.md and other docs incorrectly stated that commit automation, branch management, history analysis, and merge/rebase features were "planned" when they were fully implemented
 - Updated feature availability across all user-facing documentation
 - Corrected version references throughout documentation
 - Fixed roadmap to show Phases 1-5 as completed
 
 ### Notes
+
 - **No Code Changes**: All functionality was already present in v0.1.0-alpha
 - **Version Rationale**: v0.2.0 accurately represents the maturity level with all major features implemented, tested (69.1% coverage), and functional
 - **Breaking Changes**: None - This is a documentation and version number correction only
@@ -374,6 +399,7 @@ None - This is a new feature addition
 #### Core Library (Phases 1-5)
 
 **Repository Operations (Phase 1)**:
+
 - Repository client with open, clone, status, and info operations
 - Multiple output formats (table, JSON, CSV, markdown)
 - Progress reporting for long-running operations
@@ -383,6 +409,7 @@ None - This is a new feature addition
 - Remote tracking and ahead/behind commit counts
 
 **Commit Automation (Phase 2)**:
+
 - Template system with built-in templates (Conventional Commits, Semantic Versioning)
 - Custom template loading from YAML files
 - Template validation and variable substitution
@@ -397,6 +424,7 @@ None - This is a new feature addition
 - Force push prevention with --force-with-lease
 
 **Branch Management (Phase 3)**:
+
 - Branch manager with create, delete, list, and get operations
 - Branch name validation against Git rules
 - Protected branch support
@@ -408,6 +436,7 @@ None - This is a new feature addition
 - Conflict detection across parallel branches
 
 **History Analysis (Phase 4)**:
+
 - Commit statistics and trend analysis
 - Contributor analysis with detailed statistics
 - File history tracking with blame support
@@ -418,6 +447,7 @@ None - This is a new feature addition
 - Line-by-line authorship attribution
 
 **Merge/Rebase Operations (Phase 5)**:
+
 - Pre-merge conflict detection and analysis
 - Conflict type classification (content, delete, rename, binary)
 - Merge difficulty calculation (trivial, easy, medium, hard)
@@ -432,6 +462,7 @@ None - This is a new feature addition
 #### CLI Tool (Phase 6)
 
 **Command Groups** (7 groups, 20+ subcommands):
+
 - Repository commands: `status`, `clone`, `info`
 - Commit commands: `commit auto`, `commit validate`, `commit template`
 - Branch commands: `branch list`, `branch create`, `branch delete`
@@ -440,6 +471,7 @@ None - This is a new feature addition
 - Version command: `version`
 
 **CLI Features**:
+
 - Multiple output formats (table, JSON, CSV, markdown)
 - Comprehensive flag support for all commands
 - Error handling and validation
@@ -449,6 +481,7 @@ None - This is a new feature addition
 #### Testing Infrastructure (Phase 6)
 
 **Integration Tests**:
+
 - 51 integration tests across 5 test files (851 lines)
 - Repository, commit, branch, history, and merge test suites
 - Automatic binary building infrastructure
@@ -457,6 +490,7 @@ None - This is a new feature addition
 - All tests passing in 5.7 seconds
 
 **End-to-End Tests**:
+
 - 90 test runs across 17 test functions (1,274 lines)
 - Basic workflow, feature development, and code review scenarios
 - Conflict resolution and incremental refinement workflows
@@ -464,6 +498,7 @@ None - This is a new feature addition
 - All tests passing in 4.5 seconds
 
 **Performance Benchmarks**:
+
 - 11 CLI command benchmarks (284 lines)
 - Memory usage analysis (all < 1MB)
 - Scalability testing (~0.14ms per commit)
@@ -475,6 +510,7 @@ None - This is a new feature addition
   - Slowest: 107ms (branch list)
 
 **Test Coverage**:
+
 - Overall: 69.1% (3,333/4,823 statements)
 - Excellent (≥85%): internal/parser (95.7%), internal/gitcmd (89.5%), pkg/history (87.7%)
 - Good (70-84%): pkg/merge (82.9%)
@@ -483,6 +519,7 @@ None - This is a new feature addition
 #### Documentation (Phase 6)
 
 **User Documentation** (2,990+ lines):
+
 - QUICKSTART.md: 5-minute getting started guide
 - INSTALL.md: Complete installation instructions (Linux/macOS/Windows)
 - TROUBLESHOOTING.md: 50+ common issues and solutions
@@ -491,6 +528,7 @@ None - This is a new feature addition
 - COVERAGE.md: Detailed test coverage analysis
 
 **Contributor Documentation**:
+
 - CONTRIBUTING.md: 790 lines of comprehensive contributor guidelines
 - Development workflow and branch naming conventions
 - Coding standards with Go best practices
@@ -500,6 +538,7 @@ None - This is a new feature addition
 - Documentation standards and release process
 
 **API Documentation**:
+
 - 100% GoDoc coverage for all packages
 - Package-level documentation with examples
 - All exported types and functions documented
@@ -508,12 +547,14 @@ None - This is a new feature addition
 #### Project Infrastructure
 
 **Build System**:
+
 - Modular Makefile structure
 - Build, test, lint, and quality targets
 - Cross-platform support
 - CI/CD pipeline ready
 
 **Security**:
+
 - Git command sanitization
 - Input validation
 - No code injection vulnerabilities
@@ -523,6 +564,7 @@ None - This is a new feature addition
 ### Performance
 
 **Benchmarks** (Apple M1 Ultra):
+
 - Sub-5ms validation operations (commit validate: 4.4ms)
 - < 1MB memory usage per operation
 - Good scalability with repository size
@@ -532,6 +574,7 @@ None - This is a new feature addition
 ### Quality Metrics
 
 **Testing**:
+
 - 51 integration tests (100% passing)
 - 90 E2E test runs (100% passing)
 - 11 performance benchmarks (100% passing)
@@ -539,12 +582,14 @@ None - This is a new feature addition
 - Test coverage: 69.1% overall
 
 **Code Quality**:
+
 - All linters passing (golangci-lint)
 - All packages compile successfully
 - Zero TODOs in production code
 - Comprehensive error handling
 
 **Documentation**:
+
 - Complete API documentation (pkg.go.dev ready)
 - User guides (6 files, 2,200+ lines)
 - Specifications (6 files, 4,300+ lines)
@@ -554,12 +599,14 @@ None - This is a new feature addition
 ### Architecture
 
 **Design Principles**:
+
 - Library-first architecture (zero CLI dependencies in pkg/)
 - Interface-driven design (100% mockable components)
 - Context propagation for cancellation support
 - Clean separation between library and CLI
 
 **Package Structure**:
+
 ```
 pkg/                    # Public library API
 ├── repository/         # Repository operations
@@ -579,6 +626,7 @@ cmd/gzh-git/           # CLI application
 ### Dependencies
 
 **External Dependencies** (minimal):
+
 - github.com/spf13/cobra v1.10.1 (CLI framework)
 - gopkg.in/yaml.v3 v3.0.1 (YAML parsing)
 - golang.org/x/sync v0.18.0 (Concurrency utilities for bulk operations)
@@ -588,14 +636,17 @@ cmd/gzh-git/           # CLI application
 ### Known Issues
 
 **Test Coverage Gaps** (documented in COVERAGE.md):
+
 - pkg/repository: 39.2% (needs +40 tests for 85%)
 - pkg/branch: 48.1% (needs +35 tests for 85%)
 - pkg/commit: 66.3% (needs +15 tests for 85%)
 
 **Performance**:
+
 - Branch list command: 107ms (slightly over 100ms target)
 
 **Limitations**:
+
 - CLI commands tested via integration tests (0% direct coverage)
 - Some complex scenarios simplified in tests
 
@@ -622,35 +673,41 @@ N/A - Initial release
 - Protected branch safeguards
 - No known security vulnerabilities
 
----
+______________________________________________________________________
 
 ## Release Timeline
 
 **Phase 1** (Week 1): Foundation & Infrastructure
+
 - Project structure, documentation, basic Git operations
 - Completed: 2025-11-27
 
 **Phase 2** (Week 1): Commit Automation
+
 - Template system, validation, auto-generation, smart push
 - Completed: 2025-11-27
 
 **Phase 3** (Week 1): Branch Management
+
 - Branch manager, worktrees, cleanup, parallel workflows
 - Completed: 2025-11-27
 
 **Phase 4** (Week 1): History Analysis
+
 - Statistics, contributors, file tracking, formatters
 - Completed: 2025-11-27
 
 **Phase 5** (Week 1): Advanced Merge/Rebase
+
 - Conflict detection, merge strategies, rebase operations
 - Completed: 2025-11-27
 
 **Phase 6** (Week 2-3): Integration & Testing
+
 - CLI implementation, integration tests, E2E tests, benchmarks, documentation
 - Completed: 2025-11-30
 
----
+______________________________________________________________________
 
 ## Links
 
@@ -659,7 +716,7 @@ N/A - Initial release
 - **Issues**: https://github.com/gizzahub/gzh-cli-git/issues
 - **Discussions**: https://github.com/gizzahub/gzh-cli-git/discussions
 
----
+______________________________________________________________________
 
 ## Acknowledgments
 
@@ -667,9 +724,9 @@ N/A - Initial release
 - Follows [Conventional Commits](https://www.conventionalcommits.org/) specification
 - Inspired by [gzh-cli](https://github.com/gizzahub/gzh-cli)
 
----
+______________________________________________________________________
 
-[Unreleased]: https://github.com/gizzahub/gzh-cli-git/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/gizzahub/gzh-cli-git/releases/tag/v0.3.0
-[0.2.0]: https://github.com/gizzahub/gzh-cli-git/compare/v0.1.0-alpha...v0.2.0
 [0.1.0-alpha]: https://github.com/gizzahub/gzh-cli-git/releases/tag/v0.1.0-alpha
+[0.2.0]: https://github.com/gizzahub/gzh-cli-git/compare/v0.1.0-alpha...v0.2.0
+[0.3.0]: https://github.com/gizzahub/gzh-cli-git/releases/tag/v0.3.0
+[unreleased]: https://github.com/gizzahub/gzh-cli-git/compare/v0.3.0...HEAD

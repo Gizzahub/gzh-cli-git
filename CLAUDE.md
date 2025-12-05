@@ -2,7 +2,7 @@
 
 This file provides LLM-optimized guidance for Claude Code when working with this repository.
 
----
+______________________________________________________________________
 
 ## Project Context
 
@@ -18,7 +18,7 @@ This file provides LLM-optimized guidance for Claude Code when working with this
 - **Safe git operations**: Sanitize inputs, prevent command injection
 - **Modular packages**: Separation of git commands, parsing, and validation
 
----
+______________________________________________________________________
 
 ## Shared Library (gzh-cli-core)
 
@@ -27,7 +27,7 @@ This file provides LLM-optimized guidance for Claude Code when working with this
 | Package | Import | Purpose |
 |---------|--------|---------|
 | logger | `gzh-cli-core/logger` | Structured logging |
-| testutil | `gzh-cli-core/testutil` | Test helpers (TempDir, Assert*, Capture) |
+| testutil | `gzh-cli-core/testutil` | Test helpers (TempDir, Assert\*, Capture) |
 | errors | `gzh-cli-core/errors` | Error types and wrapping |
 | config | `gzh-cli-core/config` | Config loading utilities |
 | cli | `gzh-cli-core/cli` | CLI flags and output |
@@ -43,7 +43,7 @@ import (
 
 **Git-specific test helpers**: Use `internal/testutil` for `TempGitRepo()`, `TempGitRepoWithCommit()`, etc.
 
----
+______________________________________________________________________
 
 ## Module-Specific Guides (AGENTS.md)
 
@@ -54,7 +54,7 @@ import (
 | Common Rules | `cmd/AGENTS_COMMON.md` | Project-wide conventions |
 | CLI Module | `cmd/gzh-git/AGENTS.md` | CLI-specific rules |
 
----
+______________________________________________________________________
 
 ## Internal Packages
 
@@ -77,15 +77,15 @@ import (
 | `pkg/repository` | Repository abstraction |
 | `pkg/watch` | File watching |
 
----
+______________________________________________________________________
 
 ## Development Workflow
 
 ### Before Code Modification
 
 1. **Read AGENTS.md** for the module you're modifying
-2. Check existing patterns in `internal/` and `pkg/`
-3. Review CONTRIBUTING.md for guidelines
+1. Check existing patterns in `internal/` and `pkg/`
+1. Review CONTRIBUTING.md for guidelines
 
 ### Code Modification Process
 
@@ -101,7 +101,7 @@ make dev-fast   # format + unit tests only
 make pr-check
 ```
 
----
+______________________________________________________________________
 
 ## Essential Commands Reference
 
@@ -142,7 +142,7 @@ make fmt-diff       # Format changed files only
 make lint-diff      # Lint changed files only
 ```
 
----
+______________________________________________________________________
 
 ## Project Structure
 
@@ -178,7 +178,7 @@ make lint-diff      # Lint changed files only
 └── README.md                   # Project documentation
 ```
 
----
+______________________________________________________________________
 
 ## Important Rules
 
@@ -210,7 +210,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 **Types**: feat, fix, docs, refactor, test, chore
 **Scope**: REQUIRED (e.g., cmd, internal, pkg/branch, pkg/commit)
 
----
+______________________________________________________________________
 
 ## FAQ
 
@@ -229,6 +229,6 @@ A: `pkg/{feature}/` directory
 **Q: What files should AI not modify?**
 A: See `.claudeignore` (create if needed)
 
----
+______________________________________________________________________
 
 **Last Updated**: 2024-12-05

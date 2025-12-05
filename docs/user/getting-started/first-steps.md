@@ -5,6 +5,7 @@ Welcome! This tutorial will guide you through your first 10 minutes with gzh-git
 ## What You'll Learn
 
 By the end of this tutorial, you'll know how to:
+
 - ✅ Install gzh-git
 - ✅ Clone a repository
 - ✅ Check repository status
@@ -14,10 +15,11 @@ By the end of this tutorial, you'll know how to:
 **Time Required**: ~10 minutes
 
 **Prerequisites**:
+
 - Git 2.30+ installed
 - Go 1.24+ installed (optional, for library usage)
 
----
+______________________________________________________________________
 
 ## Step 1: Install gzh-git (2 minutes)
 
@@ -34,6 +36,7 @@ gzh-git --version
 ```
 
 **Expected Output**:
+
 ```
 gzh-git version v0.1.0-alpha
 ```
@@ -50,7 +53,7 @@ echo 'export PATH=$PATH:$HOME/go/bin' >> ~/.zshrc
 source ~/.zshrc
 ```
 
----
+______________________________________________________________________
 
 ## Step 2: Clone Your First Repository (3 minutes)
 
@@ -67,12 +70,14 @@ gzh-git clone https://github.com/gizzahub/gzh-cli-git.git my-test-repo
 ```
 
 **What happens:**
+
 1. gzh-git validates the URL
-2. Creates the destination directory
-3. Clones the repository
-4. Shows progress information
+1. Creates the destination directory
+1. Clones the repository
+1. Shows progress information
 
 **Expected Output**:
+
 ```
 Cloning into 'gzh-cli-git'...
 ✓ Repository cloned successfully
@@ -84,21 +89,24 @@ Path: /current/directory/gzh-cli-git
 Try these variations:
 
 **Clone specific branch:**
+
 ```bash
 gzh-git clone -b develop https://github.com/user/repo.git
 ```
 
 **Shallow clone (faster, saves space):**
+
 ```bash
 gzh-git clone --depth 1 https://github.com/user/repo.git
 ```
 
 **Clone only one branch:**
+
 ```bash
 gzh-git clone --single-branch -b main https://github.com/user/repo.git
 ```
 
----
+______________________________________________________________________
 
 ## Step 3: Check Repository Status (2 minutes)
 
@@ -115,6 +123,7 @@ gzh-git status
 ```
 
 **Example Output (Clean Repository)**:
+
 ```
 Repository Status
 =================
@@ -141,6 +150,7 @@ gzh-git status
 ```
 
 **Example Output (With Changes)**:
+
 ```
 Repository Status
 =================
@@ -162,7 +172,7 @@ gzh-git status -q
 echo $?  # Prints exit code (1 = dirty, 0 = clean)
 ```
 
----
+______________________________________________________________________
 
 ## Step 4: View Repository Information (1 minute)
 
@@ -173,6 +183,7 @@ gzh-git info
 ```
 
 **Example Output**:
+
 ```
 Repository Information
 =====================
@@ -191,12 +202,13 @@ Status: Dirty (1 untracked file)
 ```
 
 **What this tells you:**
+
 - Current branch name
 - Remote repository URL
 - How many commits you're ahead/behind
 - Repository cleanliness status
 
----
+______________________________________________________________________
 
 ## Step 5: Use gzh-git as a Library (Optional, 3 minutes)
 
@@ -278,6 +290,7 @@ go run main.go
 ```
 
 **Expected Output**:
+
 ```
 Repository: /Users/you/projects/gzh-test
 Branch: main
@@ -285,7 +298,7 @@ Remote: https://github.com/your/repo.git
 Status: Clean ✓
 ```
 
----
+______________________________________________________________________
 
 ## Common Workflows
 
@@ -388,7 +401,7 @@ func checkRepo(ctx context.Context, client repository.Client, path string) {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Quick Reference
 
@@ -413,16 +426,16 @@ func checkRepo(ctx context.Context, client repository.Client, path string) {
 | `--single-branch` | Clone only one branch | `clone` |
 | `--recursive` | Clone with submodules | `clone` |
 
----
+______________________________________________________________________
 
 ## What's Next?
 
 Now that you know the basics, explore:
 
 1. **Advanced Usage**: Check out [User Guide](../guides/README.md)
-2. **Library Integration**: See [Library Guide](../../LIBRARY.md) for detailed API documentation
-3. **Troubleshooting**: Visit [Troubleshooting Guide](../../TROUBLESHOOTING.md) for common issues
-4. **FAQ**: Read [FAQ](../guides/faq.md) for frequently asked questions
+1. **Library Integration**: See [Library Guide](../../LIBRARY.md) for detailed API documentation
+1. **Troubleshooting**: Visit [Troubleshooting Guide](../../TROUBLESHOOTING.md) for common issues
+1. **FAQ**: Read [FAQ](../guides/faq.md) for frequently asked questions
 
 ### Planned Features
 
@@ -435,19 +448,21 @@ These features are coming soon (not yet available):
 
 See [Roadmap](../../README.md#roadmap) for detailed timeline.
 
----
+______________________________________________________________________
 
 ## Getting Help
 
 **Documentation**:
+
 - [README](../../README.md) - Project overview
 - [Installation Guide](../../docs/INSTALL.md) - Detailed installation
 - [Command Reference](../../docs/commands/README.md) - All commands
 
 **Community**:
+
 - [GitHub Issues](https://github.com/gizzahub/gzh-cli-git/issues) - Report bugs
 - [GitHub Discussions](https://github.com/gizzahub/gzh-cli-git/discussions) - Ask questions
 
----
+______________________________________________________________________
 
 **Congratulations!** 🎉 You've completed your first steps with gzh-git. Happy coding!

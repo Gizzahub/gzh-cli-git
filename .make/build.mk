@@ -45,9 +45,14 @@ build: ## build golang binary
 
 
 install: build ## install golang binary
-	@printf "$(CYAN)Installing to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
+	@printf "$(CYAN)Installing $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@mv $(BINARY) "$(BINDIR)"/
-	@printf "$(GREEN)Installed %s to %s$(RESET)\n" "$(BINARY)" "$(BINDIR)$(SEP)$(BINARY)"
+	@printf "$(GREEN)✅ Installed $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
+	@echo ""
+	@printf "$(CYAN)Verifying installation...$(RESET)\n"
+	@"$(BINDIR)$(SEP)$(BINARY)" --version || echo -e "$(YELLOW)Note: Binary installed but --version flag not implemented$(RESET)"
+	@echo ""
+	@printf "$(GREEN)🎉 Installation complete! Run '$(BINARY) --help' to get started.$(RESET)\n"
 
 run: ## run the application (usage: make run [args...] or ARGS="args" make run)
 	@echo -e "$(CYAN)Running application with version $(VERSION)...$(RESET)"

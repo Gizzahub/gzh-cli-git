@@ -4,7 +4,7 @@
 **Status**: Pre-release (Alpha)
 **Go Version**: 1.24.0+
 
----
+______________________________________________________________________
 
 ## 🎉 Overview
 
@@ -12,15 +12,16 @@ We're excited to announce the first alpha release of **gzh-cli-git**, a Git-spec
 
 This release represents **6 weeks of development** across 6 major phases, delivering a production-ready foundation for Git automation.
 
----
+______________________________________________________________________
 
 ## 🚀 Highlights
 
 ### Dual-Purpose Design
 
 gzh-cli-git works as both:
+
 1. **Standalone CLI** - Full-featured command-line tool (`gzh-git`)
-2. **Go Library** - Importable packages for building your own tools
+1. **Go Library** - Importable packages for building your own tools
 
 ### Key Features
 
@@ -31,7 +32,7 @@ gzh-cli-git works as both:
 ✅ **Complete Documentation** (API, user guides, contributor guides)
 ✅ **High Performance** (95% operations < 100ms, all < 500ms)
 
----
+______________________________________________________________________
 
 ## 📦 Installation
 
@@ -55,7 +56,7 @@ make install
 - Git 2.30+
 - Go 1.24.0+ (for building from source)
 
----
+______________________________________________________________________
 
 ## 🎯 What's Included
 
@@ -73,6 +74,7 @@ gzh-git info
 ```
 
 **Features**:
+
 - Smart repository detection
 - Progress reporting for long operations
 - Multiple output formats (table, JSON, CSV, markdown)
@@ -93,6 +95,7 @@ gzh-git commit template show conventional
 ```
 
 **Features**:
+
 - 2 built-in templates (Conventional Commits, Semantic Versioning)
 - Custom template support (YAML format)
 - Intelligent type/scope inference
@@ -112,6 +115,7 @@ gzh-git branch delete old-feature
 ```
 
 **Features**:
+
 - Branch name validation
 - Protected branch detection
 - Worktree management
@@ -134,6 +138,7 @@ gzh-git history blame src/main.go
 ```
 
 **Features**:
+
 - Time-based filtering
 - Contributor rankings
 - File evolution tracking
@@ -156,12 +161,13 @@ gzh-git merge abort
 ```
 
 **Features**:
+
 - Conflict type classification
 - Merge difficulty calculation
 - Multiple merge strategies
 - Interactive rebase assistance
 
----
+______________________________________________________________________
 
 ## 📚 As a Go Library
 
@@ -209,7 +215,7 @@ func main() {
 
 **See [LIBRARY.md](docs/LIBRARY.md) for complete API guide.**
 
----
+______________________________________________________________________
 
 ## 📊 Quality Metrics
 
@@ -235,6 +241,7 @@ func main() {
 | status | 62ms | 20KB | ✅ Good |
 
 **Performance Targets**:
+
 - ✅ 95% operations < 100ms: **91%** (10/11)
 - ✅ 99% operations < 500ms: **100%** (11/11)
 - ✅ Memory < 50MB: **All < 1MB**
@@ -246,7 +253,7 @@ func main() {
 - ✅ Comprehensive error handling
 - ✅ 100% GoDoc coverage
 
----
+______________________________________________________________________
 
 ## 📖 Documentation
 
@@ -272,7 +279,7 @@ func main() {
 - **[PRD.md](../PRD.md)** - Product requirements
 - **[REQUIREMENTS.md](../REQUIREMENTS.md)** - Technical requirements
 
----
+______________________________________________________________________
 
 ## ⚠️ Known Limitations
 
@@ -281,52 +288,60 @@ func main() {
 This is an **alpha release** with the following limitations:
 
 1. **API Stability**: No stability guarantees until v1.0.0
+
    - APIs may change in future releases
    - Breaking changes will be documented
 
-2. **Test Coverage**: 69.1% overall
+1. **Test Coverage**: 69.1% overall
+
    - pkg/repository: 39.2% (needs improvement)
    - pkg/branch: 48.1% (needs improvement)
    - pkg/commit: 66.3% (needs improvement)
 
-3. **Production Usage**: Not recommended yet
+1. **Production Usage**: Not recommended yet
+
    - Limited real-world testing
    - No production deployments
 
-4. **Performance**: One command exceeds target
+1. **Performance**: One command exceeds target
+
    - branch list: 107ms (target: 100ms)
 
 **See [CHANGELOG.md](../CHANGELOG.md) for complete list.**
 
----
+______________________________________________________________________
 
 ## 🛣️ Roadmap
 
 ### Next Steps (Phase 7)
 
 **v0.1.x - Bug Fixes** (Current focus)
+
 - Address reported issues
 - Improve test coverage
 - Documentation updates
 
 **v0.2.0 - Feature Additions** (Q1 2025)
+
 - New features based on feedback
 - API improvements (backward compatible)
 - Performance optimizations
 
 **v1.0.0 - Production Release** (Q2 2025)
+
 - gzh-cli integration complete
 - 85%+ test coverage
 - API stability guarantees
 - 3+ months without breaking changes
 
----
+______________________________________________________________________
 
 ## 🤝 Contributing
 
 We welcome contributions! This is a great time to get involved while the project is in alpha.
 
 **Ways to Contribute**:
+
 - 🐛 Report bugs and issues
 - 💡 Suggest features and improvements
 - 📝 Improve documentation
@@ -335,7 +350,7 @@ We welcome contributions! This is a great time to get involved while the project
 
 **See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.**
 
----
+______________________________________________________________________
 
 ## 🔗 Links
 
@@ -345,7 +360,7 @@ We welcome contributions! This is a great time to get involved while the project
 - **Documentation**: https://pkg.go.dev/github.com/gizzahub/gzh-cli-git
 - **Changelog**: [CHANGELOG.md](../CHANGELOG.md)
 
----
+______________________________________________________________________
 
 ## 🙏 Acknowledgments
 
@@ -353,13 +368,13 @@ We welcome contributions! This is a great time to get involved while the project
 - Follows [Conventional Commits](https://www.conventionalcommits.org/) specification
 - Inspired by [gzh-cli](https://github.com/gizzahub/gzh-cli)
 
----
+______________________________________________________________________
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
 
----
+______________________________________________________________________
 
 **Thank you for trying gzh-cli-git!** 🎉
 

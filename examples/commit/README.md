@@ -5,9 +5,9 @@ This example demonstrates gzh-git commit automation features using the CLI.
 ## Features Demonstrated
 
 1. **Validate Commit Messages**: Check if messages follow Conventional Commits format
-2. **List Templates**: Show available commit message templates
-3. **Show Template Details**: Display template format and rules
-4. **Auto-Generate Messages**: Create commit messages from staged changes
+1. **List Templates**: Show available commit message templates
+1. **Show Template Details**: Display template format and rules
+1. **Auto-Generate Messages**: Create commit messages from staged changes
 
 ## Usage
 

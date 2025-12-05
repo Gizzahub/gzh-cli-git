@@ -5,9 +5,9 @@ This example demonstrates gzh-git branch management features using the CLI.
 ## Features Demonstrated
 
 1. **List Branches**: Show all local and remote branches
-2. **Create Branches**: Create new branches with various options
-3. **Delete Branches**: Remove branches safely
-4. **Worktree Management**: Create branches with linked worktrees
+1. **Create Branches**: Create new branches with various options
+1. **Delete Branches**: Remove branches safely
+1. **Worktree Management**: Create branches with linked worktrees
 
 ## Usage
 

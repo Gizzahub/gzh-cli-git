@@ -31,9 +31,11 @@ gzh-git status [flags]
 ```
 
 **Flags:**
+
 - `--porcelain`: Machine-readable output
 
 **Examples:**
+
 ```bash
 # Show status
 gzh-git status
@@ -51,11 +53,13 @@ gzh-git clone <url> [directory] [flags]
 ```
 
 **Flags:**
+
 - `--branch <name>`: Clone specific branch
 - `--depth <n>`: Create shallow clone
 - `--single-branch`: Clone only one branch
 
 **Examples:**
+
 ```bash
 # Clone repository
 gzh-git clone https://github.com/user/repo.git
@@ -76,6 +80,7 @@ gzh-git info [flags]
 ```
 
 **Examples:**
+
 ```bash
 # Show repository info
 gzh-git info
@@ -92,10 +97,12 @@ gzh-git commit auto [flags]
 ```
 
 **Flags:**
+
 - `--template <name>`: Use specific commit template
 - `--dry-run`: Show generated message without committing
 
 **Examples:**
+
 ```bash
 # Auto-generate and commit
 gzh-git commit auto
@@ -108,10 +115,11 @@ gzh-git commit auto --dry-run
 ```
 
 **How it works:**
+
 1. Analyzes staged changes
-2. Generates commit message using template
-3. Validates message against rules
-4. Creates commit if validation passes
+1. Generates commit message using template
+1. Validates message against rules
+1. Creates commit if validation passes
 
 ### commit validate
 
@@ -122,9 +130,11 @@ gzh-git commit validate <message> [flags]
 ```
 
 **Flags:**
+
 - `--template <name>`: Validate against specific template
 
 **Examples:**
+
 ```bash
 # Validate message
 gzh-git commit validate "feat: add new feature"
@@ -142,11 +152,13 @@ gzh-git commit template <command> [args]
 ```
 
 **Subcommands:**
+
 - `list`: List available templates
 - `show <name>`: Show template details
 - `validate <file>`: Validate custom template file
 
 **Examples:**
+
 ```bash
 # List templates
 gzh-git commit template list
@@ -169,12 +181,14 @@ gzh-git branch list [flags]
 ```
 
 **Flags:**
+
 - `--all`, `-a`: Show both local and remote branches
 - `--remote`, `-r`: Show only remote branches
 - `--merged`: Show only merged branches
 - `--no-merged`: Show only unmerged branches
 
 **Examples:**
+
 ```bash
 # List local branches
 gzh-git branch list
@@ -195,11 +209,13 @@ gzh-git branch create <name> [flags]
 ```
 
 **Flags:**
+
 - `--base <ref>`: Create from specific ref (default: HEAD)
 - `--track`: Set up tracking
 - `--worktree <path>`: Create linked worktree
 
 **Examples:**
+
 ```bash
 # Create branch
 gzh-git branch create feature/new-feature
@@ -220,10 +236,12 @@ gzh-git branch delete <name> [flags]
 ```
 
 **Flags:**
+
 - `--force`, `-f`: Force delete even if not merged
 - `--remote`, `-r`: Delete remote branch
 
 **Examples:**
+
 ```bash
 # Delete branch
 gzh-git branch delete feature/old
@@ -246,6 +264,7 @@ gzh-git history stats [flags]
 ```
 
 **Flags:**
+
 - `--since <date>`: Start date (e.g., '2024-01-01', '1 month ago')
 - `--until <date>`: End date
 - `--branch <name>`: Specific branch
@@ -253,6 +272,7 @@ gzh-git history stats [flags]
 - `--format <type>`: Output format (table|json|csv|markdown)
 
 **Examples:**
+
 ```bash
 # Overall statistics
 gzh-git history stats
@@ -273,6 +293,7 @@ gzh-git history contributors [flags]
 ```
 
 **Flags:**
+
 - `--top <n>`: Show only top N contributors
 - `--since <date>`: Start date
 - `--until <date>`: End date
@@ -281,6 +302,7 @@ gzh-git history contributors [flags]
 - `--format <type>`: Output format
 
 **Examples:**
+
 ```bash
 # List all contributors
 gzh-git history contributors
@@ -301,6 +323,7 @@ gzh-git history file <path> [flags]
 ```
 
 **Flags:**
+
 - `--since <date>`: Start date
 - `--until <date>`: End date
 - `--max <n>`: Maximum number of commits
@@ -309,6 +332,7 @@ gzh-git history file <path> [flags]
 - `--format <type>`: Output format
 
 **Examples:**
+
 ```bash
 # Show file history
 gzh-git history file src/main.go
@@ -329,6 +353,7 @@ gzh-git history blame <file> [flags]
 ```
 
 **Examples:**
+
 ```bash
 # Show blame
 gzh-git history blame src/main.go
@@ -345,6 +370,7 @@ gzh-git merge do <source-branch> [flags]
 ```
 
 **Flags:**
+
 - `--strategy <type>`: Merge strategy (auto|ours|theirs|recursive)
 - `--ff-only`: Only allow fast-forward merge
 - `--no-commit`: Merge but don't commit
@@ -352,6 +378,7 @@ gzh-git merge do <source-branch> [flags]
 - `--message <text>`: Custom merge commit message
 
 **Examples:**
+
 ```bash
 # Merge branch
 gzh-git merge do feature/new-feature
@@ -367,6 +394,7 @@ gzh-git merge do feature/new-feature --message "Merge feature X"
 ```
 
 **Merge Strategies:**
+
 - `auto` (default): Let Git choose the best strategy
 - `recursive`: Standard three-way merge
 - `ours`: Keep our version in conflicts
@@ -381,10 +409,12 @@ gzh-git merge detect <source> <target> [flags]
 ```
 
 **Flags:**
+
 - `--include-binary`: Include binary file conflicts
 - `--base <commit>`: Specify base commit
 
 **Examples:**
+
 ```bash
 # Detect conflicts
 gzh-git merge detect feature/new-feature main
@@ -402,6 +432,7 @@ gzh-git merge abort
 ```
 
 **Examples:**
+
 ```bash
 # Abort merge
 gzh-git merge abort
@@ -416,12 +447,14 @@ gzh-git merge rebase [branch] [flags]
 ```
 
 **Flags:**
+
 - `--onto <commit>`: Rebase onto specific commit
 - `--continue`: Continue after resolving conflicts
 - `--skip`: Skip current commit
 - `--abort`: Abort rebase
 
 **Examples:**
+
 ```bash
 # Rebase onto main
 gzh-git merge rebase main

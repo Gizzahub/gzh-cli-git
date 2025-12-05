@@ -38,6 +38,7 @@ gzh-git status
 ```
 
 **Output:**
+
 ```
 Repository Status
 =================
@@ -68,12 +69,14 @@ gzh-git commit auto
 ```
 
 **What happens:**
+
 1. Analyzes your staged changes
-2. Generates a commit message following best practices
-3. Validates the message
-4. Creates the commit
+1. Generates a commit message following best practices
+1. Validates the message
+1. Creates the commit
 
 **Example generated message:**
+
 ```
 feat(main): add configuration validation
 
@@ -293,5 +296,6 @@ gzh-git --version
 ```
 
 For more help:
+
 - GitHub Issues: https://github.com/gizzahub/gzh-cli-git/issues
 - Documentation: https://github.com/gizzahub/gzh-cli-git/tree/main/docs

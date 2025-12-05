@@ -5,8 +5,8 @@ This example demonstrates gzh-git history analysis features using the CLI.
 ## Features Demonstrated
 
 1. **Commit Statistics**: Analyze commit counts, authors, and changes over time
-2. **Contributor Analysis**: Rank contributors by commits and code changes
-3. **File History**: Track changes to specific files
+1. **Contributor Analysis**: Rank contributors by commits and code changes
+1. **File History**: Track changes to specific files
 
 ## Usage
 

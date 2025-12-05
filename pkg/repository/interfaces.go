@@ -217,6 +217,11 @@ type CloneOptions struct {
 	// Quiet suppresses progress output.
 	Quiet bool
 
+	// CreateBranch creates the branch if it doesn't exist on the remote.
+	// If true and the specified branch doesn't exist, it will be created after cloning.
+	// Only effective when Branch is specified.
+	CreateBranch bool
+
 	// Progress is an optional progress reporter.
 	// If provided, clone progress will be reported.
 	Progress ProgressReporter

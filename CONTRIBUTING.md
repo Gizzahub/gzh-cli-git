@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to **gzh-cli-git**! This guide will help you get started with development, testing, and submitting contributions.
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ Thank you for your interest in contributing to **gzh-cli-git**! This guide will 
 - [Documentation](#documentation)
 - [Release Process](#release-process)
 
----
+______________________________________________________________________
 
 ## Code of Conduct
 
@@ -28,7 +28,7 @@ This project adheres to a code of conduct that all contributors are expected to 
 - Accept differing viewpoints gracefully
 - Prioritize project goals over personal preferences
 
----
+______________________________________________________________________
 
 ## Getting Started
 
@@ -44,7 +44,7 @@ Before contributing, ensure you have the following installed:
 ### Fork and Clone
 
 1. Fork the repository on GitHub
-2. Clone your fork locally:
+1. Clone your fork locally:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/gzh-cli-git.git
@@ -67,7 +67,7 @@ go mod download
 make test
 ```
 
----
+______________________________________________________________________
 
 ## Development Workflow
 
@@ -82,6 +82,7 @@ git checkout -b fix/your-bug-fix
 ```
 
 **Branch Naming Convention:**
+
 - `feature/*` - New features
 - `fix/*` - Bug fixes
 - `docs/*` - Documentation updates
@@ -128,7 +129,7 @@ git push origin feature/your-feature-name
 
 Then open a Pull Request on GitHub.
 
----
+______________________________________________________________________
 
 ## Project Structure
 
@@ -163,11 +164,11 @@ gzh-cli-git/
 ### Key Principles
 
 1. **Library-First Design**: `pkg/` has ZERO CLI dependencies
-2. **Interface-Driven**: All components use well-defined interfaces
-3. **Context Propagation**: All operations support `context.Context`
-4. **Testability**: 100% mockable components
+1. **Interface-Driven**: All components use well-defined interfaces
+1. **Context Propagation**: All operations support `context.Context`
+1. **Testability**: 100% mockable components
 
----
+______________________________________________________________________
 
 ## Coding Standards
 
@@ -193,6 +194,7 @@ make lint
 ```
 
 **Key rules:**
+
 - No unused variables or imports
 - Error handling required
 - Cyclomatic complexity < 15
@@ -321,7 +323,7 @@ func (m *Manager) AutoCommit(ctx context.Context, opts AutoCommitOptions) (*Comm
 }
 ```
 
----
+______________________________________________________________________
 
 ## Testing Guidelines
 
@@ -360,6 +362,7 @@ go tool cover -html=coverage.out
 ### Writing Tests
 
 **Test File Naming:**
+
 - Unit tests: `<file>_test.go` in same package
 - Integration tests: `tests/integration/<feature>_test.go`
 - E2E tests: `tests/e2e/<workflow>_test.go`
@@ -429,6 +432,7 @@ func setupTestRepo(t *testing.T) *Repository {
 ### Integration Tests
 
 Integration tests should:
+
 - Use temporary directories (`t.TempDir()`)
 - Clean up resources
 - Be independent (no shared state)
@@ -453,7 +457,7 @@ func BenchmarkAutoCommit(b *testing.B) {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Commit Convention
 
@@ -497,6 +501,7 @@ The scope should indicate the affected component:
 ### Examples
 
 **Feature:**
+
 ```
 feat(commit): add auto-commit with template support
 
@@ -510,6 +515,7 @@ Closes #123
 ```
 
 **Bug Fix:**
+
 ```
 fix(merge): prevent panic on nil conflict resolution
 
@@ -520,6 +526,7 @@ Fixes #456
 ```
 
 **Documentation:**
+
 ```
 docs(readme): update installation instructions
 
@@ -528,6 +535,7 @@ prerequisites for building from source.
 ```
 
 **Refactoring:**
+
 ```
 refactor(parser): simplify diff parsing logic
 
@@ -551,26 +559,28 @@ Migration guide:
 - New: result, err := mgr.AutoCommit(ctx, opts); hash := result.Hash
 ```
 
----
+______________________________________________________________________
 
 ## Pull Request Process
 
 ### Before Submitting
 
 1. **Sync with upstream:**
+
    ```bash
    git fetch upstream
    git rebase upstream/master
    ```
 
-2. **Run quality checks:**
+1. **Run quality checks:**
+
    ```bash
    make quality
    ```
 
-3. **Update documentation** if needed
+1. **Update documentation** if needed
 
-4. **Add tests** for new functionality
+1. **Add tests** for new functionality
 
 ### PR Description Template
 
@@ -606,9 +616,9 @@ Describe how you tested this change:
 ### Review Process
 
 1. **Automated checks** must pass (CI/CD)
-2. **At least one reviewer** approval required
-3. **Maintainer review** for significant changes
-4. **Address feedback** promptly and professionally
+1. **At least one reviewer** approval required
+1. **Maintainer review** for significant changes
+1. **Address feedback** promptly and professionally
 
 ### Merging
 
@@ -616,26 +626,28 @@ Describe how you tested this change:
 - We use **squash and merge** for clean history
 - Your commits will be squashed into one commit
 
----
+______________________________________________________________________
 
 ## Documentation
 
 ### Types of Documentation
 
 1. **Code Documentation** - GoDoc comments
-2. **User Documentation** - `docs/` directory
-3. **API Reference** - pkg.go.dev (auto-generated)
-4. **Specifications** - `specs/` directory
+1. **User Documentation** - `docs/` directory
+1. **API Reference** - pkg.go.dev (auto-generated)
+1. **Specifications** - `specs/` directory
 
 ### Writing Documentation
 
 **User Documentation:**
+
 - Write in Markdown
 - Include examples with code snippets
 - Keep it concise and practical
 - Use proper headings and structure
 
 **GoDoc Comments:**
+
 - Start with the name being documented
 - Be clear and concise
 - Include examples for complex APIs
@@ -671,7 +683,7 @@ func (m *Manager) AutoCommit(ctx context.Context, opts AutoCommitOptions) (*Comm
 }
 ```
 
----
+______________________________________________________________________
 
 ## Release Process
 
@@ -688,13 +700,13 @@ We use [Semantic Versioning](https://semver.org/):
 Maintainers will:
 
 1. Update version in relevant files
-2. Update CHANGELOG.md
-3. Tag release: `git tag -a v0.2.0 -m "Release v0.2.0"`
-4. Push tag: `git push origin v0.2.0`
-5. Create GitHub release with notes
-6. Publish to pkg.go.dev (automatic)
+1. Update CHANGELOG.md
+1. Tag release: `git tag -a v0.2.0 -m "Release v0.2.0"`
+1. Push tag: `git push origin v0.2.0`
+1. Create GitHub release with notes
+1. Publish to pkg.go.dev (automatic)
 
----
+______________________________________________________________________
 
 ## Getting Help
 
@@ -710,22 +722,22 @@ Maintainers will:
 When reporting bugs, include:
 
 1. **Environment**: Go version, OS, Git version
-2. **Steps to reproduce**: Minimal example
-3. **Expected behavior**: What should happen
-4. **Actual behavior**: What actually happens
-5. **Logs**: Relevant error messages or logs
+1. **Steps to reproduce**: Minimal example
+1. **Expected behavior**: What should happen
+1. **Actual behavior**: What actually happens
+1. **Logs**: Relevant error messages or logs
 
 ### Feature Requests
 
 For feature requests:
 
 1. Check existing issues first
-2. Describe the use case clearly
-3. Explain why it's valuable
-4. Consider implementation complexity
-5. Be open to alternative solutions
+1. Describe the use case clearly
+1. Explain why it's valuable
+1. Consider implementation complexity
+1. Be open to alternative solutions
 
----
+______________________________________________________________________
 
 ## Project Conventions
 
@@ -759,7 +771,7 @@ Never commit build artifacts:
 
 These are in `.gitignore` - if you need to add new artifacts, update `.gitignore` first.
 
----
+______________________________________________________________________
 
 ## Recognition
 
@@ -769,13 +781,13 @@ Contributors are recognized in:
 - CHANGELOG.md (for significant contributions)
 - Release notes
 
----
+______________________________________________________________________
 
 ## License
 
 By contributing to gzh-cli-git, you agree that your contributions will be licensed under the MIT License.
 
----
+______________________________________________________________________
 
 ## Thank You!
 
@@ -783,6 +795,6 @@ Thank you for contributing to **gzh-cli-git**! Your efforts help make this proje
 
 **Questions?** Feel free to ask in [GitHub Discussions](https://github.com/gizzahub/gzh-cli-git/discussions).
 
----
+______________________________________________________________________
 
 **Last Updated**: 2025-11-29

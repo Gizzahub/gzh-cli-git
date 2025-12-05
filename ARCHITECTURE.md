@@ -5,24 +5,24 @@
 **Last Updated**: 2025-11-27
 **Status**: Draft
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
 1. [Executive Summary](#1-executive-summary)
-2. [Architectural Overview](#2-architectural-overview)
-3. [Design Principles](#3-design-principles)
-4. [Component Design](#4-component-design)
-5. [Interface Contracts](#5-interface-contracts)
-6. [Data Flow](#6-data-flow)
-7. [Error Handling Strategy](#7-error-handling-strategy)
-8. [Testing Architecture](#8-testing-architecture)
-9. [Performance Considerations](#9-performance-considerations)
-10. [Security Architecture](#10-security-architecture)
-11. [Deployment Architecture](#11-deployment-architecture)
-12. [Design Decisions](#12-design-decisions)
+1. [Architectural Overview](#2-architectural-overview)
+1. [Design Principles](#3-design-principles)
+1. [Component Design](#4-component-design)
+1. [Interface Contracts](#5-interface-contracts)
+1. [Data Flow](#6-data-flow)
+1. [Error Handling Strategy](#7-error-handling-strategy)
+1. [Testing Architecture](#8-testing-architecture)
+1. [Performance Considerations](#9-performance-considerations)
+1. [Security Architecture](#10-security-architecture)
+1. [Deployment Architecture](#11-deployment-architecture)
+1. [Design Decisions](#12-design-decisions)
 
----
+______________________________________________________________________
 
 ## 1. Executive Summary
 
@@ -31,10 +31,10 @@
 gzh-cli-git adopts a **Library-First Architecture** with the following goals:
 
 1. **Dual-Purpose Design**: Function as both standalone CLI and reusable Go library
-2. **Clean Separation**: Zero coupling between library code (`pkg/`) and CLI code (`cmd/`)
-3. **Maximum Reusability**: Enable easy integration into gzh-cli and other projects
-4. **Interface-Driven**: All core functionality via well-defined interfaces
-5. **Testability**: 100% mockable components for comprehensive testing
+1. **Clean Separation**: Zero coupling between library code (`pkg/`) and CLI code (`cmd/`)
+1. **Maximum Reusability**: Enable easy integration into gzh-cli and other projects
+1. **Interface-Driven**: All core functionality via well-defined interfaces
+1. **Testability**: 100% mockable components for comprehensive testing
 
 ### 1.2 Key Architectural Decisions
 
@@ -46,7 +46,7 @@ gzh-cli-git adopts a **Library-First Architecture** with the following goals:
 | Functional options pattern | API extensibility without breaking changes | More boilerplate |
 | Context propagation | Cancellation, timeouts, request-scoped values | Every function signature includes ctx |
 
----
+______________________________________________________________________
 
 ## 2. Architectural Overview
 
@@ -99,6 +99,7 @@ gzh-cli-git adopts a **Library-First Architecture** with the following goals:
 ### 2.2 Layer Responsibilities
 
 **CLI Layer (`cmd/`):**
+
 - User interaction (prompts, confirmations)
 - Command parsing (Cobra)
 - Output formatting (table, JSON)
@@ -106,52 +107,61 @@ gzh-cli-git adopts a **Library-First Architecture** with the following goals:
 - Configuration file management
 
 **Library Layer (`pkg/`):**
+
 - Core Git operations
 - Business logic (commit automation, conflict resolution)
 - Public APIs for external consumers
 - NO CLI dependencies (no Cobra, no fmt.Println)
 
 **Internal Layer (`internal/`):**
+
 - Git command execution
 - Output parsing (status, log, diff)
 - Input validation and sanitization
 - Shared utilities (not exposed)
 
 **External Layer:**
+
 - Git CLI binary (system installation)
 - Filesystem I/O
 - Operating system (exec, environment)
 
----
+______________________________________________________________________
 
 ## 3. Design Principles
 
 ### 3.1 SOLID Principles
 
 **Single Responsibility:**
+
 - Each package has one clear purpose
 - `pkg/commit/` only handles commits
 - `internal/gitcmd/` only executes Git commands
 
 **Open/Closed:**
+
 - Interfaces open for extension
 - Functional options allow new parameters without breaking API
 
 **Liskov Substitution:**
+
 - All interface implementations are substitutable
 - Mocks can replace real implementations
 
 **Interface Segregation:**
+
 - Small, focused interfaces (not god interfaces)
 - `CommitManager`, `BranchManager` separate, not combined
 
 **Dependency Inversion:**
+
 - Depend on interfaces, not concretions
 - Accept `Logger` interface, not `*zap.Logger`
 
 ### 3.2 Library-First Principles
 
 **P1: Zero CLI Dependencies in pkg/**
+
 ```go
 // ❌ WRONG: pkg/ code importing CLI framework
 import "github.com/spf13/cobra"
@@ -164,6 +174,7 @@ import (
 ```
 
 **P2: Dependency Injection via Interfaces**
+
 ```go
 // ❌ WRONG: Hard-coded logger
 func Process() {
@@ -177,6 +188,7 @@ func Process(ctx context.Context, logger Logger) {
 ```
 
 **P3: Context Propagation**
+
 ```go
 // ❌ WRONG: No context
 func Clone(url, path string) error
@@ -188,6 +200,7 @@ func Clone(ctx context.Context, url, path string) error
 ### 3.3 Go Idioms
 
 **Functional Options Pattern:**
+
 ```go
 type CloneOption func(*CloneConfig)
 
@@ -200,6 +213,7 @@ Clone(ctx, url, path, WithBranch("main"), WithDepth(1))
 ```
 
 **Error Wrapping:**
+
 ```go
 if err != nil {
     return fmt.Errorf("failed to clone repository: %w", err)
@@ -207,11 +221,12 @@ if err != nil {
 ```
 
 **Interface Satisfaction:**
+
 ```go
 var _ CommitManager = (*commitManager)(nil) // Compile-time check
 ```
 
----
+______________________________________________________________________
 
 ## 4. Component Design
 
@@ -338,7 +353,7 @@ gzh-cli-git/
             └────────────────────────┘
 ```
 
----
+______________________________________________________________________
 
 ## 5. Interface Contracts
 
@@ -615,7 +630,7 @@ type ConflictFile struct {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 6. Data Flow
 
@@ -743,7 +758,7 @@ Error Occurs in Git CLI
     - Verify access permissions"
 ```
 
----
+______________________________________________________________________
 
 ## 7. Error Handling Strategy
 
@@ -855,7 +870,7 @@ func IsNetworkError(err error) bool {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 8. Testing Architecture
 
@@ -1045,7 +1060,7 @@ func TestWorkflow_CommitToPush(t *testing.T) {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 9. Performance Considerations
 
@@ -1053,15 +1068,16 @@ func TestWorkflow_CommitToPush(t *testing.T) {
 
 | Operation | Target (p95) | Strategy |
 |-----------|--------------|----------|
-| `status` | <50ms | Cached repository state |
-| `commit` | <100ms | Minimal validation |
-| `branch create` | <100ms | Direct Git execution |
-| Bulk update (100 repos) | <30s | Parallel execution (goroutines) |
-| History analysis (10K commits) | <5s | Streaming, pagination |
+| `status` | \<50ms | Cached repository state |
+| `commit` | \<100ms | Minimal validation |
+| `branch create` | \<100ms | Direct Git execution |
+| Bulk update (100 repos) | \<30s | Parallel execution (goroutines) |
+| History analysis (10K commits) | \<5s | Streaming, pagination |
 
 ### 9.2 Optimization Strategies
 
 **Parallel Execution:**
+
 ```go
 // pkg/operations/bulk.go
 func (b *bulkOperator) UpdateAll(ctx context.Context, repos []*Repository) error {
@@ -1099,6 +1115,7 @@ func (b *bulkOperator) UpdateAll(ctx context.Context, repos []*Repository) error
 ```
 
 **Caching:**
+
 ```go
 // pkg/repository/client.go
 type client struct {
@@ -1125,6 +1142,7 @@ func (c *client) GetStatus(ctx context.Context, repo *Repository) (*Status, erro
 ```
 
 **Streaming for Large Results:**
+
 ```go
 // pkg/history/analyzer.go
 func (a *analyzer) GetCommits(ctx context.Context, repo *Repository, opts QueryOptions) (<-chan Commit, error) {
@@ -1153,17 +1171,17 @@ func (a *analyzer) GetCommits(ctx context.Context, repo *Repository, opts QueryO
 }
 ```
 
----
+______________________________________________________________________
 
 ## 10. Security Architecture
 
 ### 10.1 Security Principles
 
 1. **Input Validation**: Sanitize all user inputs before passing to Git CLI
-2. **Path Validation**: Ensure paths stay within repository boundaries
-3. **Command Injection Prevention**: No direct string interpolation in commands
-4. **Credential Safety**: Never log or expose credentials
-5. **Least Privilege**: Run with minimal necessary permissions
+1. **Path Validation**: Ensure paths stay within repository boundaries
+1. **Command Injection Prevention**: No direct string interpolation in commands
+1. **Credential Safety**: Never log or expose credentials
+1. **Least Privilege**: Run with minimal necessary permissions
 
 ### 10.2 Input Sanitization
 
@@ -1271,7 +1289,7 @@ func ValidateRepositoryPath(path string) error {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 11. Deployment Architecture
 
@@ -1328,22 +1346,25 @@ func ValidateRepositoryPath(path string) error {
 ### 11.2 Deployment Targets
 
 **Go Module (Primary):**
+
 ```bash
 go get github.com/gizzahub/gzh-cli-git@latest
 ```
 
 **Homebrew (macOS/Linux):**
+
 ```bash
 brew install gzh-git
 ```
 
 **Direct Download:**
+
 ```bash
 curl -sL https://github.com/gizzahub/gzh-cli-git/releases/latest/download/gzh-git-linux-amd64 -o gzh-git
 chmod +x gzh-git
 ```
 
----
+______________________________________________________________________
 
 ## 12. Design Decisions
 
@@ -1353,17 +1374,20 @@ chmod +x gzh-git
 
 **Decision**: Use Git CLI
 **Rationale**:
+
 - Maximum compatibility with all Git features
 - Simpler implementation (no need to reimplement Git logic)
 - Users already have Git installed
 - Easier to debug (same commands users run manually)
 
 **Trade-offs**:
+
 - External dependency on Git binary
 - Slower than pure Go (process spawning overhead)
 - Parsing text output vs. structured API
 
 **Alternatives Considered**:
+
 - go-git/v5: Pure Go, no external deps, but incomplete feature set
 - Hybrid: Use go-git for simple ops, Git CLI for complex (too complex)
 
@@ -1371,17 +1395,20 @@ chmod +x gzh-git
 
 **Decision**: Design library (`pkg/`) with zero CLI dependencies
 **Rationale**:
+
 - Enables reuse in gzh-cli and other projects
 - Better API design (forced to think about interfaces)
 - Easier testing (no CLI framework mocks)
 - Clear separation of concerns
 
 **Trade-offs**:
+
 - More upfront design effort
 - Indirection layer between CLI and logic
 - Some code duplication (CLI and library versions)
 
 **Alternatives Considered**:
+
 - CLI-first, extract library later (risky, usually doesn't happen)
 - Monolithic design (violates single responsibility)
 
@@ -1389,16 +1416,19 @@ chmod +x gzh-git
 
 **Decision**: Use functional options for all complex operations
 **Rationale**:
+
 - API extensibility without breaking changes
 - Sensible defaults
 - Self-documenting (option names are clear)
 - Idiomatic Go pattern
 
 **Trade-offs**:
+
 - More verbose (but clearer)
 - Slightly more allocations (usually negligible)
 
 **Example**:
+
 ```go
 // Instead of:
 Clone(ctx, url, path, branch, depth, progress, recursive)
@@ -1415,12 +1445,14 @@ Clone(ctx, url, path,
 
 **Decision**: All operations accept `context.Context` as first parameter
 **Rationale**:
+
 - Cancellation support (user can Ctrl+C)
 - Timeout support (prevent infinite hangs)
 - Request-scoped values (trace IDs, etc.)
 - Idiomatic Go concurrency pattern
 
 **Trade-offs**:
+
 - Every function signature includes ctx
 - Must remember to pass context through
 
@@ -1428,31 +1460,36 @@ Clone(ctx, url, path,
 
 **Decision**: Define interfaces for all major components
 **Rationale**:
+
 - Testability (easy to mock)
 - Extensibility (consumers can provide implementations)
 - Decoupling (depend on interfaces, not concretions)
 
 **Trade-offs**:
+
 - More files (interface + implementation)
 - Indirection (but worth it for benefits)
 
----
+______________________________________________________________________
 
 ## 13. Future Considerations
 
 ### 13.1 Potential Enhancements (v2.0+)
 
 **Plugin Architecture:**
+
 - Allow custom commit templates from plugins
 - Custom conflict resolution strategies
 - Extensible history analyzers
 
 **Performance:**
+
 - libgit2 integration for performance-critical paths
 - Persistent cache (disk-based)
 - Incremental updates
 
 **Features:**
+
 - Git hooks automation
 - Submodule management
 - Advanced visualizations (TUI)
@@ -1461,16 +1498,18 @@ Clone(ctx, url, path,
 ### 13.2 Scalability
 
 **Large Repositories (100K+ commits):**
+
 - Streaming APIs (don't load all commits into memory)
 - Pagination for queries
 - Parallel processing for bulk operations
 
 **High Concurrency:**
+
 - Connection pooling for Git operations
 - Rate limiting for external APIs (GitHub, GitLab)
 - Circuit breakers for error handling
 
----
+______________________________________________________________________
 
 ## Appendix
 
@@ -1511,7 +1550,7 @@ require ( // Test dependencies
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [gzh-cli Architecture](https://github.com/gizzahub/gzh-cli/blob/main/ARCHITECTURE.md)
 
----
+______________________________________________________________________
 
 ## Revision History
 
@@ -1519,6 +1558,6 @@ require ( // Test dependencies
 |---------|------|--------|---------|
 | 1.0 | 2025-11-27 | Claude (AI) | Initial architecture design |
 
----
+______________________________________________________________________
 
 **End of Document**

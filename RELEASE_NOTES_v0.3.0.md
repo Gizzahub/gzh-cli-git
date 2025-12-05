@@ -13,6 +13,7 @@ v0.3.0 introduces powerful bulk repository management features with the new `pul
 The new `gz-git pull` command enables parallel pulling from multiple repositories with sophisticated merge strategies:
 
 **Core Capabilities:**
+
 - Pull updates from multiple repositories in parallel
 - Three merge strategies: `merge` (default), `rebase`, `ff-only`
 - Automatic stash/pop for repositories with local changes
@@ -20,6 +21,7 @@ The new `gz-git pull` command enables parallel pulling from multiple repositorie
 - Context-aware operations with ahead/behind tracking
 
 **CLI Features:**
+
 ```bash
 # Basic usage - pull all repos in current directory
 gz-git pull -d 1
@@ -38,6 +40,7 @@ gz-git pull --dry-run -d 2 ~/work
 ```
 
 **Why This Matters:**
+
 - Fills the gap between `fetch` (download only) and `update` (single repo)
 - Respects Git semantics: pull = fetch + merge/rebase
 - Handles complex scenarios: dirty repos, merge conflicts, missing upstreams
@@ -56,6 +59,7 @@ gz-git fetch --watch --interval 1m ~/work
 ```
 
 **Features:**
+
 - Performs initial fetch immediately
 - Graceful shutdown with Ctrl+C
 - Continues watching even if individual fetches fail
@@ -85,6 +89,7 @@ gz-git fetch -d 2
 ```
 
 **Why:**
+
 - Shorter and more intuitive for frequently used command
 - Consistent with Unix conventions (`du -d`, `fd -d`)
 - Clean breaking change with no deprecated flag support
@@ -120,6 +125,7 @@ gz-git pull -j 10 -n -t -p -r -d 2 ~/work
 **Changed:** `--include-submodules` → `--recursive` (with `-r` shorthand)
 
 **Why:**
+
 - More intuitive and follows GNU conventions (cp -r, grep -r)
 - Shorter and more memorable
 - Consistent with industry-standard naming
@@ -129,10 +135,12 @@ gz-git pull -j 10 -n -t -p -r -d 2 ~/work
 ## 🐛 Bug Fixes
 
 - **Fixed:** `isSubmodule()` false positive detection
+
   - Previous: Incorrectly identified independent nested repos as submodules
   - Fixed: Only checks `.git` file type, not parent `.gitmodules`
 
 - **Fixed:** `walkDirectoryWithConfig()` early return bug
+
   - Previous: Stopped scanning when finding nested repos
   - Fixed: Continues scanning to find deeply nested structures
 
@@ -148,16 +156,19 @@ gz-git pull -j 10 -n -t -p -r -d 2 ~/work
 ### Architecture
 
 **New Types:**
+
 - `BulkPullOptions` - Configuration for bulk pull operations
 - `BulkPullResult` - Detailed results with status summaries
 - `RepositoryPullResult` - Individual repo results with commits ahead/behind
 
 **New Methods:**
+
 - `Client.BulkPull()` - Main bulk pull implementation
 - `processPullRepositories()` - Parallel processing with errgroup
 - `processPullRepository()` - Individual repo pull logic
 
 **Watch Implementation:**
+
 - Signal handling for graceful shutdown (SIGINT, SIGTERM)
 - Ticker-based scheduling with configurable intervals
 - Error resilience - continues watching on individual failures
@@ -173,18 +184,21 @@ gz-git pull -j 10 -n -t -p -r -d 2 ~/work
 ### From v0.2.0 to v0.3.0
 
 1. **Update flag usage:**
+
    ```bash
    # Replace --max-depth with -d or --depth
    find . -name "*.sh" -exec sed -i 's/--max-depth/-d/g' {} \;
    ```
 
-2. **Try new pull command:**
+1. **Try new pull command:**
+
    ```bash
    # Instead of manual cd + git pull loops
    gz-git pull -d 2 ~/projects
    ```
 
-3. **Enable watch mode for continuous monitoring:**
+1. **Enable watch mode for continuous monitoring:**
+
    ```bash
    # Keep repos up to date automatically (fetch: 5m, pull: 1m)
    gz-git pull -d 2 --watch ~/work
@@ -194,6 +208,7 @@ gz-git pull -j 10 -n -t -p -r -d 2 ~/work
 ## 🎁 What's Next
 
 Future enhancements under consideration:
+
 - Commit automation with templates
 - Advanced merge conflict resolution
 - Git history analysis tools
@@ -222,14 +237,16 @@ make install
 ## 🙏 Acknowledgments
 
 Built with:
+
 - [Cobra](https://github.com/spf13/cobra) - CLI framework
 - [Go](https://golang.org/) - Programming language
 
 Follows:
+
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [Semantic Versioning](https://semver.org/)
 - [Keep a Changelog](https://keepachangelog.com/)
 
----
+______________________________________________________________________
 
 **Full Changelog:** https://github.com/gizzahub/gzh-cli-git/compare/v0.2.0...v0.3.0

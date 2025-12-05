@@ -495,15 +495,15 @@ gzh-git --verbose <command> 2>&1 | tee debug.log
 If you can't resolve the issue:
 
 1. **Check documentation**: Read the [Command Reference](commands/README.md)
-2. **Search issues**: https://github.com/gizzahub/gzh-cli-git/issues
-3. **Ask for help**: https://github.com/gizzahub/gzh-cli-git/discussions
-4. **Report a bug**: https://github.com/gizzahub/gzh-cli-git/issues/new
+1. **Search issues**: https://github.com/gizzahub/gzh-cli-git/issues
+1. **Ask for help**: https://github.com/gizzahub/gzh-cli-git/discussions
+1. **Report a bug**: https://github.com/gizzahub/gzh-cli-git/issues/new
 
 ### Bug Report Template
 
 When reporting issues, include:
 
-```markdown
+````markdown
 **Environment:**
 - OS: [e.g., Ubuntu 22.04, macOS 14.0]
 - Go version: [output of `go version`]
@@ -513,7 +513,7 @@ When reporting issues, include:
 **Command:**
 ```bash
 gzh-git <command>
-```
+````
 
 **Expected behavior:**
 [What you expected to happen]
@@ -522,12 +522,14 @@ gzh-git <command>
 [What actually happened]
 
 **Output/Error:**
+
 ```
 [Paste full error output]
 ```
 
 **Debug log:**
 [Attach debug.log if generated]
+
 ```
 
 ## See Also
@@ -535,3 +537,4 @@ gzh-git <command>
 - [Installation Guide](INSTALL.md)
 - [Quick Start](QUICKSTART.md)
 - [Command Reference](commands/README.md)
+```

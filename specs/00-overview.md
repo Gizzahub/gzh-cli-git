@@ -6,7 +6,7 @@
 **Last Updated**: 2025-11-27
 **Status**: Draft
 
----
+______________________________________________________________________
 
 ## 1. Introduction
 
@@ -36,11 +36,12 @@ specs/
 ```
 
 **Authority**: `specs/` > source code > `docs/`
+
 - Specifications define what SHOULD be implemented
 - Source code reflects what IS implemented
 - Documentation describes HOW to use what's implemented
 
----
+______________________________________________________________________
 
 ## 2. Project Overview
 
@@ -49,7 +50,7 @@ specs/
 gzh-cli-git is a **Git-specialized CLI tool and Go library** that provides advanced Git automation capabilities. It serves dual purposes:
 
 1. **Standalone CLI**: Independent command-line tool for developers
-2. **Go Library**: Reusable package for embedding in other projects (particularly gzh-cli)
+1. **Go Library**: Reusable package for embedding in other projects (particularly gzh-cli)
 
 ### 2.2 Core Value Proposition
 
@@ -58,6 +59,7 @@ gzh-cli-git is a **Git-specialized CLI tool and Go library** that provides advan
 **Solution**: gzh-cli-git automates common Git workflows while maintaining flexibility and safety.
 
 **Benefits**:
+
 - ⏱️ **30% reduction** in time spent on Git operations
 - 📝 **90% consistency** in commit messages
 - 🌿 **Parallel development** via simplified worktree management
@@ -75,7 +77,7 @@ gzh-cli-git is a **Git-specialized CLI tool and Go library** that provides advan
 | Auto-Conflict Resolution | ✅ Multiple strategies | ❌ Manual only | ⚠️ Limited |
 | Go Integration | ✅ Clean interfaces | ❌ Not applicable | ⚠️ Heavy deps |
 
----
+______________________________________________________________________
 
 ## 3. Feature Categories
 
@@ -134,7 +136,7 @@ gzh-cli-git
 | Auto-Resolution | P1 | Phase 5 | High | High |
 | **Library API** | P0 | All Phases | Critical | Medium |
 
----
+______________________________________________________________________
 
 ## 4. User Personas & Use Cases
 
@@ -143,22 +145,26 @@ gzh-cli-git
 #### Persona 1: Solo Developer (Sarah)
 
 **Profile**:
+
 - Individual developer working on 3-5 projects
 - Uses Git multiple times per day
 - Values efficiency and consistency
 - Works with conventional commits
 
 **Goals**:
+
 - Quick, efficient Git operations
 - Consistent commit history
 - Easy context switching between projects
 
 **Pain Points**:
+
 - Writing similar commit messages repeatedly
 - Manual branch cleanup
 - Forgotten worktree paths
 
 **Key Use Cases**:
+
 ```bash
 # Sarah's daily workflow
 gzh-git commit --auto                    # Quick commits
@@ -169,22 +175,26 @@ gzh-git branch cleanup --merged          # Keep repo clean
 #### Persona 2: Team Lead (Michael)
 
 **Profile**:
+
 - Manages team of 5-10 developers
 - Enforces Git conventions
 - Reviews 20+ PRs per week
 - Handles merge conflicts
 
 **Goals**:
+
 - Standardize team Git practices
 - Reduce PR review time
 - Prevent common Git mistakes
 
 **Pain Points**:
+
 - Inconsistent commit messages across team
 - Manual conflict resolution delays
 - Lack of visibility into contribution patterns
 
 **Key Use Cases**:
+
 ```bash
 # Michael's team management workflow
 gzh-git stats contributors --since week   # Team review
@@ -195,21 +205,25 @@ gzh-git stats commits --format json      # Metrics
 #### Persona 3: Tool Developer (Alex)
 
 **Profile**:
+
 - Builds internal DevOps tools
 - Needs Git automation in Go applications
 - Values clean APIs and stability
 
 **Goals**:
+
 - Embed Git functionality in tools
 - Reliable, well-documented library
 - Easy testing and mocking
 
 **Pain Points**:
+
 - Existing libraries too heavy or tightly coupled
 - Poor documentation
 - Breaking API changes
 
 **Key Use Cases**:
+
 ```go
 // Alex's tool integration
 import "github.com/gizzahub/gzh-cli-git/pkg/repository"
@@ -238,6 +252,7 @@ gzh-git push --smart                     # Safety checks
 ```
 
 **Benefits**:
+
 - 5-10 minutes saved per day
 - Consistent commit history
 - No accidental force pushes
@@ -261,6 +276,7 @@ gzh-git worktree remove ~/work/feature-api
 ```
 
 **Benefits**:
+
 - No context loss from branch switching
 - Independent testing environments
 - Faster feature iteration
@@ -281,6 +297,7 @@ gzh-git history file src/main.go --contributors
 ```
 
 **Benefits**:
+
 - Data-driven sprint reviews
 - Identify bottlenecks
 - Fair credit attribution
@@ -304,6 +321,7 @@ fi
 ```
 
 **Benefits**:
+
 - Fewer failed builds
 - Faster integration
 - Reduced manual intervention
@@ -353,22 +371,25 @@ func deployWorkflow(repoPath string) error {
 ```
 
 **Benefits**:
+
 - Reusable Git logic
 - Clean error handling
 - Easy testing with mocks
 
----
+______________________________________________________________________
 
 ## 5. System Constraints
 
 ### 5.1 Technical Constraints
 
 **MUST**:
+
 - Go 1.24+ for building
 - Git 2.30+ installed on system
 - Linux, macOS, or Windows (amd64, arm64)
 
 **MUST NOT**:
+
 - Modify Git configuration without user consent
 - Execute destructive operations without confirmation
 - Log or expose credentials
@@ -376,12 +397,14 @@ func deployWorkflow(repoPath string) error {
 ### 5.2 Design Constraints
 
 **Library Code (pkg/)**:
+
 - ❌ NO CLI dependencies (Cobra, fmt.Println)
 - ✅ Accept I/O via interfaces (Logger, ProgressReporter)
 - ✅ Use context.Context for all operations
 - ✅ Return rich error types
 
 **CLI Code (cmd/)**:
+
 - Thin adapter over pkg/ APIs
 - Handle all user interaction
 - Format output (table, JSON)
@@ -390,34 +413,38 @@ func deployWorkflow(repoPath string) error {
 
 | Operation | Target (p95) | Rationale |
 |-----------|--------------|-----------|
-| Basic operations | <100ms | User expects instant feedback |
-| Bulk updates (100 repos) | <30s | Parallel execution feasible |
-| History analysis (10K commits) | <5s | Acceptable for one-time analysis |
+| Basic operations | \<100ms | User expects instant feedback |
+| Bulk updates (100 repos) | \<30s | Parallel execution feasible |
+| History analysis (10K commits) | \<5s | Acceptable for one-time analysis |
 
 ### 5.4 Security Constraints
 
 **Input Validation**:
+
 - Sanitize all user inputs before Git CLI
 - Prevent command injection (`;`, `&&`, `|`)
 - Validate paths stay within repository
 
 **Credential Management**:
+
 - Never log credentials
 - Delegate to Git credential manager
 - No plaintext credential storage
 
----
+______________________________________________________________________
 
 ## 6. Quality Attributes
 
 ### 6.1 Testability
 
 **Requirements**:
+
 - ≥85% code coverage in `pkg/`
 - ≥80% code coverage in `internal/`
 - 100% interface coverage (mocks)
 
 **Approach**:
+
 - Unit tests with mocked dependencies
 - Integration tests with real Git repositories
 - E2E tests simulating user workflows
@@ -425,23 +452,27 @@ func deployWorkflow(repoPath string) error {
 ### 6.2 Maintainability
 
 **Requirements**:
+
 - 100% GoDoc coverage for public APIs
 - Modular architecture (single responsibility)
 - Clear separation of concerns
 
 **Approach**:
+
 - Interface-driven design
-- Minimal cyclomatic complexity (<15 per function)
+- Minimal cyclomatic complexity (\<15 per function)
 - Consistent code style (golangci-lint)
 
 ### 6.3 Usability
 
 **Requirements**:
+
 - Intuitive CLI commands (Git-like)
 - Clear error messages with suggestions
 - Comprehensive documentation
 
 **Approach**:
+
 - User testing with 3+ personas
 - Error message templates
 - Progressive disclosure (simple → advanced)
@@ -449,11 +480,13 @@ func deployWorkflow(repoPath string) error {
 ### 6.4 Reliability
 
 **Requirements**:
+
 - All destructive operations require confirmation
 - Atomic operations (complete or rollback)
 - Graceful error recovery
 
 **Approach**:
+
 - Backup before destructive operations
 - Transaction-like behavior
 - Detailed error context
@@ -461,11 +494,13 @@ func deployWorkflow(repoPath string) error {
 ### 6.5 Performance
 
 **Requirements**:
-- <100ms for basic operations (p95)
+
+- \<100ms for basic operations (p95)
 - Support 100+ concurrent repositories
 - Streaming for large datasets
 
 **Approach**:
+
 - Parallel execution (goroutines)
 - Caching with TTL
 - Pagination for queries
@@ -473,16 +508,18 @@ func deployWorkflow(repoPath string) error {
 ### 6.6 Compatibility
 
 **Requirements**:
+
 - Git 2.30+ support
 - Cross-platform (Linux, macOS, Windows)
 - Go 1.22+ for library consumers
 
 **Approach**:
+
 - Git CLI wrapper (not go-git)
 - OS-specific path handling
 - CI matrix testing
 
----
+______________________________________________________________________
 
 ## 7. Development Phases
 
@@ -501,12 +538,14 @@ func deployWorkflow(repoPath string) error {
 ### 7.2 Milestone Criteria
 
 **Phase 1 Complete**:
+
 - ✅ Project structure established
 - ✅ PRD, REQUIREMENTS, ARCHITECTURE documented
 - ✅ Basic Git operations (open, status, clone)
 - ✅ Test infrastructure (unit + integration)
 
 **Phase 2 Complete**:
+
 - ✅ Template system working (conventional + custom)
 - ✅ Auto-commit generating messages
 - ✅ Smart push with safety checks
@@ -514,36 +553,41 @@ func deployWorkflow(repoPath string) error {
 - ✅ Specification: `specs/10-commit-automation.md`
 
 **Phase 3 Complete**:
+
 - ✅ Branch creation/deletion working
 - ✅ Worktree add/remove working
 - ✅ Parallel workflow support
 - ✅ Specification: `specs/20-branch-management.md`
 
 **Phase 4 Complete**:
+
 - ✅ Commit statistics accurate
 - ✅ Contributor analysis comprehensive
 - ✅ Multiple output formats (table, JSON, CSV)
 - ✅ Specification: `specs/30-history-analysis.md`
 
 **Phase 5 Complete**:
+
 - ✅ Conflict detection accurate
 - ✅ Auto-resolution safe and effective
 - ✅ Interactive assistance helpful
 - ✅ Specification: `specs/40-advanced-merge.md`
 
 **Phase 6 Complete**:
+
 - ✅ Test coverage ≥85% (pkg/), ≥80% (internal/)
 - ✅ Performance benchmarks met
 - ✅ All linters passing
 - ✅ Documentation complete
 
 **Phase 7 Complete**:
+
 - ✅ Library published (v0.1.0)
 - ✅ gzh-cli successfully integrated
 - ✅ v1.0.0 released
 - ✅ Adoption by 3+ alpha users
 
----
+______________________________________________________________________
 
 ## 8. Specification Documents
 
@@ -603,11 +647,13 @@ Each feature specification follows this structure:
 ### 8.3 Cross-References
 
 **From Specifications to Code**:
+
 - Specs define WHAT should be built
 - Code implements HOW it's built
 - Tests verify it's built CORRECTLY
 
 **From Code to Documentation**:
+
 - Code demonstrates actual behavior
 - Docs explain usage patterns
 - Examples show best practices
@@ -618,40 +664,45 @@ Each feature specification follows this structure:
 | F1.1.1 | Template Loading | `pkg/commit/template.go` | `template_test.go` | `10-commit-automation.md` |
 | F2.2.1 | Worktree Creation | `pkg/branch/worktree.go` | `worktree_test.go` | `20-branch-management.md` |
 
----
+______________________________________________________________________
 
 ## 9. Success Metrics
 
 ### 9.1 Product Metrics
 
 **Adoption**:
+
 - 100+ CLI installations within 3 months
 - 10+ library integrations within 6 months
 - gzh-cli successfully using library
 
 **Quality**:
+
 - ≥85% test coverage (pkg/)
-- <0.5 bugs per KLOC
+- \<0.5 bugs per KLOC
 - All linters passing
 
 **Performance**:
-- 95% operations <100ms
+
+- 95% operations \<100ms
 - 30% reduction in Git operation time
 - 90% commit message consistency
 
 ### 9.2 User Satisfaction
 
 **Alpha User Feedback**:
+
 - 3+ alpha users complete full workflows
 - ≥80% satisfaction rating
-- <5 critical issues reported
+- \<5 critical issues reported
 
 **Community Engagement**:
+
 - 50+ GitHub stars within 6 months
 - 5+ community templates contributed
 - Active discussions
 
----
+______________________________________________________________________
 
 ## 10. Risks & Mitigation
 
@@ -673,7 +724,7 @@ Each feature specification follows this structure:
 | Competition (existing tools) | Medium | Low | Unique library-first approach |
 | Documentation lag | Medium | Medium | Document-per-phase requirement |
 
----
+______________________________________________________________________
 
 ## 11. References
 
@@ -697,7 +748,7 @@ Each feature specification follows this structure:
 - [Cobra](https://github.com/spf13/cobra) - CLI framework
 - [Viper](https://github.com/spf13/viper) - Configuration
 
----
+______________________________________________________________________
 
 ## Appendix
 
@@ -731,14 +782,15 @@ Each feature specification follows this structure:
 |---------|------|--------|---------|
 | 1.0 | 2025-11-27 | Claude (AI) | Initial specification overview |
 
----
+______________________________________________________________________
 
 **End of Document**
 
 **Next Steps**:
+
 1. Review and approve this overview
-2. Begin Phase 1 implementation
-3. Create detailed feature specifications (Phase 2+)
-4. Iterate based on feedback
+1. Begin Phase 1 implementation
+1. Create detailed feature specifications (Phase 2+)
+1. Iterate based on feedback
 
 **Questions?** Open an issue or discussion on GitHub.

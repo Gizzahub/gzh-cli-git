@@ -6,7 +6,7 @@
 **Created**: 2025-11-27
 **Dependencies**: Phase 3 (Branch Management)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -15,10 +15,10 @@ Phase 4 implements comprehensive Git history analysis capabilities, enabling dev
 ### Goals
 
 1. **Commit Statistics** - Analyze commit patterns, frequency, and trends
-2. **Contributor Analysis** - Track developer contributions and collaboration patterns
-3. **File History** - Trace file evolution, changes, and ownership
-4. **Multiple Output Formats** - Support table, JSON, CSV, and markdown outputs
-5. **Performance** - Efficient analysis of large repositories
+1. **Contributor Analysis** - Track developer contributions and collaboration patterns
+1. **File History** - Trace file evolution, changes, and ownership
+1. **Multiple Output Formats** - Support table, JSON, CSV, and markdown outputs
+1. **Performance** - Efficient analysis of large repositories
 
 ### Non-Goals
 
@@ -27,7 +27,7 @@ Phase 4 implements comprehensive Git history analysis capabilities, enabling dev
 - CI/CD integration
 - Web UI or dashboard
 
----
+______________________________________________________________________
 
 ## Architecture
 
@@ -76,7 +76,7 @@ type Formatter interface {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 1: History Analyzer
 
@@ -87,19 +87,22 @@ Analyze commit history to extract statistical insights about repository activity
 ### Features
 
 1. **Commit Statistics**
+
    - Total commits count
    - Date range (first/last commit)
    - Average commits per day/week/month
    - Commit frequency distribution
    - Peak activity periods
 
-2. **Trend Analysis**
+1. **Trend Analysis**
+
    - Commit trends over time
    - Activity patterns (hourly, daily, weekly)
    - Growth rate analysis
    - Seasonal patterns
 
-3. **Branch Analysis**
+1. **Branch Analysis**
+
    - Commits per branch
    - Branch activity comparison
    - Merge frequency
@@ -199,7 +202,7 @@ func (h *historyAnalyzer) Analyze(ctx context.Context, repo *repository.Reposito
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 2: Contributor Analyzer
 
@@ -210,18 +213,21 @@ Analyze contributor activity to understand team dynamics, individual contributio
 ### Features
 
 1. **Contributor Metrics**
+
    - Total commits per contributor
    - Lines added/deleted per contributor
    - Files touched per contributor
    - Contribution period (first/last commit)
    - Activity level (commits per week)
 
-2. **Ranking**
+1. **Ranking**
+
    - Top contributors by commits
    - Top contributors by lines changed
    - Most active contributors (recent period)
 
-3. **Collaboration**
+1. **Collaboration**
+
    - Co-authorship patterns
    - File overlap between contributors
    - Pair programming detection
@@ -309,7 +315,7 @@ func (c *contributorAnalyzer) Analyze(ctx context.Context, repo *repository.Repo
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 3: File History Tracker
 
@@ -320,17 +326,20 @@ Track file evolution, changes, and ownership to understand file-level developmen
 ### Features
 
 1. **File History**
+
    - Commit history for specific file
    - Change summary (additions/deletions per commit)
    - Authors who modified file
    - Rename detection
 
-2. **File Blame**
+1. **File Blame**
+
    - Line-by-line authorship
    - Last modification date per line
    - Commit hash per line
 
-3. **File Statistics**
+1. **File Statistics**
+
    - Total modifications
    - Total authors
    - Average change size
@@ -434,7 +443,7 @@ func (f *fileHistoryTracker) GetHistory(ctx context.Context, repo *repository.Re
 }
 ```
 
----
+______________________________________________________________________
 
 ## Component 4: Output Formatters
 
@@ -445,9 +454,9 @@ Format analysis results in multiple output formats for different use cases.
 ### Supported Formats
 
 1. **Table** - Human-readable ASCII table
-2. **JSON** - Machine-readable structured data
-3. **CSV** - Spreadsheet-compatible format
-4. **Markdown** - Documentation-friendly format
+1. **JSON** - Machine-readable structured data
+1. **CSV** - Spreadsheet-compatible format
+1. **Markdown** - Documentation-friendly format
 
 ### Implementation
 
@@ -481,7 +490,7 @@ func (f *formatter) FormatCommitStats(stats *CommitStats) ([]byte, error) {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Error Handling
 
@@ -497,31 +506,35 @@ var (
 )
 ```
 
----
+______________________________________________________________________
 
 ## Testing Strategy
 
 ### Unit Tests
 
 1. **History Analyzer Tests**
+
    - Parse commit statistics
    - Calculate trends
    - Handle date ranges
    - Handle empty repositories
 
-2. **Contributor Analyzer Tests**
+1. **Contributor Analyzer Tests**
+
    - Parse shortlog output
    - Sort contributors
    - Handle duplicate emails
    - Calculate metrics
 
-3. **File History Tests**
+1. **File History Tests**
+
    - Parse file commits
    - Handle renames
    - Handle binary files
    - Parse blame output
 
-4. **Formatter Tests**
+1. **Formatter Tests**
+
    - Format in all supported formats
    - Handle empty data
    - Handle special characters
@@ -537,16 +550,16 @@ Deferred to Phase 6 (requires real Git repositories).
 - Integration tests: ≥80%
 - Overall: ≥85%
 
----
+______________________________________________________________________
 
 ## Performance Considerations
 
 ### Large Repositories
 
 1. **Limit commit count** - Use `--max-count` for initial queries
-2. **Incremental analysis** - Support date range filtering
-3. **Caching** - Cache parsed results for repeated queries
-4. **Streaming** - Process large outputs in chunks
+1. **Incremental analysis** - Support date range filtering
+1. **Caching** - Cache parsed results for repeated queries
+1. **Streaming** - Process large outputs in chunks
 
 ### Memory Management
 
@@ -576,7 +589,7 @@ func (h *historyAnalyzer) analyzeLargeRepo(ctx context.Context, repo *repository
 }
 ```
 
----
+______________________________________________________________________
 
 ## CLI Integration (Deferred to Phase 6)
 
@@ -596,7 +609,7 @@ gzh-git history file <path> [--follow] [--max-count N] [--format FORMAT]
 gzh-git history blame <path> [--format FORMAT]
 ```
 
----
+______________________________________________________________________
 
 ## Dependencies
 
@@ -610,23 +623,24 @@ gzh-git history blame <path> [--format FORMAT]
 
 - Standard library only (no external dependencies)
 
----
+______________________________________________________________________
 
 ## Success Criteria
 
 1. ✅ All core interfaces implemented
-2. ✅ Comprehensive unit tests (≥85% coverage)
-3. ✅ Support for all output formats (table, JSON, CSV, markdown)
-4. ✅ Handle large repositories efficiently (>10K commits)
-5. ✅ Accurate statistics and metrics
-6. ✅ Error handling for all edge cases
-7. ✅ Documentation and examples
+1. ✅ Comprehensive unit tests (≥85% coverage)
+1. ✅ Support for all output formats (table, JSON, CSV, markdown)
+1. ✅ Handle large repositories efficiently (>10K commits)
+1. ✅ Accurate statistics and metrics
+1. ✅ Error handling for all edge cases
+1. ✅ Documentation and examples
 
----
+______________________________________________________________________
 
 ## Implementation Checklist
 
 ### Phase 4.1: History Analyzer
+
 - [ ] Define types.go (CommitStats, CommitTrends, AnalyzeOptions)
 - [ ] Define errors.go (history-specific errors)
 - [ ] Implement analyzer.go (HistoryAnalyzer interface)
@@ -634,30 +648,34 @@ gzh-git history blame <path> [--format FORMAT]
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 4.2: Contributor Analyzer
+
 - [ ] Add Contributor types to types.go
 - [ ] Implement contributor.go (ContributorAnalyzer interface)
 - [ ] Write contributor_test.go (unit tests)
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 4.3: File History Tracker
+
 - [ ] Add FileCommit, BlameInfo types to types.go
 - [ ] Implement file_history.go (FileHistoryTracker interface)
 - [ ] Write file_history_test.go (unit tests)
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 4.4: Output Formatters
+
 - [ ] Implement formatter.go (all format types)
 - [ ] Write formatter_test.go (unit tests)
 - [ ] Validation: All tests passing, ≥85% coverage
 
 ### Phase 4.5: Integration
+
 - [ ] Update specs/00-overview.md
 - [ ] Update PROJECT_STATUS.md
 - [ ] Create docs/phase-4-completion.md
 - [ ] Run full test suite
 - [ ] Validation: All tests passing, documentation complete
 
----
+______________________________________________________________________
 
 ## Timeline
 
@@ -669,7 +687,7 @@ gzh-git history blame <path> [--format FORMAT]
 
 **Total Estimated**: 5-8 days
 
----
+______________________________________________________________________
 
 ## References
 
@@ -680,7 +698,7 @@ gzh-git history blame <path> [--format FORMAT]
 - Phase 2: Commit Automation (Complete)
 - Phase 3: Branch Management (Complete)
 
----
+______________________________________________________________________
 
 **Last Updated**: 2025-11-27
 **Version**: 1.0

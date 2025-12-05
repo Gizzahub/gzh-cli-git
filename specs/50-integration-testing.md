@@ -6,7 +6,7 @@
 **Created**: 2025-11-27
 **Dependencies**: Phase 1-5 (All Complete)
 
----
+______________________________________________________________________
 
 ## Overview
 
@@ -15,11 +15,11 @@ Phase 6 focuses on comprehensive integration testing, CLI command implementation
 ### Goals
 
 1. **CLI Implementation** - Complete all command-line interface commands
-2. **Integration Testing** - Verify cross-component interactions
-3. **E2E Testing** - Validate complete user workflows
-4. **Performance Benchmarking** - Establish performance baselines
-5. **Documentation Completion** - 100% API coverage and user guides
-6. **Quality Gates** - Achieve target coverage and quality metrics
+1. **Integration Testing** - Verify cross-component interactions
+1. **E2E Testing** - Validate complete user workflows
+1. **Performance Benchmarking** - Establish performance baselines
+1. **Documentation Completion** - 100% API coverage and user guides
+1. **Quality Gates** - Achieve target coverage and quality metrics
 
 ### Non-Goals
 
@@ -28,7 +28,7 @@ Phase 6 focuses on comprehensive integration testing, CLI command implementation
 - Cloud integrations (deferred to v1.2)
 - Advanced analytics features
 
----
+______________________________________________________________________
 
 ## Architecture
 
@@ -75,7 +75,7 @@ cmd/gzh-git/
 └── cmd_test.go         # CLI integration tests
 ```
 
----
+______________________________________________________________________
 
 ## Component 1: CLI Command Implementation
 
@@ -101,22 +101,26 @@ type GlobalFlags struct {
 ### 1.2 Status Command
 
 **Signature:**
+
 ```bash
 gzh-git status [flags] [path]
 ```
 
 **Flags:**
+
 - `-s, --short` - Short format output
 - `-q, --quiet` - Only exit code (0=clean, 1=dirty)
 - `--porcelain` - Machine-readable format
 
 **Implementation:**
+
 ```go
 // pkg/repository → status.go
 func (c *StatusCommand) Run(ctx context.Context, args []string) error
 ```
 
 **Output:**
+
 ```
 On branch: master
 Your branch is up to date with 'origin/master'
@@ -129,6 +133,7 @@ Untracked files:
 ```
 
 **Exit Codes:**
+
 - 0: Clean working tree
 - 1: Modified files
 - 2: Error
@@ -136,11 +141,13 @@ Untracked files:
 ### 1.3 Clone Command
 
 **Signature:**
+
 ```bash
 gzh-git clone <url> [directory] [flags]
 ```
 
 **Flags:**
+
 - `-b, --branch <branch>` - Clone specific branch
 - `--depth <n>` - Shallow clone with depth
 - `--bare` - Bare repository
@@ -148,6 +155,7 @@ gzh-git clone <url> [directory] [flags]
 - `--recursive` - Include submodules
 
 **Implementation:**
+
 ```go
 func (c *CloneCommand) Run(ctx context.Context, args []string) error
 ```
@@ -155,6 +163,7 @@ func (c *CloneCommand) Run(ctx context.Context, args []string) error
 ### 1.4 Commit Commands
 
 **Main Command:**
+
 ```bash
 gzh-git commit <subcommand> [flags]
 ```
@@ -162,14 +171,17 @@ gzh-git commit <subcommand> [flags]
 **Subcommands:**
 
 **1. Auto-Commit**
+
 ```bash
 gzh-git commit auto [flags]
 ```
+
 - Analyzes staged changes
 - Generates conventional commit message
 - Validates before commit
 
 **Flags:**
+
 - `--template <name>` - Use template (conventional, semantic)
 - `--dry-run` - Show message without committing
 - `--edit` - Open editor for manual editing
@@ -177,14 +189,17 @@ gzh-git commit auto [flags]
 - `--type <type>` - Override detected type
 
 **2. Validate Message**
+
 ```bash
 gzh-git commit validate <message> [flags]
 ```
+
 - Validates commit message format
 - Shows errors and warnings
 - Exits with code 0 (valid) or 1 (invalid)
 
 **3. Template Operations**
+
 ```bash
 gzh-git commit template list
 gzh-git commit template show <name>
@@ -194,6 +209,7 @@ gzh-git commit template validate <file>
 ### 1.5 Branch Commands
 
 **Main Command:**
+
 ```bash
 gzh-git branch <subcommand> [flags]
 ```
@@ -201,42 +217,55 @@ gzh-git branch <subcommand> [flags]
 **Subcommands:**
 
 **1. List Branches**
+
 ```bash
 gzh-git branch list [flags]
 ```
+
 **Flags:**
+
 - `-a, --all` - Include remote branches
 - `-r, --remote` - Only remote branches
 - `--merged` - Only merged branches
 - `--no-merged` - Only unmerged branches
 
 **2. Create Branch**
+
 ```bash
 gzh-git branch create <name> [flags]
 ```
+
 **Flags:**
+
 - `-b, --base <branch>` - Base branch
 - `--worktree <path>` - Create with worktree
 - `--track` - Set up tracking
 
 **3. Delete Branch**
+
 ```bash
 gzh-git branch delete <name> [flags]
 ```
+
 **Flags:**
+
 - `-f, --force` - Force delete
 - `-r, --remote` - Delete remote branch
 
 **4. Cleanup**
+
 ```bash
 gzh-git branch cleanup [flags]
 ```
+
 **Flags:**
+
 - `--dry-run` - Show what would be deleted
 - `--strategy <strat>` - merged|stale|orphaned|all
 - `--days <n>` - Stale threshold (default: 30)
 
 **5. Worktree Operations**
+
 ```bash
 gzh-git branch worktree add <path> <branch>
 gzh-git branch worktree remove <path>
@@ -246,6 +275,7 @@ gzh-git branch worktree list
 ### 1.6 History Commands
 
 **Main Command:**
+
 ```bash
 gzh-git history <subcommand> [flags]
 ```
@@ -253,16 +283,20 @@ gzh-git history <subcommand> [flags]
 **Subcommands:**
 
 **1. Statistics**
+
 ```bash
 gzh-git history stats [flags]
 ```
+
 **Flags:**
+
 - `--since <date>` - Start date
 - `--until <date>` - End date
 - `--branch <branch>` - Specific branch
 - `--author <name>` - Filter by author
 
 **Output:**
+
 ```
 Commit Statistics
   Total commits:     1,234
@@ -276,33 +310,43 @@ Commit Statistics
 ```
 
 **2. Contributors**
+
 ```bash
 gzh-git history contributors [flags]
 ```
+
 **Flags:**
+
 - `--top <n>` - Show top N contributors
 - `--sort <field>` - commits|additions|deletions|recent
 - `--min-commits <n>` - Minimum commits to show
 
 **3. File History**
+
 ```bash
 gzh-git history file <path> [flags]
 ```
+
 **Flags:**
+
 - `--follow` - Follow renames
 - `--max <n>` - Max commits to show
 
 **4. Blame**
+
 ```bash
 gzh-git history blame <file> [flags]
 ```
+
 **Flags:**
+
 - `-L <start>,<end>` - Line range
 - `--follow` - Follow renames
 
 ### 1.7 Merge Commands
 
 **Main Command:**
+
 ```bash
 gzh-git merge <subcommand> [flags]
 ```
@@ -310,20 +354,26 @@ gzh-git merge <subcommand> [flags]
 **Subcommands:**
 
 **1. Merge**
+
 ```bash
 gzh-git merge do <branch> [flags]
 ```
+
 **Flags:**
+
 - `--strategy <strat>` - ff|recursive|ours|theirs
 - `--no-commit` - Don't auto-commit
 - `--squash` - Squash commits
 - `-m, --message <msg>` - Commit message
 
 **2. Detect Conflicts**
+
 ```bash
 gzh-git merge detect <source> <target> [flags]
 ```
+
 **Output:**
+
 ```
 Conflict Analysis: feature/auth → main
 
@@ -341,15 +391,19 @@ Recommendations:
 ```
 
 **3. Abort Merge**
+
 ```bash
 gzh-git merge abort
 ```
 
 **4. Rebase**
+
 ```bash
 gzh-git merge rebase <branch> [flags]
 ```
+
 **Flags:**
+
 - `-i, --interactive` - Interactive rebase
 - `--continue` - Continue after resolving
 - `--skip` - Skip current commit
@@ -362,10 +416,12 @@ gzh-git version [flags]
 ```
 
 **Flags:**
+
 - `--short` - Short version only
 - `--full` - Full version info
 
 **Output:**
+
 ```
 gzh-git version v0.1.0-alpha
 Git version: 2.43.0
@@ -373,7 +429,7 @@ Go version: go1.24
 Platform: darwin/arm64
 ```
 
----
+______________________________________________________________________
 
 ## Component 2: Integration Tests
 
@@ -464,7 +520,7 @@ func TestMergeScenarios(t *testing.T)
 | pkg/merge | 86.8% | 85% | ✅ Exceeds |
 | cmd/ | 0% | 70% | Add CLI tests |
 
----
+______________________________________________________________________
 
 ## Component 3: E2E Testing
 
@@ -563,18 +619,20 @@ gzh-git merge abort
 ### 3.3 E2E Test Requirements
 
 **Coverage:**
+
 - All CLI commands exercised
 - All success paths validated
 - All error paths tested
 - Cross-platform compatibility (Linux, macOS, Windows)
 
 **Validation:**
+
 - Exit codes correct
 - Output format correct
 - Git state correct
 - Error messages helpful
 
----
+______________________________________________________________________
 
 ## Component 4: Performance Benchmarking
 
@@ -608,6 +666,7 @@ func BenchmarkMergeDetect(b *testing.B)
 ```
 
 **Targets:**
+
 - 95% of operations < 100ms
 - 99% of operations < 500ms
 - No operation > 2s (except clone)
@@ -622,6 +681,7 @@ func BenchmarkMemoryUsage(b *testing.B)
 ```
 
 **Targets:**
+
 - < 50MB for typical operations
 - < 200MB for large repository operations
 
@@ -637,24 +697,27 @@ func BenchmarkLargeRepository(b *testing.B)
 ### 4.3 Profiling
 
 **CPU Profiling:**
+
 ```bash
 go test -cpuprofile=cpu.prof -bench=.
 go tool pprof cpu.prof
 ```
 
 **Memory Profiling:**
+
 ```bash
 go test -memprofile=mem.prof -bench=.
 go tool pprof mem.prof
 ```
 
 **Trace Analysis:**
+
 ```bash
 go test -trace=trace.out -bench=.
 go tool trace trace.out
 ```
 
----
+______________________________________________________________________
 
 ## Component 5: Documentation Completion
 
@@ -665,12 +728,14 @@ Provide comprehensive documentation for users and developers.
 ### 5.1 API Documentation (GoDoc)
 
 **Requirements:**
+
 - 100% exported function documentation
 - Package-level documentation with examples
 - Type and interface documentation
 - Common usage patterns
 
 **Example:**
+
 ```go
 // Package commit provides commit message automation and validation.
 //
@@ -697,26 +762,31 @@ package commit
 **Required Documents:**
 
 1. **Installation Guide** (`docs/installation.md`)
+
    - System requirements
    - Installation methods (go install, brew, from source)
    - Verification
 
-2. **Quick Start Guide** (`docs/quickstart.md`)
+1. **Quick Start Guide** (`docs/quickstart.md`)
+
    - Basic setup
    - Common commands
    - First workflow
 
-3. **Command Reference** (`docs/commands/`)
+1. **Command Reference** (`docs/commands/`)
+
    - One file per command group
    - All flags documented
    - Examples for each command
 
-4. **Library Integration Guide** (`docs/library-integration.md`)
+1. **Library Integration Guide** (`docs/library-integration.md`)
+
    - How to use as Go library
    - Example integrations
    - API patterns
 
-5. **Troubleshooting Guide** (`docs/troubleshooting.md`)
+1. **Troubleshooting Guide** (`docs/troubleshooting.md`)
+
    - Common issues
    - Error messages
    - Solutions
@@ -726,22 +796,25 @@ package commit
 **Required Documents:**
 
 1. **Contributing Guide** (`CONTRIBUTING.md`)
+
    - Development setup
    - Coding standards
    - Testing requirements
    - PR process
 
-2. **Architecture Guide** (update `ARCHITECTURE.md`)
+1. **Architecture Guide** (update `ARCHITECTURE.md`)
+
    - Add CLI layer details
    - Add integration patterns
    - Add extension points
 
-3. **Testing Guide** (`docs/testing.md`)
+1. **Testing Guide** (`docs/testing.md`)
+
    - How to run tests
    - Writing new tests
    - Coverage requirements
 
----
+______________________________________________________________________
 
 ## Component 6: Quality Gates
 
@@ -752,11 +825,13 @@ Ensure code quality, security, and maintainability before release.
 ### 6.1 Coverage Gates
 
 **Automated Checks:**
+
 ```bash
 make test-coverage
 ```
 
 **Requirements:**
+
 - pkg/: ≥85% coverage
 - internal/: ≥80% coverage
 - cmd/: ≥70% coverage
@@ -765,12 +840,14 @@ make test-coverage
 ### 6.2 Linting Gates
 
 **Tools:**
+
 - `golangci-lint` - Comprehensive linting
 - `gosec` - Security scanning
 - `gocyclo` - Complexity analysis
 - `gofmt` - Format checking
 
 **Commands:**
+
 ```bash
 make lint-check    # Check only
 make lint-fix      # Auto-fix issues
@@ -780,6 +857,7 @@ make security      # Security scan
 ### 6.3 Performance Gates
 
 **Requirements:**
+
 - All benchmarks run successfully
 - No performance regressions > 10%
 - Memory allocations within targets
@@ -787,30 +865,34 @@ make security      # Security scan
 ### 6.4 Documentation Gates
 
 **Requirements:**
+
 - 100% GoDoc coverage
 - All user documentation complete
 - Examples tested and working
 - Links validated
 
----
+______________________________________________________________________
 
 ## Implementation Plan
 
 ### Week 1: CLI Foundation (Days 1-7)
 
 **Day 1-2: Core CLI Structure**
+
 - Set up Cobra framework
 - Implement root command
 - Add global flags
 - Implement version command
 
 **Day 3-5: Basic Commands**
+
 - Implement status command
 - Implement clone command
 - Add output formatting
 - Add progress indicators
 
 **Day 6-7: Testing & Documentation**
+
 - Write CLI tests
 - Document commands
 - Fix issues
@@ -818,11 +900,13 @@ make security      # Security scan
 ### Week 2: Advanced Commands (Days 8-14)
 
 **Day 8-10: Commit Commands**
+
 - Implement commit subcommands
 - Integrate with pkg/commit
 - Add interactive mode
 
 **Day 11-14: Branch & History Commands**
+
 - Implement branch subcommands
 - Implement history subcommands
 - Add formatting options
@@ -830,11 +914,13 @@ make security      # Security scan
 ### Week 3: Merge & Integration (Days 15-21)
 
 **Day 15-17: Merge Commands**
+
 - Implement merge subcommands
 - Add conflict detection UI
 - Interactive workflows
 
 **Day 18-21: Integration Tests**
+
 - Write integration tests
 - Improve coverage
 - Fix discovered issues
@@ -842,21 +928,24 @@ make security      # Security scan
 ### Week 4: E2E & Quality (Days 22-28)
 
 **Day 22-24: E2E Tests**
+
 - Write E2E scenarios
 - Cross-platform testing
 - Performance validation
 
 **Day 25-27: Documentation**
+
 - Complete API docs
 - Write user guides
 - Update examples
 
 **Day 28: Final Quality Check**
+
 - Run all quality gates
 - Fix remaining issues
 - Prepare for Phase 7
 
----
+______________________________________________________________________
 
 ## Success Criteria
 
@@ -881,7 +970,7 @@ make security      # Security scan
 - ✅ All examples tested and working
 - ✅ Contributing guide complete
 
----
+______________________________________________________________________
 
 ## Risks & Mitigation
 
@@ -891,6 +980,7 @@ make security      # Security scan
 **Impact:** High
 
 **Mitigation:**
+
 - Test on Linux, macOS, Windows early
 - Use platform-agnostic Git command invocation
 - Abstract filesystem operations
@@ -901,6 +991,7 @@ make security      # Security scan
 **Impact:** Medium
 
 **Mitigation:**
+
 - Establish benchmarks early
 - Run benchmarks in CI
 - Profile regularly
@@ -911,70 +1002,80 @@ make security      # Security scan
 **Impact:** Low
 
 **Mitigation:**
+
 - Start with critical paths
 - Use integration tests for coverage
 - Adjust targets if needed (document rationale)
 
----
+______________________________________________________________________
 
 ## Dependencies
 
 ### Internal Dependencies
+
 - Phase 1-5: All Complete ✅
 
 ### External Dependencies
+
 - Git 2.30+ installed
 - Go 1.24+ for development
 - golangci-lint for linting
 - Cross-platform test environments
 
----
+______________________________________________________________________
 
 ## Deliverables
 
 ### Code Deliverables
+
 1. Complete CLI implementation (cmd/)
-2. Integration test suite (tests/integration/)
-3. E2E test suite (tests/e2e/)
-4. Benchmark suite (benchmarks/)
+1. Integration test suite (tests/integration/)
+1. E2E test suite (tests/e2e/)
+1. Benchmark suite (benchmarks/)
 
 ### Documentation Deliverables
+
 1. API documentation (GoDoc)
-2. User guides (docs/)
-3. Command reference (docs/commands/)
-4. Troubleshooting guide (docs/troubleshooting.md)
+1. User guides (docs/)
+1. Command reference (docs/commands/)
+1. Troubleshooting guide (docs/troubleshooting.md)
 
 ### Quality Deliverables
-1. Coverage reports (≥85%/80%/70%)
-2. Lint reports (zero warnings)
-3. Security scan reports (zero critical)
-4. Performance benchmark reports
 
----
+1. Coverage reports (≥85%/80%/70%)
+1. Lint reports (zero warnings)
+1. Security scan reports (zero critical)
+1. Performance benchmark reports
+
+______________________________________________________________________
 
 ## Next Steps
 
 1. **Immediate (This Week)**
+
    - Implement status and version commands
    - Set up CLI test framework
    - Write first integration tests
 
-2. **Short Term (Next 2 Weeks)**
+1. **Short Term (Next 2 Weeks)**
+
    - Complete all CLI commands
    - Achieve 85% coverage in pkg/
    - Write E2E test scenarios
 
-3. **Medium Term (Weeks 3-4)**
+1. **Medium Term (Weeks 3-4)**
+
    - Complete E2E test suite
    - Finalize documentation
    - Run full quality gates
 
-4. **Long Term (Phase 7)**
+1. **Long Term (Phase 7)**
+
    - Integrate into gzh-cli
    - Release v1.0.0
    - Gather user feedback
 
----
+______________________________________________________________________
 
 **Specification Version:** 1.0
 **Last Updated:** 2025-11-27

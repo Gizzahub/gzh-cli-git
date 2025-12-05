@@ -39,6 +39,7 @@
 **ALL major features are implemented and functional.**
 
 **Repository Operations** (`pkg/repository/`):
+
 - `Open(ctx, path)` - Open existing repository
 - `Clone(ctx, opts)` - Clone with advanced options
 - `GetInfo(ctx, repo)` - Repository metadata
@@ -46,28 +47,33 @@
 - `IsRepository(ctx, path)` - Validation
 
 **Operations** (`pkg/operations/`):
+
 - Clone with options (branch, depth, single-branch, recursive)
 - Clone-or-update strategies
 - Bulk repository operations with parallelization
 
 **Commit Automation** (`pkg/commit/`):
+
 - Auto-generate commit messages
 - Template-based commits (Conventional Commits)
 - Message validation against rules
 - Template management
 
 **Branch Management** (`pkg/branch/`):
+
 - Create, list, delete branches
 - Worktree-based parallel development
 - Branch creation with linked worktrees
 
 **History Analysis** (`pkg/history/`):
+
 - Commit statistics and trends
 - Contributor analysis with metrics
 - File change tracking
 - Multiple output formats
 
 **Merge/Rebase** (`pkg/merge/`):
+
 - Pre-merge conflict detection
 - Merge execution with strategies
 - Abort and rebase operations
@@ -76,6 +82,7 @@
 All commands functional - status, info, clone, update, branch, commit, history, merge
 
 **Testing**:
+
 - 141 tests passing
 - 69.1% code coverage
 - Comprehensive integration tests
@@ -164,6 +171,7 @@ Clone(ctx, url, path,
 ### 5. Git CLI Wrapper
 
 **Uses Git CLI, not go-git library:**
+
 - Maximum compatibility
 - Simpler implementation
 - Familiar behavior
@@ -294,16 +302,16 @@ docs/
 ## Security Considerations
 
 1. **Input Sanitization**: All user inputs validated before Git commands
-2. **Path Validation**: Prevent path traversal attacks
-3. **Command Injection**: No string interpolation in Git commands
-4. **Credential Safety**: Never log credentials
+1. **Path Validation**: Prevent path traversal attacks
+1. **Command Injection**: No string interpolation in Git commands
+1. **Credential Safety**: Never log credentials
 
 ## Known Limitations
 
 1. **Git CLI Dependency**: Requires Git 2.30+ installed
-2. **Pre-v1.0.0 Status**: API may change before v1.0.0
-3. **Test Coverage**: 69.1% (target: 90% for v1.0.0)
-4. **No Windows Testing**: Primary development on macOS/Linux
+1. **Pre-v1.0.0 Status**: API may change before v1.0.0
+1. **Test Coverage**: 69.1% (target: 90% for v1.0.0)
+1. **No Windows Testing**: Primary development on macOS/Linux
 
 ## Development Workflow
 
@@ -321,18 +329,21 @@ docs/
 ## Quick Decision Reference
 
 **When to use gzh-cli-git:**
+
 - ✅ Need Git operations in Go application
 - ✅ Want type-safe Git API
 - ✅ Building automation tools
 
 **When NOT to use:**
+
 - ❌ Need pure Go solution (no Git dependency)
 - ❌ Need production-stable library with API guarantees (wait for v1.0.0)
 - ❌ Need Windows-tested code (primary development on macOS/Linux)
 
----
+______________________________________________________________________
 
 **Token Efficiency**: This document is optimized for LLM context windows
+
 - ~450 lines (well under 500-line target)
 - ~7KB (well under 10KB limit)
 - Structured for quick parsing

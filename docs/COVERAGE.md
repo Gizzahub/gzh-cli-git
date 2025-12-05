@@ -21,17 +21,21 @@
 ### Coverage Tier Analysis
 
 **Excellent Coverage (>= 85%)**:
+
 - ✅ internal/parser (95.7%)
 - ✅ internal/gitcmd (89.5%)
 - ✅ pkg/history (87.7%)
 
 **Good Coverage (70-84%)**:
+
 - ⚠️ pkg/merge (82.9%)
 
 **Needs Improvement (50-69%)**:
+
 - ⚠️ pkg/commit (66.3%)
 
 **Low Coverage (< 50%)**:
+
 - ❌ pkg/branch (48.1%)
 - ❌ pkg/repository (39.2%)
 - ❌ cmd/gzh-git (0.0%)
@@ -59,11 +63,13 @@
 ### internal/gitcmd (89.5%)
 
 **Strengths**:
+
 - Command sanitization: 93.5%
 - Security validation: High coverage
 - Error handling: Well tested
 
 **Gaps**:
+
 - Some edge cases in flag parsing
 - Uncommon error paths
 
@@ -72,11 +78,13 @@
 ### internal/parser (95.7%)
 
 **Strengths**:
+
 - Diff parsing: 97.7%
 - Status parsing: Comprehensive
 - Error scenarios: Well covered
 
 **Gaps**:
+
 - Minimal, mostly unreachable code paths
 
 **Recommendation**: Excellent coverage, no action needed
@@ -84,11 +92,13 @@
 ### pkg/history (87.7%)
 
 **Strengths**:
+
 - Statistics analysis: 93.3%
 - Contributor tracking: High coverage
 - File history: Well tested
 
 **Gaps**:
+
 - Some output formatting edge cases
 - Rare error conditions
 
@@ -97,11 +107,13 @@
 ### pkg/merge (82.9%)
 
 **Strengths**:
+
 - Conflict detection: 86.8%
 - Merge strategies: Good coverage
 - Basic workflows: Tested
 
 **Gaps**:
+
 - Complex rebase scenarios
 - Some error recovery paths
 
@@ -110,11 +122,13 @@
 ### pkg/commit (66.3%)
 
 **Strengths**:
+
 - Template validation: 64.9%
 - Message generation: Partial coverage
 - Basic operations: Tested
 
 **Gaps**:
+
 - Advanced template features
 - Custom template validation
 - Some generator edge cases
@@ -124,10 +138,12 @@
 ### pkg/branch (48.1%)
 
 **Strengths**:
+
 - Basic operations: 37.9%
 - List functionality: Partial coverage
 
 **Gaps**:
+
 - Worktree operations: Minimal coverage
 - Branch cleanup: Not well tested
 - Advanced features: Limited tests
@@ -137,10 +153,12 @@
 ### pkg/repository (39.2%)
 
 **Strengths**:
+
 - Core operations: 57.7%
 - Status handling: Partial coverage
 
 **Gaps**:
+
 - Clone operations: Minimal coverage
 - Logger implementations: Not tested (interface methods)
 - Progress tracking: Not tested
@@ -151,10 +169,12 @@
 ### cmd/gzh-git (0.0%)
 
 **Current State**:
+
 - CLI commands: 0% direct coverage
 - Tested via integration/E2E tests
 
 **Gaps**:
+
 - No unit tests for command handlers
 - Flag parsing not unit tested
 - Output formatting not directly tested
@@ -180,18 +200,22 @@
 To reach 85% overall coverage from current 69.1%:
 
 1. **Increase pkg/repository**: 39.2% → 70% (+30.8%)
+
    - Impact: +7% overall
    - Effort: ~40 tests
 
-2. **Increase pkg/branch**: 48.1% → 75% (+26.9%)
+1. **Increase pkg/branch**: 48.1% → 75% (+26.9%)
+
    - Impact: +5% overall
    - Effort: ~35 tests
 
-3. **Increase pkg/commit**: 66.3% → 80% (+13.7%)
+1. **Increase pkg/commit**: 66.3% → 80% (+13.7%)
+
    - Impact: +3% overall
    - Effort: ~15 tests
 
-4. **Increase pkg/merge**: 82.9% → 90% (+7.1%)
+1. **Increase pkg/merge**: 82.9% → 90% (+7.1%)
+
    - Impact: +1% overall
    - Effort: ~8 tests
 
@@ -202,16 +226,19 @@ To reach 85% overall coverage from current 69.1%:
 ### Critical Uncovered Paths
 
 1. **pkg/repository**:
+
    - Clone operations with various protocols
    - Logger implementations (WriterLogger, NoopLogger)
    - Progress tracking callbacks
 
-2. **pkg/branch**:
+1. **pkg/branch**:
+
    - Worktree add/remove/list
    - Branch cleanup strategies
    - Remote branch operations
 
-3. **pkg/commit**:
+1. **pkg/commit**:
+
    - Custom template loading
    - Advanced message generation
    - Template validation rules
@@ -227,24 +254,24 @@ To reach 85% overall coverage from current 69.1%:
 ### Short Term (Next Sprint)
 
 1. **pkg/repository**: Add clone integration tests
-2. **pkg/branch**: Add worktree operation tests
-3. **pkg/commit**: Add template feature tests
+1. **pkg/branch**: Add worktree operation tests
+1. **pkg/commit**: Add template feature tests
 
 **Expected Impact**: +10% overall coverage
 
 ### Medium Term (Next Month)
 
-1. Complete pkg/* coverage to 80%+
-2. Add edge case tests for all packages
-3. Improve error path coverage
+1. Complete pkg/\* coverage to 80%+
+1. Add edge case tests for all packages
+1. Improve error path coverage
 
 **Expected Impact**: +15% overall coverage
 
 ### Long Term
 
 1. Maintain 85%+ coverage on all new code
-2. Add property-based tests for parsers
-3. Performance regression tests
+1. Add property-based tests for parsers
+1. Performance regression tests
 
 ## Coverage Maintenance
 
@@ -284,12 +311,14 @@ open coverage.html
 ### Overall Assessment
 
 **Strengths**:
+
 - ✅ Excellent coverage in internal packages (92.6%)
 - ✅ Strong coverage in history package (87.7%)
 - ✅ Comprehensive integration and E2E testing
 - ✅ All tests passing
 
 **Weaknesses**:
+
 - ⚠️ pkg/repository and pkg/branch need significant work
 - ⚠️ Some packages below 85% target
 - ⚠️ CLI commands have 0% direct coverage (mitigated by integration tests)
@@ -304,11 +333,11 @@ open coverage.html
 ### Next Actions
 
 1. **Immediate**: Add tests for pkg/repository clone operations
-2. **This Week**: Improve pkg/branch coverage to 70%+
-3. **This Month**: Reach 75% overall coverage
-4. **Ongoing**: Maintain 85%+ on new code
+1. **This Week**: Improve pkg/branch coverage to 70%+
+1. **This Month**: Reach 75% overall coverage
+1. **Ongoing**: Maintain 85%+ on new code
 
----
+______________________________________________________________________
 
 **Report Generated**: 2025-11-29
 **Tool**: go test -coverprofile -covermode=atomic

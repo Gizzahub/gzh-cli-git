@@ -8,7 +8,7 @@
 **Status**: Draft
 **Priority**: P0 (High)
 
----
+______________________________________________________________________
 
 ## 1. Overview
 
@@ -29,31 +29,35 @@ This specification defines the commit automation features for gzh-cli-git, inclu
 - Git hook management (deferred to future)
 - Commit message translation (out of scope)
 
----
+______________________________________________________________________
 
 ## 2. Requirements
 
 ### 2.1 Functional Requirements
 
 **FR-1**: Template System
+
 - Support built-in templates (Conventional Commits, Semantic Versioning)
 - Support custom user templates
 - Template validation
 - Template inheritance/composition
 
 **FR-2**: Auto-Commit
+
 - Generate commit messages from git diff
 - Analyze changed files to suggest type and scope
 - Support customization of auto-generation logic
 - Preview before committing
 
 **FR-3**: Smart Push
+
 - Safety checks before push
 - Prevent force push to protected branches
 - Detect diverged branches
 - Confirmation for risky operations
 
 **FR-4**: Message Validation
+
 - Validate against template rules
 - Check message length limits
 - Detect common mistakes (typos, formatting)
@@ -62,20 +66,23 @@ This specification defines the commit automation features for gzh-cli-git, inclu
 ### 2.2 Non-Functional Requirements
 
 **NFR-1**: Performance
-- Template loading: <10ms
-- Commit creation: <100ms
-- Validation: <50ms
+
+- Template loading: \<10ms
+- Commit creation: \<100ms
+- Validation: \<50ms
 
 **NFR-2**: Usability
+
 - Intuitive CLI commands
 - Clear error messages
 - Good defaults (minimal config needed)
 
 **NFR-3**: Compatibility
+
 - Git 2.30+
 - Cross-platform (Linux, macOS, Windows)
 
----
+______________________________________________________________________
 
 ## 3. Design
 
@@ -271,6 +278,7 @@ type PushIssue struct {
 #### Built-in Templates
 
 **Conventional Commits Template**:
+
 ```yaml
 name: conventional
 description: Conventional Commits 1.0.0
@@ -318,6 +326,7 @@ examples:
 ```
 
 **Semantic Versioning Template**:
+
 ```yaml
 name: semantic
 description: Semantic Versioning commit template
@@ -351,28 +360,32 @@ examples:
   - "[PATCH] Fix typo in error message"
 ```
 
----
+______________________________________________________________________
 
 ## 4. Implementation
 
 ### 4.1 Key Components
 
 **pkg/commit/template.go**
+
 - Template loading from built-in and custom sources
 - Template validation
 - Template variable substitution
 
 **pkg/commit/generator.go**
+
 - Analyze git diff to suggest commit type/scope
 - Generate commit description from changes
 - Support for custom generation rules
 
 **pkg/commit/validator.go**
+
 - Validate message against template rules
 - Check message length, format, content
 - Provide actionable error messages
 
 **pkg/commit/push.go**
+
 - Pre-push safety checks
 - Protected branch detection
 - Force push prevention
@@ -406,13 +419,14 @@ type CommitError struct {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 5. Testing
 
 ### 5.1 Test Scenarios
 
 **Template System**:
+
 - Load built-in templates (conventional, semantic)
 - Load custom templates from file
 - Validate template format
@@ -421,6 +435,7 @@ type CommitError struct {
 - Invalid template handling
 
 **Auto-Generation**:
+
 - Generate message from simple changes
 - Generate message from complex changes
 - Suggest type from file patterns
@@ -429,6 +444,7 @@ type CommitError struct {
 - Handle large diffs
 
 **Validation**:
+
 - Validate conventional commits format
 - Validate semantic commits format
 - Check message length limits
@@ -437,6 +453,7 @@ type CommitError struct {
 - Interactive validation
 
 **Smart Push**:
+
 - Allow push to non-protected branches
 - Block force push to main/master
 - Detect diverged branches
@@ -460,13 +477,14 @@ type CommitError struct {
 - Concurrent template modifications
 - Network failures during push
 
----
+______________________________________________________________________
 
 ## 6. Examples
 
 ### 6.1 CLI Usage
 
 **Using Built-in Template**:
+
 ```bash
 # Interactive template-based commit
 gzh-git commit --template conventional
@@ -486,6 +504,7 @@ gzh-git commit --auto --dry-run
 ```
 
 **Using Custom Template**:
+
 ```bash
 # Load from file
 gzh-git commit --template-file ~/.config/gzh-git/my-template.yaml
@@ -495,6 +514,7 @@ gzh-git config template.default my-template
 ```
 
 **Smart Push**:
+
 ```bash
 # Safe push with checks
 gzh-git push --smart
@@ -507,6 +527,7 @@ gzh-git push --smart --force --skip-checks
 ```
 
 **Message Validation**:
+
 ```bash
 # Validate message from file
 gzh-git commit --validate --message-file commit.txt
@@ -519,6 +540,7 @@ gzh-git commit --validate --template conventional \
 ### 6.2 Library Usage
 
 **Template-Based Commit**:
+
 ```go
 package main
 
@@ -555,6 +577,7 @@ func main() {
 ```
 
 **Auto-Generated Commit**:
+
 ```go
 func autoCommit() {
     ctx := context.Background()
@@ -581,6 +604,7 @@ func autoCommit() {
 ```
 
 **Smart Push**:
+
 ```go
 func smartPush() {
     ctx := context.Background()
@@ -607,7 +631,7 @@ func smartPush() {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 7. Acceptance Criteria
 
@@ -638,7 +662,7 @@ func smartPush() {
 - [ ] Smart push prevents accidents (zero force-push incidents)
 - [ ] Template system is intuitive (≤5 min to create custom template)
 
----
+______________________________________________________________________
 
 ## 8. Risks & Mitigation
 
@@ -649,46 +673,51 @@ func smartPush() {
 | Smart push too restrictive | Low | Medium | Provide override flag; clear error messages |
 | Performance with large diffs | Low | Low | Implement diff size limits; optimize parsing |
 
----
+______________________________________________________________________
 
 ## 9. Open Questions
 
 1. Should templates support hooks/plugins for custom logic?
-2. How to handle merge commits in auto-generation?
-3. Support for GPG signing in smart push?
-4. Should we provide a template marketplace/registry?
+1. How to handle merge commits in auto-generation?
+1. Support for GPG signing in smart push?
+1. Should we provide a template marketplace/registry?
 
----
+______________________________________________________________________
 
 ## 10. References
 
 ### 10.1 Standards
+
 - [Conventional Commits 1.0.0](https://www.conventionalcommits.org/)
 - [Semantic Versioning 2.0.0](https://semver.org/)
 
 ### 10.2 Similar Tools
+
 - commitizen (interactive commit tool)
 - commitlint (commit message linter)
 - husky (Git hooks manager)
 
 ### 10.3 Internal Documents
+
 - [PRD.md](../PRD.md) - Section 4.2
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - Section 5
 - [specs/00-overview.md](./00-overview.md)
 
----
+______________________________________________________________________
 
 **Approval Required From**:
+
 - [ ] Product Owner
 - [ ] Tech Lead
 - [ ] Security Team (for push safety features)
 
 **Next Steps**:
-1. Review and approve specification
-2. Create implementation tasks
-3. Begin Phase 2 development
 
----
+1. Review and approve specification
+1. Create implementation tasks
+1. Begin Phase 2 development
+
+______________________________________________________________________
 
 **Document Version**: 1.0
 **Status**: Draft - Pending Review

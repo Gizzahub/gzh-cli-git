@@ -14,18 +14,10 @@ import (
 )
 
 var (
-	fetchDepth            int
-	fetchParallel         int
-	fetchDryRun           bool
-	fetchAllRemotes       bool
-	fetchPrune            bool
-	fetchTags             bool
-	fetchIncludeSubmodules bool
-	fetchInclude          string
-	fetchExclude          string
-	fetchFormat           string
-	fetchWatch            bool
-	fetchInterval         time.Duration
+	fetchFlags      BulkCommandFlags
+	fetchAllRemotes bool
+	fetchPrune      bool
+	fetchTags       bool
 )
 
 // fetchCmd represents the fetch command
@@ -87,78 +79,60 @@ It only updates remote-tracking branches.`,
 func init() {
 	rootCmd.AddCommand(fetchCmd)
 
-	// Flags
-	fetchCmd.Flags().IntVarP(&fetchDepth, "depth", "d", repository.DefaultBulkMaxDepth, "directory depth to scan")
-	fetchCmd.Flags().IntVarP(&fetchParallel, "parallel", "j", repository.DefaultBulkParallel, "number of parallel fetch operations")
-	fetchCmd.Flags().BoolVarP(&fetchDryRun, "dry-run", "n", false, "show what would be fetched without fetching")
+	// Common bulk operation flags
+	addBulkFlags(fetchCmd, &fetchFlags)
+
+	// Fetch-specific flags
 	fetchCmd.Flags().BoolVar(&fetchAllRemotes, "all", false, "fetch from all remotes (not just origin)")
 	fetchCmd.Flags().BoolVar(&fetchPrune, "prune", false, "prune remote-tracking branches that no longer exist")
 	fetchCmd.Flags().BoolVarP(&fetchTags, "tags", "t", false, "fetch all tags from remote")
-	fetchCmd.Flags().BoolVarP(&fetchIncludeSubmodules, "recursive", "r", false, "recursively include nested repositories and submodules")
-	fetchCmd.Flags().StringVar(&fetchInclude, "include", "", "regex pattern to include repositories")
-	fetchCmd.Flags().StringVar(&fetchExclude, "exclude", "", "regex pattern to exclude repositories")
-	fetchCmd.Flags().StringVar(&fetchFormat, "format", "default", "output format: default, compact")
-	fetchCmd.Flags().BoolVar(&fetchWatch, "watch", false, "continuously fetch at intervals")
-	fetchCmd.Flags().DurationVar(&fetchInterval, "interval", 5*time.Minute, "fetch interval when watching")
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Parse directory argument
-	directory := "."
-	if len(args) > 0 {
-		directory = args[0]
-	}
-
-	// Validate directory exists
-	if _, err := os.Stat(directory); err != nil {
-		return fmt.Errorf("directory does not exist: %s", directory)
+	// Validate and parse directory
+	directory, err := validateBulkDirectory(args)
+	if err != nil {
+		return err
 	}
 
 	// Validate depth
-	if cmd.Flags().Changed("depth") && fetchDepth == 0 {
-		return fmt.Errorf("depth must be at least 1 (use --depth 1 to scan current directory and immediate subdirectories)")
+	if err := validateBulkDepth(cmd, fetchFlags.Depth); err != nil {
+		return err
 	}
 
 	// Create client
 	client := repository.NewClient()
 
 	// Create logger for verbose mode
-	var logger repository.Logger
-	if verbose {
-		logger = repository.NewWriterLogger(os.Stdout)
-	}
+	logger := createBulkLogger(verbose)
 
 	// Build options
 	opts := repository.BulkFetchOptions{
 		Directory:         directory,
-		Parallel:          fetchParallel,
-		MaxDepth:          fetchDepth,
-		DryRun:            fetchDryRun,
+		Parallel:          fetchFlags.Parallel,
+		MaxDepth:          fetchFlags.Depth,
+		DryRun:            fetchFlags.DryRun,
 		Verbose:           verbose,
 		AllRemotes:        fetchAllRemotes,
 		Prune:             fetchPrune,
 		Tags:              fetchTags,
-		IncludeSubmodules: fetchIncludeSubmodules,
-		IncludePattern:    fetchInclude,
-		ExcludePattern:    fetchExclude,
+		IncludeSubmodules: fetchFlags.IncludeSubmodules,
+		IncludePattern:    fetchFlags.Include,
+		ExcludePattern:    fetchFlags.Exclude,
 		Logger:            logger,
-		ProgressCallback: func(current, total int, repo string) {
-			if !quiet && fetchFormat != "compact" {
-				fmt.Printf("[%d/%d] Fetching %s...\n", current, total, repo)
-			}
-		},
+		ProgressCallback:  createProgressCallback("Fetching", fetchFlags.Format, quiet),
 	}
 
 	// Watch mode: continuously fetch at intervals
-	if fetchWatch {
+	if fetchFlags.Watch {
 		return runFetchWatch(ctx, client, opts)
 	}
 
 	// One-time fetch
 	if !quiet {
-		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, fetchDepth)
+		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, fetchFlags.Depth)
 	}
 
 	result, err := client.BulkFetch(ctx, opts)
@@ -181,7 +155,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 
 func runFetchWatch(ctx context.Context, client repository.Client, opts repository.BulkFetchOptions) error {
 	if !quiet {
-		fmt.Printf("Starting watch mode: fetching every %s\n", fetchInterval)
+		fmt.Printf("Starting watch mode: fetching every %s\n", fetchFlags.Interval)
 		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", opts.Directory, opts.MaxDepth)
 		fmt.Println("Press Ctrl+C to stop...")
 		fmt.Println()
@@ -192,7 +166,7 @@ func runFetchWatch(ctx context.Context, client repository.Client, opts repositor
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Create ticker for periodic fetching
-	ticker := time.NewTicker(fetchInterval)
+	ticker := time.NewTicker(fetchFlags.Interval)
 	defer ticker.Stop()
 
 	// Perform initial fetch immediately
@@ -210,7 +184,7 @@ func runFetchWatch(ctx context.Context, client repository.Client, opts repositor
 			return nil
 
 		case <-ticker.C:
-			if !quiet && fetchFormat != "compact" {
+			if !quiet && fetchFlags.Format != "compact" {
 				fmt.Printf("\n[%s] Running scheduled fetch...\n", time.Now().Format("15:04:05"))
 			}
 			if err := executeFetch(ctx, client, opts); err != nil {
@@ -259,7 +233,7 @@ func displayFetchResults(result *repository.BulkFetchResult) {
 	}
 
 	// Display individual results if not compact
-	if fetchFormat != "compact" && len(result.Repositories) > 0 {
+	if fetchFlags.Format != "compact" && len(result.Repositories) > 0 {
 		fmt.Println("Repository details:")
 		for _, repo := range result.Repositories {
 			displayFetchRepositoryResult(repo)
@@ -267,7 +241,7 @@ func displayFetchResults(result *repository.BulkFetchResult) {
 	}
 
 	// Display only errors/warnings in compact mode
-	if fetchFormat == "compact" {
+	if fetchFlags.Format == "compact" {
 		hasIssues := false
 		for _, repo := range result.Repositories {
 			if repo.Status == "error" || repo.Status == "no-remote" {

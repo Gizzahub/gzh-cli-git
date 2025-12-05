@@ -14,18 +14,10 @@ import (
 )
 
 var (
-	pushDepth             int
-	pushParallel          int
-	pushDryRun            bool
-	pushForce             bool
-	pushSetUpstream       bool
-	pushTags              bool
-	pushIncludeSubmodules bool
-	pushInclude           string
-	pushExclude           string
-	pushFormat            string
-	pushWatch             bool
-	pushInterval          time.Duration
+	pushFlags       BulkCommandFlags
+	pushForce       bool
+	pushSetUpstream bool
+	pushTags        bool
 )
 
 // pushCmd represents the push command
@@ -86,78 +78,60 @@ The command pushes your local commits to remote repositories.`,
 func init() {
 	rootCmd.AddCommand(pushCmd)
 
-	// Flags
-	pushCmd.Flags().IntVarP(&pushDepth, "depth", "d", repository.DefaultBulkMaxDepth, "directory depth to scan")
-	pushCmd.Flags().IntVarP(&pushParallel, "parallel", "j", repository.DefaultBulkParallel, "number of parallel push operations")
-	pushCmd.Flags().BoolVarP(&pushDryRun, "dry-run", "n", false, "show what would be pushed without pushing")
+	// Common bulk operation flags
+	addBulkFlags(pushCmd, &pushFlags)
+
+	// Push-specific flags
 	pushCmd.Flags().BoolVarP(&pushForce, "force", "f", false, "force push (use with caution!)")
 	pushCmd.Flags().BoolVarP(&pushSetUpstream, "set-upstream", "u", false, "set upstream for new branches")
 	pushCmd.Flags().BoolVarP(&pushTags, "tags", "t", false, "push all tags to remote")
-	pushCmd.Flags().BoolVarP(&pushIncludeSubmodules, "recursive", "r", false, "recursively include nested repositories and submodules")
-	pushCmd.Flags().StringVar(&pushInclude, "include", "", "regex pattern to include repositories")
-	pushCmd.Flags().StringVar(&pushExclude, "exclude", "", "regex pattern to exclude repositories")
-	pushCmd.Flags().StringVar(&pushFormat, "format", "default", "output format: default, compact")
-	pushCmd.Flags().BoolVar(&pushWatch, "watch", false, "continuously push at intervals")
-	pushCmd.Flags().DurationVar(&pushInterval, "interval", 5*time.Minute, "push interval when watching")
 }
 
 func runPush(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Parse directory argument
-	directory := "."
-	if len(args) > 0 {
-		directory = args[0]
-	}
-
-	// Validate directory exists
-	if _, err := os.Stat(directory); err != nil {
-		return fmt.Errorf("directory does not exist: %s", directory)
+	// Validate and parse directory
+	directory, err := validateBulkDirectory(args)
+	if err != nil {
+		return err
 	}
 
 	// Validate depth
-	if cmd.Flags().Changed("depth") && pushDepth == 0 {
-		return fmt.Errorf("depth must be at least 1 (use --depth 1 to scan current directory and immediate subdirectories)")
+	if err := validateBulkDepth(cmd, pushFlags.Depth); err != nil {
+		return err
 	}
 
 	// Create client
 	client := repository.NewClient()
 
 	// Create logger for verbose mode
-	var logger repository.Logger
-	if verbose {
-		logger = repository.NewWriterLogger(os.Stdout)
-	}
+	logger := createBulkLogger(verbose)
 
 	// Build options
 	opts := repository.BulkPushOptions{
 		Directory:         directory,
-		Parallel:          pushParallel,
-		MaxDepth:          pushDepth,
-		DryRun:            pushDryRun,
+		Parallel:          pushFlags.Parallel,
+		MaxDepth:          pushFlags.Depth,
+		DryRun:            pushFlags.DryRun,
 		Verbose:           verbose,
 		Force:             pushForce,
 		SetUpstream:       pushSetUpstream,
 		Tags:              pushTags,
-		IncludeSubmodules: pushIncludeSubmodules,
-		IncludePattern:    pushInclude,
-		ExcludePattern:    pushExclude,
+		IncludeSubmodules: pushFlags.IncludeSubmodules,
+		IncludePattern:    pushFlags.Include,
+		ExcludePattern:    pushFlags.Exclude,
 		Logger:            logger,
-		ProgressCallback: func(current, total int, repo string) {
-			if !quiet && pushFormat != "compact" {
-				fmt.Printf("[%d/%d] Pushing %s...\n", current, total, repo)
-			}
-		},
+		ProgressCallback:  createProgressCallback("Pushing", pushFlags.Format, quiet),
 	}
 
 	// Watch mode: continuously push at intervals
-	if pushWatch {
+	if pushFlags.Watch {
 		return runPushWatch(ctx, client, opts)
 	}
 
 	// One-time push
 	if !quiet {
-		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, pushDepth)
+		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, pushFlags.Depth)
 	}
 
 	result, err := client.BulkPush(ctx, opts)
@@ -180,7 +154,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 
 func runPushWatch(ctx context.Context, client repository.Client, opts repository.BulkPushOptions) error {
 	if !quiet {
-		fmt.Printf("Starting watch mode: pushing every %s\n", pushInterval)
+		fmt.Printf("Starting watch mode: pushing every %s\n", pushFlags.Interval)
 		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", opts.Directory, opts.MaxDepth)
 		fmt.Println("Press Ctrl+C to stop...")
 		fmt.Println()
@@ -191,7 +165,7 @@ func runPushWatch(ctx context.Context, client repository.Client, opts repository
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Create ticker for periodic pushing
-	ticker := time.NewTicker(pushInterval)
+	ticker := time.NewTicker(pushFlags.Interval)
 	defer ticker.Stop()
 
 	// Perform initial push immediately
@@ -209,7 +183,7 @@ func runPushWatch(ctx context.Context, client repository.Client, opts repository
 			return nil
 
 		case <-ticker.C:
-			if !quiet && pushFormat != "compact" {
+			if !quiet && pushFlags.Format != "compact" {
 				fmt.Printf("\n[%s] Running scheduled push...\n", time.Now().Format("15:04:05"))
 			}
 			if err := executePush(ctx, client, opts); err != nil {
@@ -258,7 +232,7 @@ func displayPushResults(result *repository.BulkPushResult) {
 	}
 
 	// Display individual results if not compact
-	if pushFormat != "compact" && len(result.Repositories) > 0 {
+	if pushFlags.Format != "compact" && len(result.Repositories) > 0 {
 		fmt.Println("Repository details:")
 		for _, repo := range result.Repositories {
 			displayPushRepositoryResult(repo)
@@ -266,7 +240,7 @@ func displayPushResults(result *repository.BulkPushResult) {
 	}
 
 	// Display only errors/warnings in compact mode
-	if pushFormat == "compact" {
+	if pushFlags.Format == "compact" {
 		hasIssues := false
 		for _, repo := range result.Repositories {
 			if repo.Status == "error" || repo.Status == "no-remote" || repo.Status == "no-upstream" ||

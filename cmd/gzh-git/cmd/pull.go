@@ -14,19 +14,11 @@ import (
 )
 
 var (
-	pullDepth              int
-	pullParallel           int
-	pullDryRun             bool
-	pullStrategy           string
-	pullPrune              bool
-	pullTags               bool
-	pullStash              bool
-	pullIncludeSubmodules  bool
-	pullInclude            string
-	pullExclude            string
-	pullFormat             string
-	pullWatch              bool
-	pullInterval           time.Duration
+	pullFlags    BulkCommandFlags
+	pullStrategy string
+	pullPrune    bool
+	pullTags     bool
+	pullStash    bool
 )
 
 // pullCmd represents the pull command
@@ -91,80 +83,62 @@ The command updates your working tree with changes from the remote.`,
 func init() {
 	rootCmd.AddCommand(pullCmd)
 
-	// Flags
-	pullCmd.Flags().IntVarP(&pullDepth, "depth", "d", repository.DefaultBulkMaxDepth, "directory depth to scan")
-	pullCmd.Flags().IntVarP(&pullParallel, "parallel", "j", repository.DefaultBulkParallel, "number of parallel pull operations")
-	pullCmd.Flags().BoolVarP(&pullDryRun, "dry-run", "n", false, "show what would be pulled without pulling")
+	// Common bulk operation flags
+	addBulkFlags(pullCmd, &pullFlags)
+
+	// Pull-specific flags
 	pullCmd.Flags().StringVarP(&pullStrategy, "strategy", "s", "merge", "pull strategy: merge, rebase, ff-only")
 	pullCmd.Flags().BoolVarP(&pullPrune, "prune", "p", false, "prune remote-tracking branches that no longer exist")
 	pullCmd.Flags().BoolVarP(&pullTags, "tags", "t", false, "fetch all tags from remote")
 	pullCmd.Flags().BoolVar(&pullStash, "stash", false, "automatically stash local changes before pull")
-	pullCmd.Flags().BoolVarP(&pullIncludeSubmodules, "recursive", "r", false, "recursively include nested repositories and submodules")
-	pullCmd.Flags().StringVar(&pullInclude, "include", "", "regex pattern to include repositories")
-	pullCmd.Flags().StringVar(&pullExclude, "exclude", "", "regex pattern to exclude repositories")
-	pullCmd.Flags().StringVar(&pullFormat, "format", "default", "output format: default, compact")
-	pullCmd.Flags().BoolVar(&pullWatch, "watch", false, "continuously pull at intervals")
-	pullCmd.Flags().DurationVar(&pullInterval, "interval", 1*time.Minute, "pull interval when watching")
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Parse directory argument
-	directory := "."
-	if len(args) > 0 {
-		directory = args[0]
-	}
-
-	// Validate directory exists
-	if _, err := os.Stat(directory); err != nil {
-		return fmt.Errorf("directory does not exist: %s", directory)
+	// Validate and parse directory
+	directory, err := validateBulkDirectory(args)
+	if err != nil {
+		return err
 	}
 
 	// Validate depth
-	if cmd.Flags().Changed("depth") && pullDepth == 0 {
-		return fmt.Errorf("depth must be at least 1 (use --depth 1 to scan current directory and immediate subdirectories)")
+	if err := validateBulkDepth(cmd, pullFlags.Depth); err != nil {
+		return err
 	}
 
 	// Create client
 	client := repository.NewClient()
 
 	// Create logger for verbose mode
-	var logger repository.Logger
-	if verbose {
-		logger = repository.NewWriterLogger(os.Stdout)
-	}
+	logger := createBulkLogger(verbose)
 
 	// Build options
 	opts := repository.BulkPullOptions{
 		Directory:         directory,
-		Parallel:          pullParallel,
-		MaxDepth:          pullDepth,
-		DryRun:            pullDryRun,
+		Parallel:          pullFlags.Parallel,
+		MaxDepth:          pullFlags.Depth,
+		DryRun:            pullFlags.DryRun,
 		Verbose:           verbose,
 		Strategy:          pullStrategy,
 		Prune:             pullPrune,
 		Tags:              pullTags,
 		Stash:             pullStash,
-		IncludeSubmodules: pullIncludeSubmodules,
-		IncludePattern:    pullInclude,
-		ExcludePattern:    pullExclude,
+		IncludeSubmodules: pullFlags.IncludeSubmodules,
+		IncludePattern:    pullFlags.Include,
+		ExcludePattern:    pullFlags.Exclude,
 		Logger:            logger,
-		ProgressCallback: func(current, total int, repo string) {
-			if !quiet && pullFormat != "compact" {
-				fmt.Printf("[%d/%d] Pulling %s...\n", current, total, repo)
-			}
-		},
+		ProgressCallback:  createProgressCallback("Pulling", pullFlags.Format, quiet),
 	}
 
 	// Watch mode: continuously pull at intervals
-	if pullWatch {
+	if pullFlags.Watch {
 		return runPullWatch(ctx, client, opts)
 	}
 
 	// One-time pull
 	if !quiet {
-		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, pullDepth)
+		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", directory, pullFlags.Depth)
 	}
 
 	result, err := client.BulkPull(ctx, opts)
@@ -187,7 +161,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 func runPullWatch(ctx context.Context, client repository.Client, opts repository.BulkPullOptions) error {
 	if !quiet {
-		fmt.Printf("Starting watch mode: pulling every %s\n", pullInterval)
+		fmt.Printf("Starting watch mode: pulling every %s\n", pullFlags.Interval)
 		fmt.Printf("Scanning for repositories in %s (depth: %d)...\n", opts.Directory, opts.MaxDepth)
 		fmt.Println("Press Ctrl+C to stop...")
 		fmt.Println()
@@ -198,7 +172,7 @@ func runPullWatch(ctx context.Context, client repository.Client, opts repository
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Create ticker for periodic pulling
-	ticker := time.NewTicker(pullInterval)
+	ticker := time.NewTicker(pullFlags.Interval)
 	defer ticker.Stop()
 
 	// Perform initial pull immediately
@@ -216,7 +190,7 @@ func runPullWatch(ctx context.Context, client repository.Client, opts repository
 			return nil
 
 		case <-ticker.C:
-			if !quiet && pullFormat != "compact" {
+			if !quiet && pullFlags.Format != "compact" {
 				fmt.Printf("\n[%s] Running scheduled pull...\n", time.Now().Format("15:04:05"))
 			}
 			if err := executePull(ctx, client, opts); err != nil {
@@ -265,7 +239,7 @@ func displayPullResults(result *repository.BulkPullResult) {
 	}
 
 	// Display individual results if not compact
-	if pullFormat != "compact" && len(result.Repositories) > 0 {
+	if pullFlags.Format != "compact" && len(result.Repositories) > 0 {
 		fmt.Println("Repository details:")
 		for _, repo := range result.Repositories {
 			displayPullRepositoryResult(repo)
@@ -273,7 +247,7 @@ func displayPullResults(result *repository.BulkPullResult) {
 	}
 
 	// Display only errors/warnings in compact mode
-	if pullFormat == "compact" {
+	if pullFlags.Format == "compact" {
 		hasIssues := false
 		for _, repo := range result.Repositories {
 			if repo.Status == "error" || repo.Status == "no-remote" || repo.Status == "no-upstream" ||

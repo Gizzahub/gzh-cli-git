@@ -20,6 +20,31 @@ This file provides LLM-optimized guidance for Claude Code when working with this
 
 ---
 
+## Shared Library (gzh-cli-core)
+
+**IMPORTANT**: Use `gzh-cli-core` for common utilities. DO NOT create local duplicates.
+
+| Package | Import | Purpose |
+|---------|--------|---------|
+| logger | `gzh-cli-core/logger` | Structured logging |
+| testutil | `gzh-cli-core/testutil` | Test helpers (TempDir, Assert*, Capture) |
+| errors | `gzh-cli-core/errors` | Error types and wrapping |
+| config | `gzh-cli-core/config` | Config loading utilities |
+| cli | `gzh-cli-core/cli` | CLI flags and output |
+| version | `gzh-cli-core/version` | Version info |
+
+```go
+import (
+    "github.com/gizzahub/gzh-cli-core/logger"
+    "github.com/gizzahub/gzh-cli-core/errors"
+    "github.com/gizzahub/gzh-cli-core/testutil"
+)
+```
+
+**Git-specific test helpers**: Use `internal/testutil` for `TempGitRepo()`, `TempGitRepoWithCommit()`, etc.
+
+---
+
 ## Module-Specific Guides (AGENTS.md)
 
 **Read these before modifying code:**
@@ -37,7 +62,7 @@ This file provides LLM-optimized guidance for Claude Code when working with this
 |---------|---------|---------------|
 | `internal/gitcmd` | Git command execution | `Run()`, `RunWithOutput()` |
 | `internal/parser` | Git output parsing | Status, log, diff parsing |
-| `internal/validation` | Input validation | Path, branch validation |
+| `internal/testutil` | Git-specific test helpers | `TempGitRepo()`, `TempGitRepoWithCommit()` |
 
 ## Public Packages (pkg/)
 

@@ -30,7 +30,7 @@ This command recursively scans the specified directory (or current directory)
 for Git repositories and fetches updates from their remotes in parallel.
 
 By default:
-  - Scans up to 5 directory levels deep
+  - Scans 1 directory level deep
   - Processes 5 repositories in parallel
   - Fetches from origin remote only
   - Skips repositories without remotes

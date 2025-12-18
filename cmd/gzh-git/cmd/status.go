@@ -323,9 +323,9 @@ func getStatusIconForStatus(status string) string {
 	case "error":
 		return "✗"
 	case "no-remote":
-		return "⊘"
+		return "⚠"
 	case "no-upstream":
-		return "⊘"
+		return "⚠"
 	default:
 		return "•"
 	}

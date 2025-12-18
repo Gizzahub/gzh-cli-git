@@ -6,41 +6,45 @@ import (
 )
 
 func TestStatusCommand(t *testing.T) {
-	repo := NewTestRepo(t)
-	repo.SetupWithCommits()
+	// NOTE: gz-git status is a BULK status command that scans directories for repositories.
+	// It outputs bulk status format, not standard git status format.
 
 	t.Run("clean repository", func(t *testing.T) {
+		repo := NewTestRepo(t)
+		repo.SetupWithCommits()
+
 		output := repo.RunGzhGitSuccess("status")
 
+		// Bulk status output format
+		AssertContains(t, output, "Bulk Status Results")
 		AssertContains(t, output, "clean")
 	})
 
-	t.Run("with unstaged changes", func(t *testing.T) {
+	t.Run("with uncommitted changes", func(t *testing.T) {
+		repo := NewTestRepo(t)
+		repo.SetupWithCommits()
 		repo.WriteFile("modified.txt", "changed content")
+		repo.GitAdd("modified.txt")
 
 		output := repo.RunGzhGitSuccess("status")
 
-		AssertContains(t, output, "Untracked")
-		AssertContains(t, output, "modified.txt")
-	})
-
-	t.Run("with staged changes", func(t *testing.T) {
-		repo.WriteFile("staged.txt", "new file")
-		repo.GitAdd("staged.txt")
-
-		output := repo.RunGzhGitSuccess("status")
-
-		AssertContains(t, output, "Changes to be committed")
-		AssertContains(t, output, "staged.txt")
+		// Bulk status shows "dirty" with uncommitted count
+		AssertContains(t, output, "Bulk Status Results")
+		AssertContains(t, output, "dirty")
+		AssertContains(t, output, "uncommitted")
 	})
 
 	t.Run("with untracked files", func(t *testing.T) {
+		repo := NewTestRepo(t)
+		repo.SetupWithCommits()
 		repo.WriteFile("untracked.txt", "untracked content")
 
 		output := repo.RunGzhGitSuccess("status")
 
-		AssertContains(t, output, "Untracked files")
-		AssertContains(t, output, "untracked.txt")
+		// Bulk status shows "dirty" with untracked count
+		AssertContains(t, output, "Bulk Status Results")
+		AssertContains(t, output, "dirty")
+		AssertContains(t, output, "untracked")
 	})
 }
 
@@ -103,13 +107,14 @@ func TestCloneCommand(t *testing.T) {
 }
 
 func TestStatusNotARepository(t *testing.T) {
+	// NOTE: gz-git status is a BULK status command that scans directories for repositories.
+	// It does NOT fail when run in a non-git directory; it simply reports "no repositories found".
 	tmpDir := t.TempDir()
 	repo := &TestRepo{Path: tmpDir, T: t}
 
-	output := repo.RunGzhGitExpectError("status")
+	output := repo.RunGzhGitSuccess("status")
 
-	// Should fail because it's not a Git repository
-	if !strings.Contains(output, "not a git repository") && !strings.Contains(output, "failed") {
-		t.Errorf("Expected 'not a repository' error, got: %s", output)
-	}
+	// Bulk status completes successfully but finds no repositories
+	AssertContains(t, output, "Bulk Status Results")
+	AssertContains(t, output, "Total scanned:   0")
 }

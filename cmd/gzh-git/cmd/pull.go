@@ -267,7 +267,9 @@ func displayPullResults(result *repository.BulkPullResult) {
 }
 
 func displayPullRepositoryResult(repo repository.RepositoryPullResult) {
-	icon := getPullStatusIcon(repo.Status)
+	// Determine icon based on actual result, not just status
+	// ✓ = changes pulled, = = no changes (up-to-date)
+	icon := getPullStatusIconWithContext(repo.Status, repo.CommitsBehind)
 
 	// Build compact one-line format: icon path (branch) status duration
 	parts := []string{icon}
@@ -280,13 +282,17 @@ func displayPullRepositoryResult(repo repository.RepositoryPullResult) {
 	parts = append(parts, fmt.Sprintf("%-50s", pathPart))
 
 	// Show status compactly
+	// Status Display Guidelines:
+	//   - Changes occurred: "N↓ pulled" with ✓ icon
+	//   - No changes: "up-to-date" with = icon
 	statusStr := ""
 	switch repo.Status {
-	case "success":
+	case "success", "pulled":
 		if repo.CommitsBehind > 0 {
 			statusStr = fmt.Sprintf("%d↓ pulled", repo.CommitsBehind)
 		} else {
-			statusStr = "pulled"
+			// No changes pulled - display as up-to-date for consistency
+			statusStr = "up-to-date"
 		}
 	case "up-to-date":
 		if repo.CommitsAhead > 0 {
@@ -345,10 +351,16 @@ func displayPullRepositoryResult(repo repository.RepositoryPullResult) {
 	}
 }
 
-func getPullStatusIcon(status string) string {
+// getPullStatusIconWithContext returns the appropriate icon based on status and actual changes.
+// Icons: ✓ (changes pulled), = (no changes), ✗ (error), ⚠ (warning), ⊘ (skipped)
+func getPullStatusIconWithContext(status string, commitsBehind int) string {
 	switch status {
-	case "success":
-		return "✓"
+	case "success", "pulled":
+		// Only show ✓ if actual changes were pulled
+		if commitsBehind > 0 {
+			return "✓"
+		}
+		return "=" // No changes = up-to-date
 	case "up-to-date":
 		return "="
 	case "error":
@@ -372,4 +384,9 @@ func getPullStatusIcon(status string) string {
 	default:
 		return "•"
 	}
+}
+
+// getPullStatusIcon returns the icon for a status (deprecated: use getPullStatusIconWithContext).
+func getPullStatusIcon(status string) string {
+	return getPullStatusIconWithContext(status, 0)
 }

@@ -149,21 +149,22 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print result based on action
+	// Unified icon scheme: ✓ (success with changes), = (no changes), ⊘ (skipped)
 	switch result.Action {
 	case "cloned":
-		fmt.Printf("✅ %s\n", result.Message)
+		fmt.Printf("✓ %s\n", result.Message)
 	case "skipped":
-		fmt.Printf("⏭️  %s\n", result.Message)
+		fmt.Printf("⊘ %s\n", result.Message)
 	case "fetched":
-		fmt.Printf("📥 %s\n", result.Message)
+		fmt.Printf("✓ %s\n", result.Message)
 	case "pulled":
-		fmt.Printf("🔄 %s\n", result.Message)
+		fmt.Printf("✓ %s\n", result.Message)
 	case "reset":
-		fmt.Printf("🔄 %s\n", result.Message)
+		fmt.Printf("✓ %s\n", result.Message)
 	case "rebased":
-		fmt.Printf("🔄 %s\n", result.Message)
+		fmt.Printf("✓ %s\n", result.Message)
 	default:
-		fmt.Printf("✅ %s\n", result.Message)
+		fmt.Printf("✓ %s\n", result.Message)
 	}
 
 	return nil

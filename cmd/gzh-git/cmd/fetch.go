@@ -259,7 +259,9 @@ func displayFetchResults(result *repository.BulkFetchResult) {
 }
 
 func displayFetchRepositoryResult(repo repository.RepositoryFetchResult) {
-	icon := getStatusIcon(repo.Status)
+	// Determine icon based on actual result, not just status
+	// ✓ = changes fetched, = = no changes (up-to-date)
+	icon := getFetchStatusIconWithContext(repo.Status, repo.CommitsBehind)
 
 	// Build compact one-line format: icon path (branch) status duration
 	parts := []string{icon}
@@ -271,24 +273,47 @@ func displayFetchRepositoryResult(repo repository.RepositoryFetchResult) {
 	}
 	parts = append(parts, fmt.Sprintf("%-50s", pathPart))
 
-	// Show behind/ahead status compactly
+	// Show status compactly
+	// Status Display Guidelines:
+	//   - Changes occurred: "N↓ fetched" with ✓ icon
+	//   - No changes: "up-to-date" with = icon
 	statusStr := ""
-	if repo.CommitsBehind > 0 && repo.CommitsAhead > 0 {
-		statusStr = fmt.Sprintf("%d↓ %d↑", repo.CommitsBehind, repo.CommitsAhead)
-	} else if repo.CommitsBehind > 0 {
-		statusStr = fmt.Sprintf("%d↓", repo.CommitsBehind)
-	} else if repo.CommitsAhead > 0 {
-		statusStr = fmt.Sprintf("%d↑", repo.CommitsAhead)
-	} else if repo.Status == "up-to-date" {
-		statusStr = "up-to-date"
-	} else if repo.Status == "error" {
+	switch repo.Status {
+	case "success", "fetched", "updated":
+		if repo.CommitsBehind > 0 && repo.CommitsAhead > 0 {
+			statusStr = fmt.Sprintf("%d↓ %d↑ fetched", repo.CommitsBehind, repo.CommitsAhead)
+		} else if repo.CommitsBehind > 0 {
+			statusStr = fmt.Sprintf("%d↓ fetched", repo.CommitsBehind)
+		} else if repo.CommitsAhead > 0 {
+			statusStr = fmt.Sprintf("up-to-date %d↑", repo.CommitsAhead)
+		} else {
+			// No changes fetched - display as up-to-date for consistency
+			statusStr = "up-to-date"
+		}
+	case "up-to-date":
+		if repo.CommitsAhead > 0 {
+			statusStr = fmt.Sprintf("up-to-date %d↑", repo.CommitsAhead)
+		} else {
+			statusStr = "up-to-date"
+		}
+	case "error":
 		statusStr = "failed"
-	} else if repo.Status == "no-remote" {
+	case "no-remote":
 		statusStr = "no remote"
-	} else {
+	case "no-upstream":
+		statusStr = "no upstream"
+	case "would-fetch":
+		if repo.CommitsBehind > 0 {
+			statusStr = fmt.Sprintf("would fetch %d↓", repo.CommitsBehind)
+		} else {
+			statusStr = "would fetch"
+		}
+	case "skipped":
+		statusStr = "skipped"
+	default:
 		statusStr = repo.Status
 	}
-	parts = append(parts, fmt.Sprintf("%-15s", statusStr))
+	parts = append(parts, fmt.Sprintf("%-18s", statusStr))
 
 	// Duration
 	if repo.Duration > 0 {
@@ -308,12 +333,16 @@ func displayFetchRepositoryResult(repo repository.RepositoryFetchResult) {
 	}
 }
 
-func getStatusIcon(status string) string {
+// getFetchStatusIconWithContext returns the appropriate icon based on status and actual changes.
+// Icons: ✓ (changes fetched), = (no changes), ✗ (error), ⚠ (warning), ⊘ (skipped)
+func getFetchStatusIconWithContext(status string, commitsBehind int) string {
 	switch status {
-	case "success":
-		return "✓"
-	case "updated":
-		return "↓"
+	case "success", "fetched", "updated":
+		// Only show ✓ if actual changes were fetched
+		if commitsBehind > 0 {
+			return "✓"
+		}
+		return "=" // No changes = up-to-date
 	case "up-to-date":
 		return "="
 	case "error":
@@ -329,4 +358,9 @@ func getStatusIcon(status string) string {
 	default:
 		return "•"
 	}
+}
+
+// getStatusIcon returns the icon for a status (deprecated: use getFetchStatusIconWithContext).
+func getStatusIcon(status string) string {
+	return getFetchStatusIconWithContext(status, 0)
 }

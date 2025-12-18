@@ -933,11 +933,11 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 		return result
 	}
 
-	result.Status = StatusUpdated
+	result.Status = StatusPulled
 	result.Message = fmt.Sprintf("Successfully pulled %d commits", info.BehindBy)
 	result.Duration = time.Since(startTime)
 
-	logger.Info("repository updated", "path", result.RelativePath, "commits", info.BehindBy)
+	logger.Info("repository pulled", "path", result.RelativePath, "commits", info.BehindBy)
 
 	return result
 }
@@ -1147,8 +1147,9 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 		result.CommitsAhead = updatedInfo.AheadBy
 
 		// Update status based on behind/ahead state
+		// Use StatusFetched when changes were fetched, StatusUpToDate when no changes
 		if result.CommitsBehind > 0 {
-			result.Status = StatusUpdated
+			result.Status = StatusFetched
 			if result.CommitsAhead > 0 {
 				result.Message = fmt.Sprintf("Fetched updates: %d behind, %d ahead", result.CommitsBehind, result.CommitsAhead)
 			} else {
@@ -1162,8 +1163,8 @@ func (c *client) processFetchRepository(ctx context.Context, rootDir, repoPath s
 			result.Message = "Already up to date"
 		}
 	} else {
-		// Fallback if GetInfo fails
-		result.Status = StatusSuccess
+		// Fallback if GetInfo fails - assume fetched successfully
+		result.Status = StatusFetched
 		result.Message = "Successfully fetched from remote"
 	}
 
@@ -1512,17 +1513,19 @@ func (c *client) processPullRepository(ctx context.Context, rootDir, repoPath st
 	}
 
 	// Check if git pull reported "Already up to date"
+	// Use specific statuses: StatusPulled (changes pulled) vs StatusUpToDate (no changes)
 	outputStr := strings.ToLower(pullResult.Stdout + pullResult.Stderr)
 	if strings.Contains(outputStr, "already up to date") || strings.Contains(outputStr, "already up-to-date") {
 		result.Status = StatusUpToDate
 		result.Message = "Already up to date"
+	} else if result.CommitsBehind > 0 {
+		// Actual changes were pulled
+		result.Status = StatusPulled
+		result.Message = fmt.Sprintf("Successfully pulled %d commit(s) from remote", result.CommitsBehind)
 	} else {
-		result.Status = StatusSuccess
-		if result.CommitsBehind > 0 {
-			result.Message = fmt.Sprintf("Successfully pulled %d commit(s) from remote", result.CommitsBehind)
-		} else {
-			result.Message = "Successfully pulled from remote"
-		}
+		// No commits behind but pull succeeded (edge case)
+		result.Status = StatusUpToDate
+		result.Message = "Already up to date"
 	}
 	result.Duration = time.Since(startTime)
 
@@ -1865,12 +1868,14 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 		return result
 	}
 
-	result.Status = StatusSuccess
+	// Use specific statuses: StatusPushed (changes pushed) vs StatusUpToDate (no changes)
 	result.PushedCommits = info.AheadBy
 	if info.AheadBy > 0 {
+		result.Status = StatusPushed
 		result.Message = fmt.Sprintf("Successfully pushed %d commit(s) to %d remote(s)", info.AheadBy, len(remotes))
 	} else {
-		result.Message = fmt.Sprintf("Successfully pushed to %d remote(s)", len(remotes))
+		result.Status = StatusUpToDate
+		result.Message = "Already up to date"
 	}
 	result.Duration = time.Since(startTime)
 

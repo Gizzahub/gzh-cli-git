@@ -280,7 +280,9 @@ func displayPushResults(result *repository.BulkPushResult) {
 }
 
 func displayPushRepositoryResult(repo repository.RepositoryPushResult) {
-	icon := getPushStatusIcon(repo.Status)
+	// Determine icon based on actual result, not just status
+	// ✓ = changes pushed, = = no changes (up-to-date)
+	icon := getPushStatusIconWithContext(repo.Status, repo.PushedCommits)
 
 	// Build compact one-line format: icon path (branch) status duration
 	parts := []string{icon}
@@ -293,16 +295,20 @@ func displayPushRepositoryResult(repo repository.RepositoryPushResult) {
 	parts = append(parts, fmt.Sprintf("%-50s", pathPart))
 
 	// Show status compactly
+	// Status Display Guidelines:
+	//   - Changes occurred: "N↑ pushed" with ✓ icon
+	//   - No changes: "up-to-date" with = icon
 	statusStr := ""
 	switch repo.Status {
-	case "success":
+	case "success", "pushed":
 		if repo.PushedCommits > 0 {
 			statusStr = fmt.Sprintf("%d↑ pushed", repo.PushedCommits)
 		} else {
-			statusStr = "pushed"
+			// No changes pushed - display as up-to-date for consistency
+			statusStr = "up-to-date"
 		}
-	case "nothing-to-push":
-		statusStr = "nothing to push"
+	case "nothing-to-push", "up-to-date":
+		statusStr = "up-to-date"
 	case "would-push":
 		if repo.CommitsAhead > 0 {
 			statusStr = fmt.Sprintf("would push %d↑", repo.CommitsAhead)
@@ -347,11 +353,17 @@ func displayPushRepositoryResult(repo repository.RepositoryPushResult) {
 	}
 }
 
-func getPushStatusIcon(status string) string {
+// getPushStatusIconWithContext returns the appropriate icon based on status and actual changes.
+// Icons: ✓ (changes pushed), = (no changes), ✗ (error), ⚠ (warning), ⊘ (skipped)
+func getPushStatusIconWithContext(status string, pushedCommits int) string {
 	switch status {
-	case "success":
-		return "✓"
-	case "nothing-to-push":
+	case "success", "pushed":
+		// Only show ✓ if actual changes were pushed
+		if pushedCommits > 0 {
+			return "✓"
+		}
+		return "=" // No changes = up-to-date
+	case "nothing-to-push", "up-to-date":
 		return "="
 	case "error":
 		return "✗"
@@ -372,4 +384,9 @@ func getPushStatusIcon(status string) string {
 	default:
 		return "•"
 	}
+}
+
+// getPushStatusIcon returns the icon for a status (deprecated: use getPushStatusIconWithContext).
+func getPushStatusIcon(status string) string {
+	return getPushStatusIconWithContext(status, 0)
 }

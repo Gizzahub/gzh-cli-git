@@ -514,6 +514,102 @@ type RepositoryUpdateResult struct {
 	HasUncommittedChanges bool
 }
 
+// BulkSwitchOptions configures bulk repository branch switch operations
+type BulkSwitchOptions struct {
+	// Directory is the root directory to scan for repositories
+	Directory string
+
+	// Branch is the target branch to switch to (required)
+	Branch string
+
+	// Parallel is the number of concurrent workers (default: 5)
+	Parallel int
+
+	// MaxDepth is the maximum directory depth to scan (default: 1)
+	MaxDepth int
+
+	// DryRun performs simulation without actual changes
+	DryRun bool
+
+	// Verbose enables detailed logging
+	Verbose bool
+
+	// Create creates the branch if it doesn't exist
+	Create bool
+
+	// Force forces the switch even with uncommitted changes (dangerous)
+	Force bool
+
+	// IncludeSubmodules includes git submodules in the scan (default: false)
+	IncludeSubmodules bool
+
+	// IncludePattern is a regex pattern for repositories to include
+	IncludePattern string
+
+	// ExcludePattern is a regex pattern for repositories to exclude
+	ExcludePattern string
+
+	// Logger for operation feedback
+	Logger Logger
+
+	// ProgressCallback is called for each processed repository
+	ProgressCallback func(current, total int, repo string)
+}
+
+// BulkSwitchResult contains the results of a bulk switch operation
+type BulkSwitchResult struct {
+	// TotalScanned is the number of repositories found
+	TotalScanned int
+
+	// TotalProcessed is the number of repositories processed
+	TotalProcessed int
+
+	// Repositories contains individual repository results
+	Repositories []RepositorySwitchResult
+
+	// Duration is the total operation time
+	Duration time.Duration
+
+	// Summary contains status counts
+	Summary map[string]int
+
+	// TargetBranch is the branch that was switched to
+	TargetBranch string
+}
+
+// RepositorySwitchResult represents the result for a single repository switch
+type RepositorySwitchResult struct {
+	// Path is the repository path
+	Path string
+
+	// RelativePath is the path relative to scan root
+	RelativePath string
+
+	// Status is the operation status (switched, already-on-branch, dirty, error, etc.)
+	Status string
+
+	// Message is a human-readable status message
+	Message string
+
+	// Error if the operation failed
+	Error error
+
+	// Duration is how long this repository took to process
+	Duration time.Duration
+
+	// PreviousBranch is the branch before switching
+	PreviousBranch string
+
+	// CurrentBranch is the branch after switching (or current if not switched)
+	CurrentBranch string
+
+	// RemoteURL is the remote origin URL
+	RemoteURL string
+
+	// HasUncommittedChanges indicates if there were local changes preventing switch
+	HasUncommittedChanges bool
+}
+
 // BulkUpdate scans for repositories and updates them in parallel
 func (c *client) BulkUpdate(ctx context.Context, opts BulkUpdateOptions) (*BulkUpdateResult, error) {
 	startTime := time.Now()

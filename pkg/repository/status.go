@@ -80,6 +80,21 @@ const (
 
 	// StatusMergeInProgress indicates a merge operation is in progress.
 	StatusMergeInProgress = "merge-in-progress"
+
+	// StatusSwitched indicates the branch was successfully switched.
+	StatusSwitched = "switched"
+
+	// StatusAlreadyOnBranch indicates the repository is already on the target branch.
+	StatusAlreadyOnBranch = "already-on-branch"
+
+	// StatusBranchCreated indicates a new branch was created and switched to.
+	StatusBranchCreated = "branch-created"
+
+	// StatusWouldSwitch indicates the operation would switch (dry-run mode).
+	StatusWouldSwitch = "would-switch"
+
+	// StatusBranchNotFound indicates the target branch was not found.
+	StatusBranchNotFound = "branch-not-found"
 )
 
 // IsSuccessStatus returns true if the status indicates a successful operation.
@@ -87,7 +102,8 @@ func IsSuccessStatus(status string) bool {
 	switch status {
 	case StatusUpdated, StatusSuccess, StatusUpToDate,
 		StatusFetched, StatusPulled, StatusPushed,
-		StatusCloned, StatusRebased, StatusReset:
+		StatusCloned, StatusRebased, StatusReset,
+		StatusSwitched, StatusAlreadyOnBranch, StatusBranchCreated:
 		return true
 	default:
 		return false
@@ -97,7 +113,7 @@ func IsSuccessStatus(status string) bool {
 // IsDryRunStatus returns true if the status indicates a dry-run simulation.
 func IsDryRunStatus(status string) bool {
 	switch status {
-	case StatusWouldUpdate, StatusWouldFetch, StatusWouldPull, StatusWouldPush:
+	case StatusWouldUpdate, StatusWouldFetch, StatusWouldPull, StatusWouldPush, StatusWouldSwitch:
 		return true
 	default:
 		return false

@@ -49,6 +49,10 @@ type Client interface {
 	// This is useful for checking the working tree status of multiple repositories at once.
 	BulkStatus(ctx context.Context, opts BulkStatusOptions) (*BulkStatusResult, error)
 
+	// BulkSwitch scans for repositories and switches their branches in parallel.
+	// This is useful for switching branches across multiple repositories at once.
+	BulkSwitch(ctx context.Context, opts BulkSwitchOptions) (*BulkSwitchResult, error)
+
 	// IsRepository checks if the path points to a valid Git repository.
 	// Returns true if the path contains a .git directory or is a bare repository.
 	IsRepository(ctx context.Context, path string) bool

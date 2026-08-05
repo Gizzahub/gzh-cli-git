@@ -148,14 +148,12 @@ if out, err := cmd.Output(); err == nil {          // ← fail-open
 
 ### D2. `ParallelWorkflow`은 프로덕션 소비자가 없다
 
-이 태스크 §3은 결함 1의 소비자로 `pkg/branch/parallel.go:182`를 들었지만, 그 지점 자체가
-도달 불가다. `pkg/branch` 밖의 `branch.X` 참조를 전수 확인한 결과 사용되는 것은
-`NewService` `NewManager` `NewCleanupService` `NewWorktreeManager` `Worktree` 및
-옵션/리포트 타입뿐이다. `ParallelWorkflow` `GetActiveContexts` `DetectConflicts`는
-어디서도 호출되지 않는다.
+이 태스크 §3은 결함 1의 소비자로 `pkg/branch/parallel.go:182`를 들었지만 그 지점이
+도달 불가다. `pkg/branch` 밖의 참조를 전수 확인한 결과 `ParallelWorkflow`
+`GetActiveContexts` `DetectConflicts`는 어디서도 호출되지 않는다.
 
-그래도 고쳤다. `pkg/branch`는 공개 패키지이고, 다음 호출자가 생길 때 결함이 살아 있는
-것보다는 낫다. 다만 **심각도 근거를 "사용자 영향"에서 "공개 API 정확성"으로 정정**한다.
+그래도 고쳤다 — `pkg/branch`는 공개 패키지다. 다만 **심각도 근거를 "사용자 영향"에서
+"공개 API 정확성"으로 정정**한다.
 
 ### D3. `AA`/`DD` 회귀 테스트는 `U` 부재를 함께 단언한다
 
@@ -166,10 +164,12 @@ if out, err := cmd.Output(); err == nil {          // ← fail-open
 
 ## Follow-ups
 
-- `internal/parser` 전체 삭제 (§5) — 태스크 `12`
-- `pkg/branch/{manager,cleanup}.go`의 `Run` + `ExitCode` 미검사 잔여, 그리고
-  `worktreeManager.Get`이 `filepath.Abs`만 써서 심볼릭 링크 경로(macOS `/var` →
-  `/private/var`)의 워크트리를 못 찾는 문제 — 태스크 `13`
+- 태스크 `12` — `internal/parser` 전체 삭제 (§5)
+- 태스크 `13` — `pkg/branch/{manager,cleanup}.go`의 `Run`+`ExitCode` 미검사 잔여 10곳
+- 태스크 `14` — `worktreeManager.Get`의 `filepath.Abs`가 심볼릭 링크를 안 풀어
+  macOS `/var` 하위 워크트리를 못 찾는다. 13과 분리한 이유: 오류 보고가 아니라 경로
+  해석 결함이고 실측 재현이 이미 있다
+- 태스크 `15` — 13 조사 중 파생. `cleanup branch --gone` 무동작
 
 ## References
 

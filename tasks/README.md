@@ -74,6 +74,10 @@ tasks/
 |---|--------|---------|------|
 | 09 | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2 | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip |
 | 11 | [status-consumer-and-fixture-test-gaps](issue/11-status-consumer-and-fixture-test-gaps.md) | P2 | status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킴 |
+| 13 | [branch-manager-cleanup-fail-open-on-git-failure](issue/13-branch-manager-cleanup-fail-open-on-git-failure.md) | P2 | `manager.go`·`cleanup.go` 10곳이 실패한 git을 성공으로 읽음 + 삭제 실패가 사용자에게 도달하는 경로 없음 |
+| 14 | [worktree-get-does-not-resolve-symlinks](issue/14-worktree-get-does-not-resolve-symlinks.md) | P2 | `Get`이 `filepath.Abs`만 써서 심볼릭 링크 하위 워크트리를 못 찾음 — `Add`는 만들어 놓고 실패를 반환 (실측 재현됨) |
+| 15 | [cleanup-gone-flag-is-a-no-op](issue/15-cleanup-gone-flag-is-a-no-op.md) | P2 | `isBranchOrphaned`가 이미 제거된 `remotes/` 접두어를 검사 — `--gone`은 한 번도 동작한 적이 없다 |
+| 12 | [internal-parser-is-dead-code](issue/12-internal-parser-is-dead-code.md) | P3 | 임포터 0건인 패키지 8.9KB를 테스트 21KB가 검증 중. `pkg/doctor`가 `parseAheadBehind` 사본을 따로 씀 |
 | 08 | [conflict-guard-fail-open-on-git-failure](issue/08-conflict-guard-fail-open-on-git-failure.md) | P2 | **Scope 1·2·3·4 해소** — 3(`diagnostic_executor.go`의 "assume clean on error")은 P0 수정과 함께 제거. **같은 날 내린 P3 강등은 철회**(근거였던 "잔여는 표시 경로뿐"이 사실이 아니었다). 잔여: `pkg/repository` 전역의 `executor.Run`+`ExitCode`-only 지점 선별. 10의 Finding 2·3이 같은 계열 |
 | 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | `gzh-cli-core` 쪽 **수정 완료**(정렬 방출 + 100회 결정성 테스트, 미커밋). 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 — CI는 `GOWORK: off`로 pinned core를 쓴다 |
 
@@ -176,7 +180,8 @@ classifyHealth → HealthHealthy
 `7eecc6c`(branch/worktree + sync 프리뷰). 상세·결정 근거는 태스크 문서 참조.
 
 범위가 달라 분리한 잔여: **12**(죽은 `internal/parser` 삭제), **13**(`pkg/branch`
-`manager.go`·`cleanup.go` 잔여 fail-open + `worktreeManager.Get` 심볼릭 링크 미해석).
+`manager.go`·`cleanup.go` 잔여 fail-open 10곳), **14**(`worktreeManager.Get` 심볼릭
+링크 미해석 — 실측 재현됨). 13 조사 중 **15**(`cleanup branch --gone` 무동작) 파생.
 
 ---
 

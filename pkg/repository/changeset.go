@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/gizzahub/gzh-cli-gitforge/internal/porcelain"
 )
 
 // ChangeScope names the two-endpoint comparison that defines a change set.
@@ -110,7 +112,7 @@ func (c *client) collectChangeSet(ctx context.Context, repoPath string, scope Ch
 		return nil, fmt.Errorf("failed to read status: %w", err)
 	}
 
-	records, err := parsePorcelainZ(stdout)
+	records, err := porcelain.Parse(stdout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read status: %w", err)
 	}
@@ -121,11 +123,15 @@ func (c *client) collectChangeSet(ctx context.Context, repoPath string, scope Ch
 		code := rec.Code
 
 		entry := ChangeEntry{
-			Path:       rec.Path,
-			OldPath:    rec.OldPath,
-			Status:     parseGitStatus(code),
-			Untracked:  code == "??",
-			Conflicted: isUnmergedCode(code),
+			Path:      rec.Path,
+			OldPath:   rec.OldPath,
+			Status:    parseGitStatus(code),
+			Untracked: code == "??",
+			// Conflicts have to be recognized here, before anything stages them:
+			// `git add -A` marks a conflicted path as *resolved*, so the markers
+			// become ordinary content and the commit records them permanently.
+			// Reading the state beforehand is the only reliable guard.
+			Conflicted: porcelain.IsUnmerged(code),
 		}
 		// A conflicted path has index stages rather than a staged change;
 		// counting it as staged would let it slip past a staged-only filter.
@@ -394,35 +400,6 @@ func addUntrackedAdditions(repoPath string, cs *ChangeSet) {
 		}
 		cs.Additions += n
 	}
-}
-
-// isUnmergedCode reports whether a porcelain v1 "XY" status code denotes an
-// unmerged (conflicted) path.
-//
-// Git defines exactly seven unmerged combinations:
-//
-//	DD  both deleted     AU  added by us      UD  deleted by them
-//	UA  added by them    DU  deleted by us    AA  both added
-//	UU  both modified
-//
-// Every one of them carries a 'U' on at least one side except AA and DD, so the
-// set collapses to the two checks below.
-//
-// This matters because `git add -A` marks a conflicted path as *resolved*: once
-// staged, the conflict markers become ordinary content and the following commit
-// records them permanently. Detecting the state before staging is the only
-// reliable guard.
-func isUnmergedCode(code string) bool {
-	if len(code) < 2 {
-		return false
-	}
-
-	x, y := code[0], code[1]
-	if x == 'U' || y == 'U' {
-		return true
-	}
-
-	return (x == 'A' && y == 'A') || (x == 'D' && y == 'D')
 }
 
 // collectConflictedPaths returns the unmerged paths recorded in the index.

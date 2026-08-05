@@ -182,21 +182,3 @@ func TestBulkCommitDryRunReportsConflict(t *testing.T) {
 		t.Errorf("summary reports %d would-commit, want 0", result.Summary["would-commit"])
 	}
 }
-
-func TestIsUnmergedCode(t *testing.T) {
-	// The seven combinations git defines as unmerged, plus near-misses that
-	// must not trip the guard.
-	unmerged := []string{"DD", "AU", "UD", "UA", "DU", "AA", "UU"}
-	for _, code := range unmerged {
-		if !isUnmergedCode(code) {
-			t.Errorf("isUnmergedCode(%q) = false, want true", code)
-		}
-	}
-
-	merged := []string{"M ", " M", "MM", "A ", " D", "??", "R ", "AM", "AD", "", "U"}
-	for _, code := range merged {
-		if isUnmergedCode(code) {
-			t.Errorf("isUnmergedCode(%q) = true, want false", code)
-		}
-	}
-}

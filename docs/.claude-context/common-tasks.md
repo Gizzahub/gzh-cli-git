@@ -102,19 +102,31 @@ func (e *Executor) Run(ctx context.Context, args ...string) error {
 
 ### Where to add
 
-`pkg/repository/porcelain.go` — the single `git status --porcelain` parser for the
-package. Do not add a second one; the defect class this file exists to close was
-four call sites each re-parsing porcelain their own way.
+`internal/porcelain` — the single `git status --porcelain -z` parser for the whole
+module. Do not add a second one; the defect class it exists to close was every
+package that read git status re-parsing it their own way, each rediscovering the
+same bugs (collapsed untracked directories, C-quoted paths naming no real file,
+renames flattened into one nonexistent path).
+
+It stops at the record level on purpose. Projecting records onto a domain type is
+the caller's job, because the projections disagree: `pkg/repository`'s `Status`
+folds the XY pair into a union of file lists, while a conflict check needs the
+pair intact.
 
 ### Example
 
 ```go
-// pkg/repository/porcelain.go
+// Any package holding a *gitcmd.Executor
 stdout, err := c.runGit(ctx, repoPath, "status", "--porcelain", "-z", "-uall")
 if err != nil {
     return nil, fmt.Errorf("failed to read status: %w", err)
 }
-status, err := statusFromRecords(parsePorcelainZ(stdout))
+records, err := porcelain.Parse(stdout)
+if err != nil {
+    return nil, fmt.Errorf("failed to read status: %w", err)
+}
+
+// Inside pkg/repository, parseStatusZ composes both steps into a Status.
 ```
 
 ### Rules that are not optional

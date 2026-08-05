@@ -443,7 +443,7 @@ func (c *client) GetStatus(ctx context.Context, repo *Repository) (*Status, erro
 
 	c.logger.Debug("Getting repository status for %s", repo.Path)
 
-	// -z -uall, and runGit rather than RunOutput: see parsePorcelainZ for why all
+	// -z -uall, and runGit rather than RunOutput: see porcelain.Parse for why all
 	// three matter. RunOutput trims its result, which used to strip the leading
 	// space off the first record and reclassify an unstaged edit as a staged one.
 	output, err := c.runGit(ctx, repo.Path, "status", "--porcelain", "-z", "-uall")
@@ -483,6 +483,7 @@ func parseAheadBehind(output string) (ahead, behind int, err error) {
 	return ahead, behind, nil
 }
 
-// Porcelain status parsing lives in porcelain.go: parsePorcelainZ splits the
-// wire format, statusFromRecords projects it onto Status. Both are shared with
-// collectChangeSet and checkRepositoryState so the package has one parser.
+// Porcelain status parsing is split across two places: internal/porcelain owns
+// the wire format, shared with the packages outside this one that read the same
+// output, and porcelain.go here projects records onto Status. collectChangeSet
+// and checkRepositoryState go through the same pair.

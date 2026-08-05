@@ -1869,7 +1869,7 @@ func (c *client) checkRepositoryState(ctx context.Context, repoPath string) (*re
 		MergeInProgress:  IsMergeInProgress(repoPath),
 	}
 
-	// -z through runGit, for the three reasons parsePorcelainZ documents plus a
+	// -z through runGit, for the three reasons porcelain.Parse documents plus a
 	// fourth specific to this caller: runGit surfaces a non-zero exit, which the
 	// previous `err != nil` check could not. Executor.Run reports a failed git
 	// through Result.ExitCode and returns a nil error, so a git that died here

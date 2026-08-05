@@ -426,9 +426,15 @@ func renderColoredCompactStatus(ps *reposync.PostSyncStatus) string {
 	if ps.AheadBy > 0 {
 		parts = append(parts, tui.DirtyStyle.Render(fmt.Sprintf("↑%d", ps.AheadBy)))
 	}
-	if ps.HasConflicts {
+	// Mirrors reposync.FormatCompactStatus: a status that could not be read is
+	// its own token, because rendering neither "dirty" nor "conflict" is how a
+	// healthy repository looks.
+	switch {
+	case ps.StatusErr != nil:
+		parts = append(parts, tui.UnhealthyStyle.Render("unknown"))
+	case ps.HasConflicts:
 		parts = append(parts, tui.UnhealthyStyle.Render("conflict"))
-	} else if ps.IsDirty {
+	case ps.IsDirty:
 		parts = append(parts, tui.DirtyStyle.Render("dirty"))
 	}
 

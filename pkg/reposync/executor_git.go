@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/internal/porcelain"
 	repo "github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -362,18 +363,33 @@ func collectPostSyncStatus(ctx context.Context, repoPath string) *PostSyncStatus
 		}
 	}
 
-	// Porcelain status (dirty + conflicts)
-	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain")
-	if out, err := cmd.Output(); err == nil {
-		output := strings.TrimSpace(string(out))
-		if output != "" {
-			ps.IsDirty = true
-			for line := range strings.SplitSeq(output, "\n") {
-				if len(line) >= 2 && line[0] == 'U' || (len(line) >= 2 && line[1] == 'U') {
-					ps.HasConflicts = true
-					break
-				}
-			}
+	// Porcelain status (dirty + conflicts).
+	//
+	// This is the one read here whose failure is not safe to leave implicit. A
+	// missing branch name or ahead/behind count is visibly absent from the badge,
+	// but IsDirty and HasConflicts both default to false, which is exactly what a
+	// clean, conflict-free repository looks like. A user who reads "no conflict"
+	// off the screen and proceeds with the next sync is acting on a git error.
+	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain", "-z")
+
+	out, err := cmd.Output()
+	if err != nil {
+		ps.StatusErr = fmt.Errorf("git status failed: %w", err)
+		return ps
+	}
+
+	records, err := porcelain.Parse(string(out))
+	if err != nil {
+		ps.StatusErr = fmt.Errorf("git status failed: %w", err)
+		return ps
+	}
+
+	ps.IsDirty = len(records) > 0
+
+	for _, rec := range records {
+		if porcelain.IsUnmerged(rec.Code) {
+			ps.HasConflicts = true
+			break
 		}
 	}
 
@@ -396,9 +412,15 @@ func FormatCompactStatus(ps *PostSyncStatus) string {
 	if ps.AheadBy > 0 {
 		parts = append(parts, fmt.Sprintf("↑%d", ps.AheadBy))
 	}
-	if ps.HasConflicts {
+	// An unreadable working tree gets its own token rather than falling through
+	// to the clean case, where the absence of "dirty"/"conflict" would read as a
+	// positive result the status never established.
+	switch {
+	case ps.StatusErr != nil:
+		parts = append(parts, "unknown")
+	case ps.HasConflicts:
 		parts = append(parts, "conflict")
-	} else if ps.IsDirty {
+	case ps.IsDirty:
 		parts = append(parts, "dirty")
 	}
 

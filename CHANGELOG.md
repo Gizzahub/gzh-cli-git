@@ -143,6 +143,14 @@ line up, and all three are fixed:
 
 ### Fixed
 
+- The post-sync badge in `gz-git sync` and `gz-git workspace sync` recognizes every
+  conflicted state. It tested each porcelain status letter against `U`, which covers five
+  of git's seven unmerged codes; `AA` (both added) and `DD` (both deleted) contain no `U`,
+  so a repository left in either state rendered as `dirty` rather than `conflict`.
+- The post-sync badge no longer renders an unreadable repository as a healthy one. A
+  failed `git status` was discarded, leaving `IsDirty` and `HasConflicts` at `false` —
+  the exact shape of a clean, conflict-free repository, so the badge showed neither
+  `dirty` nor `conflict`. Such a repository now renders as `unknown`.
 - `branch.ParallelWorkflow` reports worktree changes as paths that exist. Its file list
   is compared across worktrees to find files two branches touch at once, so a value
   naming nothing on disk cannot match and the overlap it should reveal goes unreported.

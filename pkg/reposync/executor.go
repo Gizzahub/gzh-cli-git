@@ -32,6 +32,13 @@ type PostSyncStatus struct {
 	BehindBy     int
 	IsDirty      bool
 	HasConflicts bool
+
+	// StatusErr records a failure to read the working tree. IsDirty and
+	// HasConflicts are only meaningful when it is nil — their zero values are
+	// indistinguishable from a clean, conflict-free repository, so a renderer
+	// that ignores this field reports an unreadable repo as a healthy one.
+	// Same reasoning as WorkTreeUnknown in diagnostic.go.
+	StatusErr error
 }
 
 // Strategy defines how updates are performed.

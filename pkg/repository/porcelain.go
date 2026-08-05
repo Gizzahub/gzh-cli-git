@@ -41,15 +41,30 @@ type porcelainRecord struct {
 //
 // Pair -uall with it at the call site to stop git from collapsing an untracked
 // directory into a single `dir/` entry, which would report N new files as one.
-func parsePorcelainZ(stdout string) []porcelainRecord {
+//
+// Anything that is not a well-formed record is an error rather than a skip. The
+// only input this function may discard is the empty string, which -z produces by
+// construction: it terminates every record with a NUL, so the final split always
+// yields one trailing empty field. A non-empty record shorter than "XY P" is not
+// something git emits, so it means either that the format is not what this parser
+// believes it to be or that stdout was truncated — and that is the one signal
+// worth keeping, not the one worth swallowing. The rename-pairing defect fixed in
+// this same function is the worked example: it was caught only because the
+// orphaned source path happened to be long enough to reach applyStatusCode and
+// fail there. A three-byte path would have been eaten by a length check and the
+// bug would have surfaced only as a file quietly missing from a list.
+func parsePorcelainZ(stdout string) ([]porcelainRecord, error) {
 	records := strings.Split(stdout, "\x00")
 	out := make([]porcelainRecord, 0, len(records))
 
 	for i := 0; i < len(records); i++ {
-		// "XY PATH": two status characters, a space, then at least one byte of
-		// path. The trailing NUL leaves an empty final record that lands here too.
-		if len(records[i]) < 4 {
+		if records[i] == "" {
 			continue
+		}
+
+		// "XY PATH": two status characters, a space, then at least one byte of path.
+		if len(records[i]) < 4 {
+			return nil, fmt.Errorf("malformed porcelain record %q: want at least 4 bytes (XY, space, path)", records[i])
 		}
 
 		rec := porcelainRecord{Code: records[i][:2], Path: records[i][3:]}
@@ -57,16 +72,29 @@ func parsePorcelainZ(stdout string) []porcelainRecord {
 		// -z drops the " -> " separator and reverses the field order: the
 		// destination stays in this record and the source becomes the next one.
 		if isRenameOrCopyCode(rec.Code) {
-			if i+1 < len(records) {
-				i++
-				rec.OldPath = records[i]
+			// A missing source record is malformed, not an empty OldPath. Passing
+			// it through would report a rename with no origin, and the caller has
+			// no way to tell that from a rename genuinely lacking one — which git
+			// never emits.
+			//
+			// Checking i+1 against the length is not enough on its own: the split
+			// of a well-formed payload always ends in an empty element, so a
+			// truncated rename entry — the destination present, its source cut off
+			// — reads as "a next record exists" and adopts "" as the source. That
+			// is the exact silent pass this guard is here to stop, so the source
+			// must be present *and* non-empty.
+			if i+1 >= len(records) || records[i+1] == "" {
+				return nil, fmt.Errorf("porcelain record %q has status %q but no source path record follows", rec.Path, rec.Code)
 			}
+
+			i++
+			rec.OldPath = records[i]
 		}
 
 		out = append(out, rec)
 	}
 
-	return out
+	return out, nil
 }
 
 // isRenameOrCopyCode reports whether an entry is followed by a source-path record.
@@ -87,6 +115,22 @@ func parsePorcelainZ(stdout string) []porcelainRecord {
 // forms, including RM and RD where both columns are set.
 func isRenameOrCopyCode(code string) bool {
 	return code[0] == 'R' || code[0] == 'C' || code[1] == 'R' || code[1] == 'C'
+}
+
+// parseStatusZ turns raw `git status --porcelain -z` output into a Status.
+//
+// The two stages behind it are separate because collectChangeSet needs the
+// records themselves — it keeps the XY pair per path, which Status collapses —
+// but every caller that only wants a Status runs both stages back to back and
+// wraps either failure identically. Composing them here keeps that pairing in
+// one place rather than repeating it, correctly, at each call site.
+func parseStatusZ(stdout string) (*Status, error) {
+	records, err := parsePorcelainZ(stdout)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusFromRecords(records)
 }
 
 // statusFromRecords projects porcelain records onto the public Status view.

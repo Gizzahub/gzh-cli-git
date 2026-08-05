@@ -129,6 +129,17 @@ line up, and all three are fixed:
   the parse failure above into a silent wrong answer, and it predates it: a corrupt
   `.git/index` already produced `✓ All 1 repositories are healthy`, exit 0. Such a
   repository is now `HealthError`, exit 2, with the underlying git error preserved.
+- **Unparseable status output is an error again rather than a dropped record.** Folding
+  the two porcelain parsers into one silently relaxed the contract: the parser this
+  replaced (`internal/parser.ParseStatus`) rejected a line it could not read, while the
+  merged one skipped any record shorter than `XY P`. That guard could not tell the empty
+  element every `-z` payload ends with — a structural artifact of NUL-terminating each
+  record — from the one signal that says the output is not the format the parser assumes,
+  such as a truncated read. Commands now fail with the offending record quoted instead of
+  reporting a file list that is short by exactly the records they could not read. Two
+  narrower cases went the same way: a status code with no path, and a rename whose source
+  record is missing, which was passed through as a rename with an empty origin — a shape
+  git never emits and a caller cannot distinguish from a real one.
 
 ### Fixed
 

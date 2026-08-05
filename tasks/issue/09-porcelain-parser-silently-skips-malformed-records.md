@@ -1,6 +1,6 @@
 # ISSUE: `parsePorcelainZ`가 깨진 레코드를 조용히 버린다 (구 파서는 에러였음)
 
-- status: todo
+- status: done
 - priority: P2
 - category: repository
 - created_at: 2026-08-05T21:40:00+09:00
@@ -65,11 +65,39 @@ for i := 0; i < len(records); i++ {
 
 ## Acceptance Criteria
 
-- [ ] 비어있지 않은 4바이트 미만 레코드에 대해 non-nil error
-- [ ] 후행 NUL로 생기는 빈 레코드는 여전히 에러 없이 통과
-- [ ] rename 코드인데 다음 레코드가 없으면 non-nil error
-- [ ] 위 3건 각각 테이블 테스트 케이스 보유 (06에서 삭제된 "short record" 케이스 복원)
-- [ ] CHANGELOG 기재
+- [x] 비어있지 않은 4바이트 미만 레코드에 대해 non-nil error
+- [x] 후행 NUL로 생기는 빈 레코드는 여전히 에러 없이 통과
+- [x] rename 코드인데 다음 레코드가 없으면 non-nil error
+- [x] 위 3건 각각 테이블 테스트 케이스 보유 (06에서 삭제된 "short record" 케이스 복원)
+- [x] CHANGELOG 기재
+
+테이블 케이스 4건 추가: `trailing NUL does not become a phantom record`,
+`record too short to hold a status code`(`"M"`),
+`record with status code but no path`(`"?? "`), `rename with no source record`.
+
+## Decisions
+
+### Scope 3의 lookahead 가드는 길이 검사만으로 부족했다
+
+태스크가 제안한 `i+1 < len(records)`는 **항상 참**이다. `-z`는 모든 레코드를 NUL로
+끝내므로 `strings.Split`이 언제나 빈 원소 하나를 뒤에 남긴다. 소스가 잘린 rename
+(`"R  new.go\x00"` → `["R  new.go", ""]`)은 길이 검사를 통과한 뒤 그 빈 원소를
+`OldPath: ""`로 채택한다 — 태스크가 막으려던 바로 그 조용한 통과다.
+
+가드는 `i+1 >= len(records) || records[i+1] == ""`로 확정했다. git은 빈 경로를 내지
+않으므로 빈 소스 레코드를 거부해도 정상 입력을 잃지 않는다.
+
+같은 빈 문자열이 루프 상단에서는 정상(후행 NUL), lookahead에서는 비정상(잘린 소스)
+이라는 점이 이 결함의 구조다 — 한 값이 위치에 따라 두 의미를 갖는데 한쪽만
+처리했다. 회귀 방지를 위해 가드를 되돌려 `rename with no source record` 케이스가
+실제로 실패하는 것을 확인한 뒤 복원했다.
+
+### `parseStatusZ` 합성 헬퍼 추가
+
+`parsePorcelainZ`가 2값을 반환하게 되자 `GetStatus`와 `checkRepositoryState`가
+동일한 2단계 + 동일 문구 래핑을 복제하게 됐다. `parseStatusZ(stdout) (*Status, error)`
+로 묶어 호출부를 1단계로 되돌렸다. `collectChangeSet`은 레코드의 XY 쌍이 필요해
+(Status는 이를 합집합으로 뭉갠다) 여전히 `parsePorcelainZ`를 직접 쓴다.
 
 ## References
 

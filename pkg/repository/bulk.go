@@ -1887,7 +1887,7 @@ func (c *client) checkRepositoryState(ctx context.Context, repoPath string) (*re
 		return nil, fmt.Errorf("failed to get repository status: %w", err)
 	}
 
-	status, err := statusFromRecords(parsePorcelainZ(stdout))
+	status, err := parseStatusZ(stdout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repository status: %w", err)
 	}

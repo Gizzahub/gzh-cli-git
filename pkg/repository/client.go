@@ -452,7 +452,7 @@ func (c *client) GetStatus(ctx context.Context, repo *Repository) (*Status, erro
 	}
 
 	// Parse status output
-	status, err := statusFromRecords(parsePorcelainZ(output))
+	status, err := parseStatusZ(output)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse status output: %w", err)
 	}

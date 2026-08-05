@@ -571,13 +571,59 @@ func TestParseStatus(t *testing.T) {
 			output:  porcelainZ("X  weird.txt"),
 			wantErr: true,
 		},
+		{
+			// The trailing NUL every payload ends with produces one empty split
+			// element. It is the only input the parser may discard, so the case
+			// that proves it is tolerated has to be stated rather than left
+			// implicit in the other fixtures.
+			name:   "trailing NUL does not become a phantom record",
+			output: porcelainZ("M  only.go"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{},
+				StagedFiles:    []string{"only.go"},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// Shorter than "XY P". git has no way to emit this, so it means the
+			// format is not what the parser believes or stdout was truncated.
+			// Skipping it would hide both.
+			name:    "record too short to hold a status code",
+			output:  porcelainZ("M"),
+			wantErr: true,
+		},
+		{
+			// Three bytes: an XY pair and its separator with the path cut off.
+			// This is the length that the previous `len < 4 { continue }` guard
+			// swallowed, and it is indistinguishable from a truncated read.
+			name:    "record with status code but no path",
+			output:  porcelainZ("?? "),
+			wantErr: true,
+		},
+		{
+			// A rename destination whose source record was cut off. The split's
+			// trailing empty element makes this look like "a next record exists",
+			// so a length-only lookahead reports a rename with an empty origin.
+			name:    "rename with no source record",
+			output:  porcelainZ("R  renamed.go"),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := statusFromRecords(parsePorcelainZ(tt.output))
+			got, err := parseStatusZ(tt.output)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("statusFromRecords() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("parseStatusZ() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 

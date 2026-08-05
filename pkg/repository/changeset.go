@@ -110,9 +110,14 @@ func (c *client) collectChangeSet(ctx context.Context, repoPath string, scope Ch
 		return nil, fmt.Errorf("failed to read status: %w", err)
 	}
 
+	records, err := parsePorcelainZ(stdout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read status: %w", err)
+	}
+
 	cs := &ChangeSet{Scope: scope, Entries: make([]ChangeEntry, 0, 8)}
 
-	for _, rec := range parsePorcelainZ(stdout) {
+	for _, rec := range records {
 		code := rec.Code
 
 		entry := ChangeEntry{

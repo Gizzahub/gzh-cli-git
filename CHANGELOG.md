@@ -143,6 +143,19 @@ line up, and all three are fixed:
 
 ### Fixed
 
+- `branch.ParallelWorkflow` reports worktree changes as paths that exist. Its file list
+  is compared across worktrees to find files two branches touch at once, so a value
+  naming nothing on disk cannot match and the overlap it should reveal goes unreported.
+  Four shapes produced such values: a rename came back as the single string
+  `old.txt -> new.txt`; a path holding a space or a non-ASCII byte came back C-quoted,
+  escapes included; untracked files were listed despite the name; and an untracked
+  directory collapsed to one `dir/` entry, counting N new files as one path that is not
+  a file. It now reads `-z` through the shared parser and drops untracked entries.
+- `branch.ParallelWorkflow` no longer reports a worktree it could not read as clean.
+  A failed `git status` became `HasChanges: false`, an unreadable file list became an
+  empty one, a worktree that failed to build was dropped from the list without a signal,
+  and a failed conflict scan became `Conflicts: 0` — four separate fallbacks that all
+  land on the answer a caller acts on by doing nothing. Each is now an error.
 - `gz-git commit` no longer commits repositories with unresolved merge conflicts.
   `git add -A` marks conflicts as resolved, so `<<<<<<<` markers were staged as ordinary
   content and recorded into a two-parent merge commit — after which the repository

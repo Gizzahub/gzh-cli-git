@@ -248,7 +248,7 @@ func TestParseStatus(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// Same regression, deletion flavour: this is the shape that made
+			// Same regression, deletion flavor: this is the shape that made
 			// v0.7.0 report uncommitted_files=1 for two worktree-only deletes.
 			name:   "worktree-only delete as first record",
 			output: porcelainZ(" D a.txt", " D b.txt"),

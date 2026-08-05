@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/internal/porcelain"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -106,14 +107,21 @@ func (p *parallelWorkflow) GetActiveContexts(ctx context.Context, repo *reposito
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	// Build contexts
+	// Build contexts.
+	//
+	// A worktree that cannot be read is not dropped from the list. Every
+	// consumer of these contexts asks a question whose reassuring answer is the
+	// empty one — DetectConflicts reports the files two worktrees both touch,
+	// GetStatus counts the worktrees holding changes — so omitting a worktree
+	// silently is indistinguishable from that worktree being clean and
+	// conflict-free.
 	contexts := make([]*WorkContext, 0, len(worktrees))
 	for _, wt := range worktrees {
 		workCtx, err := p.buildWorkContext(ctx, wt)
 		if err != nil {
-			// Log error but continue with other worktrees
-			continue
+			return nil, fmt.Errorf("failed to read worktree %s: %w", wt.Path, err)
 		}
+
 		contexts = append(contexts, workCtx)
 	}
 
@@ -212,11 +220,14 @@ func (p *parallelWorkflow) GetStatus(ctx context.Context, repo *repository.Repos
 		return nil, fmt.Errorf("failed to get contexts: %w", err)
 	}
 
-	// Detect conflicts
+	// Detect conflicts.
+	//
+	// Falling back to an empty slice here reported Conflicts: 0, which is the
+	// same value a genuinely conflict-free set of worktrees produces and the one
+	// a caller reads as "nothing to look at".
 	conflicts, err := p.DetectConflicts(ctx, repo)
 	if err != nil {
-		// Continue without conflict detection
-		conflicts = []*Conflict{}
+		return nil, fmt.Errorf("failed to detect conflicts: %w", err)
 	}
 
 	// Count active worktrees
@@ -238,11 +249,15 @@ func (p *parallelWorkflow) GetStatus(ctx context.Context, repo *repository.Repos
 }
 
 // buildWorkContext builds a WorkContext from a Worktree.
-func (p *parallelWorkflow) buildWorkContext(ctx context.Context, wt *Worktree) (*WorkContext, error) { //nolint:unparam // error return kept for future use and consistent interface
-	// Check for uncommitted changes
+//
+// Both reads below used to mask their failure — a broken status became
+// HasChanges=false, and an unreadable file list became an empty one. Together
+// they turned any git failure into "this worktree is clean", which is precisely
+// the state the callers act on by doing nothing.
+func (p *parallelWorkflow) buildWorkContext(ctx context.Context, wt *Worktree) (*WorkContext, error) {
 	hasChanges, err := p.hasUncommittedChanges(ctx, wt.Path)
 	if err != nil {
-		hasChanges = false
+		return nil, err
 	}
 
 	// Get modified files if there are changes
@@ -250,7 +265,7 @@ func (p *parallelWorkflow) buildWorkContext(ctx context.Context, wt *Worktree) (
 	if hasChanges {
 		modifiedFiles, err = p.getModifiedFiles(ctx, wt.Path)
 		if err != nil {
-			modifiedFiles = []string{}
+			return nil, err
 		}
 	}
 
@@ -266,36 +281,74 @@ func (p *parallelWorkflow) buildWorkContext(ctx context.Context, wt *Worktree) (
 }
 
 // hasUncommittedChanges checks if a worktree has uncommitted changes.
+//
+// Plain --porcelain is adequate here and only here: the answer is whether the
+// output is empty, and neither directory collapsing nor C-quoting can turn an
+// empty result into a non-empty one or the reverse. Going through
+// internal/porcelain would unify the code without fixing anything.
 func (p *parallelWorkflow) hasUncommittedChanges(ctx context.Context, path string) (bool, error) {
 	result, err := p.executor.Run(ctx, path, "status", "--porcelain")
 	if err != nil {
 		return false, err
 	}
 
+	if result.ExitCode != 0 {
+		return false, fmt.Errorf("git status failed in %s: %s", path, strings.TrimSpace(result.Stderr))
+	}
+
 	return strings.TrimSpace(result.Stdout) != "", nil
 }
 
-// getModifiedFiles gets list of modified files in a worktree.
+// getModifiedFiles lists the tracked files a worktree has changed.
+//
+// Every path returned here is compared against paths from other worktrees to
+// find files two branches touch at once, so a value that names no file on disk
+// does not merely look wrong — it can never match, and the conflict it was
+// supposed to reveal goes unreported. The previous implementation produced three
+// such values:
+//
+//   - A rename came back as the single string "old.txt -> new.txt", because
+//     plain --porcelain renders both paths in one line. -z splits them into
+//     separate records, and the destination is the path that exists.
+//   - A path holding a space or a non-ASCII byte came back C-quoted
+//     (`"\303\251.md"`), quotes and escapes included. -z disables quoting.
+//   - Untracked files were included despite the name, and an untracked
+//     directory collapsed to one `dir/` entry, so N new files counted as one
+//     path that is not a file.
+//
+// Untracked files are now excluded outright rather than listed correctly: two
+// worktrees independently creating a file git does not track yet is not the
+// overlap this detector reports on. That is also why -uall is absent while the
+// rest of the module pairs it with -z — it only affects how untracked entries
+// are listed, so here it would buy a full recursive walk of every ignored tree
+// for entries that are dropped on the next line.
 func (p *parallelWorkflow) getModifiedFiles(ctx context.Context, path string) ([]string, error) {
-	result, err := p.executor.Run(ctx, path, "status", "--porcelain")
+	result, err := p.executor.Run(ctx, path, "status", "--porcelain", "-z")
 	if err != nil {
 		return nil, err
 	}
 
-	files := make([]string, 0)
-	lines := strings.SplitSeq(result.Stdout, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
+	// Run reports a failed git through ExitCode and leaves err nil unless the
+	// process could not start, so checking err alone would read a broken status
+	// as a worktree with nothing changed.
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("git status failed in %s: %s", path, strings.TrimSpace(result.Stderr))
+	}
+
+	records, err := porcelain.Parse(result.Stdout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read status in %s: %w", path, err)
+	}
+
+	files := make([]string, 0, len(records))
+	for _, rec := range records {
+		if rec.Code == "??" || rec.Code == "!!" {
 			continue
 		}
 
-		// Format: "XY filename" where XY is status code
-		// After TrimSpace, skip 2 chars for status, then TrimLeft space/tab
-		if len(line) > 2 {
-			filename := strings.TrimLeft(line[2:], " \t")
-			files = append(files, filename)
-		}
+		// Path is the destination for a rename or copy; OldPath holds the source,
+		// which no longer exists and cannot collide with anything.
+		files = append(files, rec.Path)
 	}
 
 	return files, nil

@@ -4,7 +4,7 @@
 - priority: P3
 - category: cross-repo (gzh-cli-core)
 - created_at: 2026-08-05T16:00:00+09:00
-- fixed_at: 2026-08-05T19:40:00+09:00 (gzh-cli-core 작업 트리, **미커밋**)
+- fixed_at: 2026-08-05T19:40:00+09:00 (gzh-cli-core `84a0f3d`, **미푸시**)
 - affects: v0.7.0 (gz-git `--format llm`)
 - spawned_from: `05-diff-output-untracked-visibility.md` (Follow-up #2)
 
@@ -136,8 +136,9 @@ FAIL
 
 ## 남은 절차 (순서 고정)
 
-1. `gzh-cli-core` 작업 트리의 변경 2건(`cli/llm_formatter.go`, `cli/llm_formatter_test.go`)을
-   커밋 → 푸시. **현재 미커밋 상태다.**
+1. ~~커밋~~ **완료** — `gzh-cli-core` `84a0f3d` *fix(cli): sort map keys in llm output*
+   (`cli/llm_formatter.go`, `cli/llm_formatter_test.go`, master).
+   **푸시는 아직이다.** 원격에 올라가야 2단계가 쓸 pseudo-version이 생긴다.
 2. `gzh-cli-gitforge`에서 `go get github.com/gizzahub/gzh-cli-core@<new-pseudo-version>`
    으로 `go.mod` 갱신.
 3. `GOWORK=off go test ./cmd/gz-git/cmd/ -run TestDiffLLM -count=20` 통과 확인.

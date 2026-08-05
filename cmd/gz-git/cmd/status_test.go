@@ -150,11 +150,11 @@ func TestDisplayDiagnosticResults_Formats(t *testing.T) {
 	report := &reposync.HealthReport{
 		Results: []reposync.RepoHealth{
 			{
-				Repo:           reposync.RepoSpec{TargetPath: "/tmp/a"},
-				HealthStatus:   reposync.HealthHealthy,
-				CurrentBranch:  "main",
-				Duration:       time.Millisecond,
-				FetchDuration:  time.Millisecond,
+				Repo:          reposync.RepoSpec{TargetPath: "/tmp/a"},
+				HealthStatus:  reposync.HealthHealthy,
+				CurrentBranch: "main",
+				Duration:      time.Millisecond,
+				FetchDuration: time.Millisecond,
 			},
 			{
 				Repo:           reposync.RepoSpec{TargetPath: "/tmp/b"},

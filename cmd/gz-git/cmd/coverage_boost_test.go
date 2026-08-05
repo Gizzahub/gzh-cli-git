@@ -27,20 +27,20 @@ func TestDisplayHealthRepositoryResult_AllDivergence(t *testing.T) {
 	}
 	for _, dt := range types {
 		h := reposync.RepoHealth{
-			Repo:             reposync.RepoSpec{TargetPath: "/tmp/repo-x"},
-			HealthStatus:     reposync.HealthWarning,
-			CurrentBranch:    "main",
-			DivergenceType:   dt,
-			AheadBy:          2,
-			BehindBy:         3,
-			ConflictFiles:    1,
-			WorkTreeStatus:   reposync.WorkTreeDirty,
-			ModifiedFiles:    2,
-			UntrackedFiles:   1,
-			Recommendation:   "pull --rebase",
-			Error:            errors.New("warn"),
-			Duration:         time.Millisecond * 20,
-			FetchDuration:    time.Millisecond * 10,
+			Repo:           reposync.RepoSpec{TargetPath: "/tmp/repo-x"},
+			HealthStatus:   reposync.HealthWarning,
+			CurrentBranch:  "main",
+			DivergenceType: dt,
+			AheadBy:        2,
+			BehindBy:       3,
+			ConflictFiles:  1,
+			WorkTreeStatus: reposync.WorkTreeDirty,
+			ModifiedFiles:  2,
+			UntrackedFiles: 1,
+			Recommendation: "pull --rebase",
+			Error:          errors.New("warn"),
+			Duration:       time.Millisecond * 20,
+			FetchDuration:  time.Millisecond * 10,
 		}
 		captureStdout(t, func() { displayHealthRepositoryResult(h) })
 	}
@@ -59,11 +59,11 @@ func TestPrintBulkCleanupBranchResult(t *testing.T) {
 	verbose = true
 	quiet = false
 	res := &repository.BulkCleanupResult{
-		TotalScanned:           4,
-		TotalProcessed:         4,
-		TotalBranchesAnalyzed:  10,
-		TotalBranchesDeleted:   2,
-		Duration:               time.Millisecond * 50,
+		TotalScanned:          4,
+		TotalProcessed:        4,
+		TotalBranchesAnalyzed: 10,
+		TotalBranchesDeleted:  2,
+		Duration:              time.Millisecond * 50,
 		Repositories: []repository.RepositoryCleanupResult{
 			{RelativePath: "a", Status: repository.StatusCleanedUp, Message: "cleaned", DeletedBranches: []string{"old"}},
 			{RelativePath: "b", Status: repository.StatusWouldCleanup, Message: "would", DeletedBranches: []string{"feat"}},

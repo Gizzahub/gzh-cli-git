@@ -193,7 +193,8 @@ func (c *client) processExecRepository(ctx context.Context, rootDir, repoPath st
 
 	cmd := exec.CommandContext(runCtx, opts.Command, opts.Args...) //nolint:gosec // intentional user-supplied argv, no shell
 	cmd.Dir = repoPath
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GZ_REPO_NAME="+filepath.Base(repoPath),
 		"GZ_REPO_PATH="+repoPath,
 	)

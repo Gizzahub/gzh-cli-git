@@ -33,9 +33,7 @@ On headless Linux without Secret Service, set/get/delete warn and fall back
 gracefully so CI and doctor keep working.`),
 }
 
-var (
-	tokenShowFull bool
-)
+var tokenShowFull bool
 
 var configTokenSetCmd = &cobra.Command{
 	Use:   "set <provider> <token>",

@@ -219,16 +219,16 @@ func displayPushResults(result *repository.BulkPushResult) {
 	}
 
 	RenderBulkResults(os.Stdout, BulkRenderConfig{
-		Title:          "=== Push Results ===",
-		Verb:           "Pushed",
-		Format:         pushFlags.Format,
-		Verbose:        verbose,
-		IssueStatuses:  issueStatuses,
-		FormatStatus:   formatPushStatus,
-		ChangesCount:   func(row BulkRenderRow) int { return row.PushedCommits },
+		Title:           "=== Push Results ===",
+		Verb:            "Pushed",
+		Format:          pushFlags.Format,
+		Verbose:         verbose,
+		IssueStatuses:   issueStatuses,
+		FormatStatus:    formatPushStatus,
+		ChangesCount:    func(row BulkRenderRow) int { return row.PushedCommits },
 		AlwaysShowError: func(row BulkRenderRow) bool { return isRefspecError(row.Err) },
-		SuccessMessage: "✓ All repositories pushed successfully",
-		ShowFooters:    true,
+		SuccessMessage:  "✓ All repositories pushed successfully",
+		ShowFooters:     true,
 	}, BulkRenderInput{
 		TotalScanned:   result.TotalScanned,
 		TotalProcessed: result.TotalProcessed,

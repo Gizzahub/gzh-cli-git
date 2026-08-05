@@ -32,15 +32,15 @@ type BulkRenderInput struct {
 
 // BulkRenderConfig configures command-specific rendering policy.
 type BulkRenderConfig struct {
-	Title          string
-	Verb           string
-	Format         string
-	Verbose        bool
-	IssueStatuses  map[string]bool
-	FormatStatus   func(row BulkRenderRow) string
-	ChangesCount   func(row BulkRenderRow) int
+	Title           string
+	Verb            string
+	Format          string
+	Verbose         bool
+	IssueStatuses   map[string]bool
+	FormatStatus    func(row BulkRenderRow) string
+	ChangesCount    func(row BulkRenderRow) int
 	AlwaysShowError func(row BulkRenderRow) bool
-	SuccessMessage string
+	SuccessMessage  string
 	// ShowFooters enables dirty-warning + auth-required footers (fetch/pull/push).
 	ShowFooters bool
 }

@@ -390,14 +390,14 @@ func TestIsValidBaseURL(t *testing.T) {
 		{"https is valid", "https://github.example.com", true},
 		{"http is valid", "http://ghe.insecure.local", true},
 		{"https with path is valid", "https://github.example.com/api/v3", true},
-			{"https with port is valid", "https://ghe.io:8443", true},
-			{"https without host rejected", "https://", false},
-			{"http without host rejected", "http://", false},
-			{"ftp scheme rejected", "ftp://github.example.com", false},
-			{"ssh scheme rejected", "ssh://git@github.example.com", false},
-			{"missing scheme rejected", "github.example.com", false},
-			{"javascript scheme rejected", "javascript:alert(1)", false},
-		}
+		{"https with port is valid", "https://ghe.io:8443", true},
+		{"https without host rejected", "https://", false},
+		{"http without host rejected", "http://", false},
+		{"ftp scheme rejected", "ftp://github.example.com", false},
+		{"ssh scheme rejected", "ssh://git@github.example.com", false},
+		{"missing scheme rejected", "github.example.com", false},
+		{"javascript scheme rejected", "javascript:alert(1)", false},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := IsValidBaseURL(tt.url); got != tt.want {

@@ -451,8 +451,6 @@ func checkTokenSources() []CheckResult {
 	}}
 }
 
-
-
 func checkSSHKeys() []CheckResult {
 	manager, err := config.NewManager()
 	if err != nil {

@@ -107,10 +107,10 @@ func TestBulkIssueStatusesTableDriven(t *testing.T) {
 func TestBulkFormatStatusUsed(t *testing.T) {
 	var buf bytes.Buffer
 	cfg := BulkRenderConfig{
-		Title:         "=== Fetch Results ===",
-		Format:        "compact",
-		IssueStatuses: issueStatusSet("error"),
-		FormatStatus:  func(row BulkRenderRow) string { return "FORMATTED:" + row.Path },
+		Title:          "=== Fetch Results ===",
+		Format:         "compact",
+		IssueStatuses:  issueStatusSet("error"),
+		FormatStatus:   func(row BulkRenderRow) string { return "FORMATTED:" + row.Path },
 		SuccessMessage: "✓ All repositories fetched successfully",
 	}
 	RenderBulkResults(&buf, cfg, sampleRenderInput())

@@ -42,6 +42,11 @@ type BulkCommitOptions struct {
 	// IncludeSubmodules includes git submodules in the scan
 	IncludeSubmodules bool
 
+	// AllowConflicted commits repositories that still have unmerged paths.
+	// Off by default: `git add -A` marks conflicts as resolved, so committing
+	// them writes conflict markers into history irreversibly.
+	AllowConflicted bool
+
 	// Verbose enables detailed logging
 	Verbose bool
 
@@ -72,6 +77,10 @@ type BulkCommitResult struct {
 
 	// TotalSkipped is the number of repositories skipped (clean or excluded)
 	TotalSkipped int
+
+	// TotalConflicted is the number of repositories left uncommitted because
+	// they still have unmerged paths
+	TotalConflicted int
 
 	// Repositories contains individual repository results
 	Repositories []RepositoryCommitResult
@@ -109,6 +118,14 @@ type RepositoryCommitResult struct {
 	// FilesChanged is the number of files changed
 	FilesChanged int
 
+	// TrackedFilesChanged, UntrackedFilesChanged and StagedFilesChanged break
+	// FilesChanged down. The untracked count is the one that used to be wrong:
+	// without -uall, `?? docs/` counted as a single file while the commit
+	// recorded every file beneath it.
+	TrackedFilesChanged   int
+	UntrackedFilesChanged int
+	StagedFilesChanged    int
+
 	// Additions is the number of lines added
 	Additions int
 
@@ -117,6 +134,10 @@ type RepositoryCommitResult struct {
 
 	// ChangedFiles is the list of changed files
 	ChangedFiles []string
+
+	// ConflictedFiles is the list of unmerged files. Non-empty means the
+	// repository was not committed (unless AllowConflicted was set).
+	ConflictedFiles []string
 
 	// Error if the operation failed
 	Error error
@@ -190,12 +211,27 @@ func (c *client) BulkCommit(ctx context.Context, opts BulkCommitOptions) (*BulkC
 	}
 	wg.Wait()
 
-	// Count dirty repositories
+	// Count dirty repositories. "conflicted" repos are deliberately excluded:
+	// they are never handed to Phase 2, so counting them as dirty would make the
+	// committed/dirty ratio look like a failure rather than a refusal.
 	for _, repo := range result.Repositories {
-		if repo.Status == "dirty" || repo.Status == "would-commit" {
+		switch repo.Status {
+		case "dirty", "would-commit":
 			result.TotalDirty++
+		case "conflicted":
+			result.TotalConflicted++
 		}
 	}
+
+	// Skipped counts repositories that were examined and left alone, so it is
+	// measured against the filtered set. TotalScanned is the pre-filter total, so
+	// using it counted every repository excluded by --include/--exclude as
+	// "skipped" — a repository that was never a candidate was reported as one
+	// that had nothing to do.
+	//
+	// This is computed before the dry-run return below; when it lived after it,
+	// a dry run always reported 0 skipped.
+	result.TotalSkipped = len(filteredRepos) - result.TotalDirty - result.TotalConflicted
 
 	// If dry-run, we're done with analysis
 	if opts.DryRun {
@@ -263,9 +299,6 @@ func (c *client) BulkCommit(ctx context.Context, opts BulkCommitOptions) (*BulkC
 	}
 	wg.Wait()
 
-	// Calculate skipped
-	result.TotalSkipped = result.TotalScanned - result.TotalDirty
-
 	result.Duration = time.Since(startTime)
 	c.updateCommitSummary(result)
 
@@ -297,8 +330,12 @@ func (c *client) analyzeRepositoryForCommit(ctx context.Context, rootDir, repoPa
 		result.Branch = strings.TrimSpace(branchResult.Stdout)
 	}
 
-	// Get status (staged + unstaged)
-	statusResult, err := c.executor.Run(ctx, repoPath, "status", "--porcelain")
+	// Collect the change set at HEAD scope — the exact set `git add -A` stages
+	// and the following commit records. Sharing collectChangeSet with BulkDiff is
+	// what makes `diff` and `commit --dry-run` agree; previously each parsed
+	// porcelain independently and reported different file counts for the same
+	// repository.
+	changes, err := c.collectChangeSet(ctx, repoPath, ScopeHead)
 	if err != nil {
 		result.Status = "error"
 		result.Error = err
@@ -306,23 +343,20 @@ func (c *client) analyzeRepositoryForCommit(ctx context.Context, rootDir, repoPa
 		return result
 	}
 
-	// Parse status
-	lines := strings.SplitSeq(statusResult.Stdout, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if len(line) >= 3 {
-			// Extract filename after status code (e.g., "M\tfilename" -> "filename")
-			// After TrimSpace, status code is 2 chars, followed by space or tab
-			// Use line[2:] to skip status, then TrimLeft to remove space/tab
-			file := strings.TrimLeft(line[2:], " \t")
-			result.ChangedFiles = append(result.ChangedFiles, file)
+	var porcelainConflicts []string
+	for _, entry := range changes.Entries {
+		result.ChangedFiles = append(result.ChangedFiles, entry.Path)
+		if entry.Conflicted {
+			porcelainConflicts = append(porcelainConflicts, entry.Path)
 		}
 	}
 
 	result.FilesChanged = len(result.ChangedFiles)
+	result.TrackedFilesChanged = changes.TrackedCount
+	result.UntrackedFilesChanged = changes.UntrackedCount
+	result.StagedFilesChanged = changes.StagedCount
+	result.Additions = changes.Additions
+	result.Deletions = changes.Deletions
 
 	if result.FilesChanged == 0 {
 		result.Status = "clean"
@@ -330,21 +364,50 @@ func (c *client) analyzeRepositoryForCommit(ctx context.Context, rootDir, repoPa
 		return result
 	}
 
+	// A repository can look dirty and still have nothing to commit. `MM f.txt`
+	// means the index differs from HEAD and the worktree differs from the index;
+	// if the worktree happens to match HEAD, the net change against HEAD is empty
+	// and `git add -A && git commit` fails with "nothing to commit". Predicting
+	// "would-commit" for it turned a deterministic failure into a surprise —
+	// and, because the failure arrived in phase 2, one that exited 0.
+	//
+	// Conflicts are exempt: an unmerged path has no HEAD delta until it is
+	// resolved, and the guard below must still refuse it rather than call it
+	// clean.
+	if changes.DiffFileCount == 0 && changes.UntrackedCount == 0 && changes.ConflictCount == 0 {
+		result.Status = "clean"
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	// Guard against committing an unresolved merge. `executeCommit` runs
+	// `git add -A`, which git treats as "conflict resolved": the <<<<<<< markers
+	// would be staged as ordinary content and, because .git/MERGE_HEAD still
+	// exists, recorded in a two-parent merge commit. The repository then reports
+	// clean, so the damage is effectively undetectable after the fact.
+	if len(porcelainConflicts) > 0 {
+		// Porcelain paths may be C-quoted; ask the index for the real ones.
+		result.ConflictedFiles = c.collectConflictedPaths(ctx, repoPath)
+		if len(result.ConflictedFiles) == 0 {
+			result.ConflictedFiles = porcelainConflicts
+		}
+	}
+
+	if len(result.ConflictedFiles) > 0 && !opts.AllowConflicted {
+		result.Status = "conflicted"
+		result.Error = fmt.Errorf(
+			"%d unmerged path(s) — resolve the merge first, or re-run with --allow-conflicted: %s",
+			len(result.ConflictedFiles), strings.Join(result.ConflictedFiles, ", "),
+		)
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
 	result.Status = "dirty"
 
-	// Get diff stats
-	diffResult, err := c.executor.Run(ctx, repoPath, "diff", "--stat", "--cached")
-	if err == nil {
-		result.Additions, result.Deletions = parseDiffStats(diffResult.Stdout)
-	}
-
-	// Also check unstaged changes
-	diffUnstagedResult, err := c.executor.Run(ctx, repoPath, "diff", "--stat")
-	if err == nil {
-		additions, deletions := parseDiffStats(diffUnstagedResult.Stdout)
-		result.Additions += additions
-		result.Deletions += deletions
-	}
+	// Line counts came from the change set above. The previous code summed
+	// `--stat --cached` and `--stat`, which double-counts any file that is both
+	// staged and modified again in the worktree.
 
 	// Generate suggested message
 	if opts.MessageGenerator != nil {
@@ -469,26 +532,6 @@ func inferScopeFromFiles(files []string) string {
 	scope = strings.TrimPrefix(scope, "cmd/")
 
 	return scope
-}
-
-// parseDiffStats parses git diff --stat output.
-func parseDiffStats(output string) (additions, deletions int) {
-	lines := strings.SplitSeq(output, "\n")
-	for line := range lines {
-		if strings.Contains(line, "changed") {
-			parts := strings.SplitSeq(line, ",")
-			for part := range parts {
-				part = strings.TrimSpace(part)
-				if strings.Contains(part, "insertion") {
-					_, _ = fmt.Sscanf(part, "%d", &additions) //nolint:errcheck // Sscanf on a known numeric string is best-effort; zero value on failure is acceptable
-				}
-				if strings.Contains(part, "deletion") {
-					_, _ = fmt.Sscanf(part, "%d", &deletions) //nolint:errcheck // Sscanf on a known numeric string is best-effort; zero value on failure is acceptable
-				}
-			}
-		}
-	}
-	return
 }
 
 // updateCommitSummary updates the summary counts.

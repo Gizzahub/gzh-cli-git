@@ -1,0 +1,43 @@
+{
+  "total_scanned": 2,
+  "total_with_changes": 1,
+  "total_clean": 1,
+  "duration_ms": 1500,
+  "summary": {
+    "clean": 1,
+    "has-changes": 1
+  },
+  "repositories": [
+    {
+      "path": "repoA",
+      "branch": "master",
+      "status": "has-changes",
+      "scope": "head",
+      "files_changed": 4,
+      "tracked_files_changed": 4,
+      "staged_files_changed": 1,
+      "additions": 12,
+      "deletions": 4,
+      "diff_summary": "4 files changed, 12 insertions(+), 4 deletions(-)",
+      "diff_content": "diff --git a/tracked1.txt b/tracked1.txt\n@@ -1 +1 @@\n-old\n+new\n",
+      "changed_files": [
+        {
+          "path": "tracked1.txt",
+          "status": "M"
+        },
+        {
+          "path": "renamed.txt",
+          "status": "R",
+          "old_path": "original.txt"
+        }
+      ],
+      "duration_ms": 200
+    },
+    {
+      "path": "repoB",
+      "branch": "develop",
+      "status": "clean",
+      "duration_ms": 100
+    }
+  ]
+}

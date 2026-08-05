@@ -400,44 +400,6 @@ func TestParseGitStatus(t *testing.T) {
 	}
 }
 
-func TestExtractDiffSummaryLine(t *testing.T) {
-	tests := []struct {
-		name     string
-		output   string
-		expected string
-	}{
-		{
-			name:     "Normal diff stat",
-			output:   " README.md | 2 ++\n 1 file changed, 2 insertions(+)",
-			expected: "1 file changed, 2 insertions(+)",
-		},
-		{
-			name:     "Multiple files",
-			output:   " a.go | 5 +++++\n b.go | 3 ---\n 2 files changed, 5 insertions(+), 3 deletions(-)",
-			expected: "2 files changed, 5 insertions(+), 3 deletions(-)",
-		},
-		{
-			name:     "Empty output",
-			output:   "",
-			expected: "",
-		},
-		{
-			name:     "No summary line",
-			output:   "some random output\n no summary here",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractDiffSummaryLine(tt.output)
-			if result != tt.expected {
-				t.Errorf("Expected summary '%s', got '%s'", tt.expected, result)
-			}
-		})
-	}
-}
-
 func TestBulkDiffContextCancellation(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -1,0 +1,44 @@
+TOTAL_SCANNED: 2
+TOTAL_WITH_CHANGES: 1
+TOTAL_CLEAN: 1
+DURATION_MS: 1500
+SUMMARY:
+  clean: 1
+  has-changes: 1
+REPOSITORIES:
+  [0]
+    PATH: repoA
+    BRANCH: master
+    STATUS: has-changes
+    SCOPE: head
+    FILES_CHANGED: 4
+    TRACKED_FILES_CHANGED: 4
+    UNTRACKED_FILES_CHANGED: 3
+    STAGED_FILES_CHANGED: 1
+    ADDITIONS: 12
+    DELETIONS: 4
+    DIFF_SUMMARY: 7 files changed, 12 insertions(+), 4 deletions(-)
+    DIFF_CONTENT:
+diff --git a/tracked1.txt b/tracked1.txt
+@@ -1 +1 @@
+-old
++new
+    CHANGED_FILES:
+      [0]
+        PATH: tracked1.txt
+        STATUS: M
+      [1]
+        PATH: renamed.txt
+        STATUS: R
+        OLD_PATH: original.txt
+    UNTRACKED_FILES: docs/adr/0005.md | docs/adr/0006.md | tasks/todo.md
+    OMITTED_FILES:
+      [0]
+        PATH: tasks/todo.md
+        REASON: too-large
+    DURATION_MS: 200
+  [1]
+    PATH: repoB
+    BRANCH: develop
+    STATUS: clean
+    DURATION_MS: 100

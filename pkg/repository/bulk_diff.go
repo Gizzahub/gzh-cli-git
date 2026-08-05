@@ -6,7 +6,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -96,8 +95,23 @@ type RepositoryDiffResult struct {
 	// DiffSummary is a short summary of changes
 	DiffSummary string
 
-	// FilesChanged is the number of files changed
+	// FilesChanged is the number of tracked files that differ from the scope's
+	// base. It equals TrackedFilesChanged and deliberately excludes untracked
+	// files, preserving the meaning this key has always had for diff. The full
+	// set a commit would record is TrackedFilesChanged + UntrackedFilesChanged.
 	FilesChanged int
+
+	// TrackedFilesChanged, UntrackedFilesChanged and StagedFilesChanged name the
+	// three counts separately, so a caller can tell why diff and commit report
+	// the numbers they do instead of having to guess which set each one means.
+	// StagedFilesChanged overlaps the other two rather than partitioning them.
+	TrackedFilesChanged   int
+	UntrackedFilesChanged int
+	StagedFilesChanged    int
+
+	// Scope names the comparison these numbers describe ("head", "staged" or
+	// "worktree"). See ChangeScope.
+	Scope string
 
 	// Additions is the number of lines added
 	Additions int
@@ -111,6 +125,11 @@ type RepositoryDiffResult struct {
 	// UntrackedFiles is the list of untracked files
 	UntrackedFiles []string
 
+	// OmittedFiles lists untracked files whose content was left out of
+	// DiffContent, with the reason. Never silently empty: every skip in the
+	// untracked reader is recorded here.
+	OmittedFiles []OmittedFile
+
 	// Truncated indicates if the diff was truncated due to size limits
 	Truncated bool
 
@@ -123,6 +142,16 @@ type RepositoryDiffResult struct {
 
 // GetStatus returns the status for summary calculation.
 func (r RepositoryDiffResult) GetStatus() string { return r.Status }
+
+// OmittedFile records an untracked file that was left out of the diff body.
+type OmittedFile struct {
+	// Path is the repository-relative file path
+	Path string
+
+	// Reason is why the content was omitted: "not-regular-file", "too-large",
+	// or "read-error"
+	Reason string
+}
 
 // ChangedFile represents a changed file with its status.
 type ChangedFile struct {
@@ -244,8 +273,17 @@ func (c *client) getRepositoryDiff(ctx context.Context, rootDir, repoPath string
 		result.Branch = strings.TrimSpace(branchResult.Stdout)
 	}
 
-	// Get status to identify changed files
-	statusResult, err := c.executor.Run(ctx, repoPath, "status", "--porcelain")
+	// Collect the change set. Default scope is HEAD → worktree (untracked
+	// included), which is the set `commit` actually records; --staged narrows it
+	// to the index. Previously this path compared the index against the worktree
+	// and never said so, which is why a fully staged repository listed files but
+	// produced an empty diff body.
+	scope := ScopeHead
+	if opts.Staged {
+		scope = ScopeStagedOnly
+	}
+
+	changes, err := c.collectChangeSet(ctx, repoPath, scope)
 	if err != nil {
 		result.Status = "error"
 		result.Error = err
@@ -253,51 +291,28 @@ func (c *client) getRepositoryDiff(ctx context.Context, rootDir, repoPath string
 		return result
 	}
 
-	// Parse status output
-	lines := strings.SplitSeq(statusResult.Stdout, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
+	for _, entry := range changes.Entries {
+		if entry.Untracked {
+			result.UntrackedFiles = append(result.UntrackedFiles, entry.Path)
 			continue
 		}
-		if len(line) < 3 {
-			continue
-		}
-
-		statusCode := line[:2]
-		filePath := strings.TrimLeft(line[2:], " \t")
-
-		// Handle renamed files (R oldpath -> newpath)
-		if strings.Contains(filePath, " -> ") {
-			parts := strings.Split(filePath, " -> ")
-			if len(parts) == 2 {
-				result.ChangedFiles = append(result.ChangedFiles, ChangedFile{
-					Path:    parts[1],
-					OldPath: parts[0],
-					Status:  "R",
-				})
-				continue
-			}
-		}
-
-		// Untracked files
-		if statusCode == "??" {
-			result.UntrackedFiles = append(result.UntrackedFiles, filePath)
-			continue
-		}
-
-		// Parse status code
-		status := parseGitStatus(statusCode)
 		result.ChangedFiles = append(result.ChangedFiles, ChangedFile{
-			Path:   filePath,
-			Status: status,
+			Path:    entry.Path,
+			OldPath: entry.OldPath,
+			Status:  entry.Status,
 		})
 	}
 
-	result.FilesChanged = len(result.ChangedFiles)
+	result.Scope = string(scope)
+	result.FilesChanged = changes.TrackedCount
+	result.TrackedFilesChanged = changes.TrackedCount
+	result.UntrackedFilesChanged = changes.UntrackedCount
+	result.StagedFilesChanged = changes.StagedCount
+	result.Additions = changes.Additions
+	result.Deletions = changes.Deletions
 
 	// If no changes, mark as clean
-	if result.FilesChanged == 0 && len(result.UntrackedFiles) == 0 {
+	if len(changes.Entries) == 0 {
 		result.Status = "clean"
 		result.Duration = time.Since(startTime)
 		return result
@@ -305,22 +320,15 @@ func (c *client) getRepositoryDiff(ctx context.Context, rootDir, repoPath string
 
 	result.Status = "has-changes"
 
-	// Build diff command
-	diffArgs := []string{"diff"}
-	if opts.Staged {
-		diffArgs = append(diffArgs, "--cached")
-	}
-	diffArgs = append(diffArgs, fmt.Sprintf("--unified=%d", opts.ContextLines))
-
-	// Get diff content
-	diffResult, err := c.executor.Run(ctx, repoPath, diffArgs...)
+	// Get diff content for the same scope the change set was collected in
+	diffContent, err := c.runScopedDiff(ctx, repoPath, scope, fmt.Sprintf("--unified=%d", opts.ContextLines))
 	if err != nil {
 		result.Error = fmt.Errorf("failed to get diff: %w", err)
 		result.Duration = time.Since(startTime)
 		return result
 	}
 
-	result.DiffContent = diffResult.Stdout
+	result.DiffContent = diffContent
 
 	// Truncate if too large
 	if len(result.DiffContent) > opts.MaxDiffSize {
@@ -328,42 +336,11 @@ func (c *client) getRepositoryDiff(ctx context.Context, rootDir, repoPath string
 		result.Truncated = true
 	}
 
-	// Get diff stats
-	statsArgs := []string{"diff", "--stat"}
-	if opts.Staged {
-		statsArgs = append(statsArgs, "--cached")
-	}
-	statsResult, err := c.executor.Run(ctx, repoPath, statsArgs...)
-	if err == nil {
-		result.Additions, result.Deletions = parseDiffStats(statsResult.Stdout)
-		result.DiffSummary = extractDiffSummaryLine(statsResult.Stdout)
-	}
+	result.DiffSummary = formatDiffSummary(changes)
 
 	// Include untracked file contents if requested
 	if opts.IncludeUntracked && len(result.UntrackedFiles) > 0 {
-		for _, file := range result.UntrackedFiles {
-			if result.Truncated {
-				break
-			}
-			// Read untracked file directly from filesystem
-			content, err := os.ReadFile(filepath.Join(repoPath, file))
-			if err != nil {
-				continue
-			}
-			contentStr := string(content)
-			lines := strings.Split(contentStr, "\n")
-			var diffLines strings.Builder
-			for _, l := range lines {
-				diffLines.WriteString("+" + l + "\n")
-			}
-			lineCount := len(lines)
-			untrackedDiff := fmt.Sprintf("\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n%s", file, lineCount, diffLines.String())
-			if len(result.DiffContent)+len(untrackedDiff) > opts.MaxDiffSize {
-				result.Truncated = true
-				break
-			}
-			result.DiffContent += untrackedDiff
-		}
+		c.appendUntrackedDiffs(repoPath, &result, opts)
 	}
 
 	result.Duration = time.Since(startTime)
@@ -401,16 +378,32 @@ func parseGitStatus(code string) string {
 	return "?" // Unknown
 }
 
-// extractDiffSummaryLine extracts the summary line from git diff --stat output.
-func extractDiffSummaryLine(output string) string {
-	lines := strings.Split(output, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if strings.Contains(line, "changed") {
-			return line
-		}
+// formatDiffSummary renders git's familiar one-line stat summary from exact
+// numstat counts, rather than scraping it back out of `--stat` prose. The prose
+// form is localized and width-limited, so parsing it was never reliable.
+func formatDiffSummary(cs *ChangeSet) string {
+	if cs.TrackedCount == 0 && cs.UntrackedCount == 0 {
+		return ""
 	}
-	return ""
+
+	parts := []string{fmt.Sprintf("%s changed", pluralize(cs.TrackedCount+cs.UntrackedCount, "file"))}
+	if cs.Additions > 0 {
+		parts = append(parts, pluralize(cs.Additions, "insertion")+"(+)")
+	}
+	if cs.Deletions > 0 {
+		parts = append(parts, pluralize(cs.Deletions, "deletion")+"(-)")
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// pluralize renders "1 file" / "2 files" the way git does.
+func pluralize(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // updateDiffSummary updates the summary counts.

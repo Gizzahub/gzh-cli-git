@@ -1,0 +1,4 @@
+
+Diff 2 repos  [⚠1 changed  ✓1 clean]  1.5s
+  ⚠ repoA                                    (master)  4 files (+3 untracked)   +12/-4     7 files changed, 12 insertions(+), 4 deletions(-)
+      ⚠ 1 untracked file omitted from the diff body (--verbose for reasons)

@@ -1,0 +1,22 @@
+
+=== Bulk Diff Results ===
+Total scanned:     2 repositories
+With changes:      1 repositories
+Clean:             1 repositories
+Duration:          1.5s
+
+
+⚠ === repoA (master) ===
+  7 files changed, 12 insertions(+), 4 deletions(-)
+  Changed files:
+    M tracked1.txt
+    R original.txt → renamed.txt
+  Untracked files:
+    ? docs/adr/0005.md
+    ? docs/adr/0006.md
+    ? tasks/todo.md
+  ⚠ 1 untracked file omitted from the diff body:
+    ! tasks/todo.md (too-large)
+
+✓ === repoB (develop) ===
+  No changes

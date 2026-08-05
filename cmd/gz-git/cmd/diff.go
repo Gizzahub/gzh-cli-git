@@ -191,8 +191,12 @@ func displayDiffResults(result *repository.BulkDiffResult) {
 			}
 			icon := getDiffStatusIcon(repo.Status)
 			changes := fmt.Sprintf("+%d/-%d", repo.Additions, repo.Deletions)
-			fmt.Printf("  %s %-40s (%s)  %d files  %-10s %s\n",
-				icon, repo.RelativePath, repo.Branch, repo.FilesChanged, changes, repo.DiffSummary)
+			fmt.Printf("  %s %-40s (%s)  %-24s %-10s %s\n",
+				icon, repo.RelativePath, repo.Branch, formatDiffFileCount(repo), changes, repo.DiffSummary)
+
+			if note := omittedNote(repo); note != "" {
+				fmt.Printf("      %s (--verbose for reasons)\n", note)
+			}
 		}
 
 		if result.TotalWithChanges == 0 {
@@ -236,8 +240,19 @@ func displayDiffResultsCompact(result *repository.BulkDiffResult) {
 		return
 	}
 
-	fmt.Printf("%-40s %-12s %-8s %-8s %s\n", "Repository", "Branch", "Files", "+/-", "Summary")
-	fmt.Println(strings.Repeat("-", 90))
+	// The untracked column only appears when some repository has untracked
+	// files. A column of zeroes would be pure noise on the common case, and the
+	// "Files" heading only becomes ambiguous once a second file count sits next
+	// to it — which is exactly when it is renamed to "Tracked".
+	showUntracked := anyUntracked(result)
+	if showUntracked {
+		fmt.Printf("%-40s %-12s %-8s %-10s %-8s %s\n",
+			"Repository", "Branch", "Tracked", "Untracked", "+/-", "Summary")
+		fmt.Println(strings.Repeat("-", 100))
+	} else {
+		fmt.Printf("%-40s %-12s %-8s %-8s %s\n", "Repository", "Branch", "Files", "+/-", "Summary")
+		fmt.Println(strings.Repeat("-", 90))
+	}
 
 	for _, repo := range result.Repositories {
 		if repo.Status == "clean" {
@@ -258,10 +273,67 @@ func displayDiffResultsCompact(result *repository.BulkDiffResult) {
 		if repo.Truncated {
 			summary += " [truncated]"
 		}
+		if n := len(repo.OmittedFiles); n > 0 {
+			summary += fmt.Sprintf(" [%d omitted]", n)
+		}
+
+		if showUntracked {
+			fmt.Printf("%s %-38s %-12s %-8d %-10d %-8s %s\n",
+				icon, path, repo.Branch, repo.FilesChanged, repo.UntrackedFilesChanged, changes, summary)
+
+			continue
+		}
 
 		fmt.Printf("%s %-38s %-12s %-8d %-8s %s\n",
 			icon, path, repo.Branch, repo.FilesChanged, changes, summary)
 	}
+}
+
+// anyUntracked reports whether any repository in the result has untracked
+// changes, which decides whether the compact table grows its extra column.
+func anyUntracked(result *repository.BulkDiffResult) bool {
+	for _, repo := range result.Repositories {
+		if repo.UntrackedFilesChanged > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// formatDiffFileCount renders the file count for the default format, naming the
+// untracked share explicitly.
+//
+// FilesChanged counts tracked paths only, because that is what `git diff` can
+// compare. `gz-git commit` runs `git add -A` and records the untracked files
+// too, so a default-format reader who took this number as "what will be
+// committed" was systematically short — the reported case had diff say 4 where
+// the commit recorded 7. The suffix is dropped entirely when there are no
+// untracked files, so those lines gain padding but no new words.
+func formatDiffFileCount(repo repository.RepositoryDiffResult) string {
+	if repo.UntrackedFilesChanged == 0 {
+		return fmt.Sprintf("%d files", repo.FilesChanged)
+	}
+
+	return fmt.Sprintf("%d files (+%d untracked)", repo.FilesChanged, repo.UntrackedFilesChanged)
+}
+
+// omittedNote renders the completeness warning shared by the human-readable
+// formats, or "" when the diff body is complete. A diff that quietly dropped
+// files reads exactly like one that had nothing to drop, so the count is
+// surfaced even in the formats that never print a diff body.
+func omittedNote(repo repository.RepositoryDiffResult) string {
+	n := len(repo.OmittedFiles)
+	if n == 0 {
+		return ""
+	}
+
+	noun := "files"
+	if n == 1 {
+		noun = "file"
+	}
+
+	return fmt.Sprintf("⚠ %d untracked %s omitted from the diff body", n, noun)
 }
 
 func displayDiffRepositoryResult(repo repository.RepositoryDiffResult) {
@@ -303,6 +375,16 @@ func displayDiffRepositoryResult(repo repository.RepositoryDiffResult) {
 		fmt.Println("  Untracked files:")
 		for _, file := range repo.UntrackedFiles {
 			fmt.Printf("    ? %s\n", file)
+		}
+	}
+
+	// Files whose content could not be included. Printed unconditionally: a
+	// diff that silently dropped files is worse than one that says so. This is
+	// the only format that also prints why each one was dropped.
+	if note := omittedNote(repo); note != "" {
+		fmt.Printf("  %s:\n", note)
+		for _, omitted := range repo.OmittedFiles {
+			fmt.Printf("    ! %s (%s)\n", omitted.Path, omitted.Reason)
 		}
 	}
 
@@ -367,19 +449,32 @@ type DiffJSONOutput struct {
 
 // DiffRepositoryJSONOutput represents a single repository in JSON output
 type DiffRepositoryJSONOutput struct {
-	Path           string                  `json:"path"`
-	Branch         string                  `json:"branch,omitempty"`
-	Status         string                  `json:"status"`
-	FilesChanged   int                     `json:"files_changed,omitempty"`
-	Additions      int                     `json:"additions,omitempty"`
-	Deletions      int                     `json:"deletions,omitempty"`
-	DiffSummary    string                  `json:"diff_summary,omitempty"`
-	DiffContent    string                  `json:"diff_content,omitempty"`
-	ChangedFiles   []ChangedFileJSONOutput `json:"changed_files,omitempty"`
-	UntrackedFiles []string                `json:"untracked_files,omitempty"`
-	Truncated      bool                    `json:"truncated,omitempty"`
-	DurationMs     int64                   `json:"duration_ms,omitempty"`
-	Error          string                  `json:"error,omitempty"`
+	Path                  string                  `json:"path"`
+	Branch                string                  `json:"branch,omitempty"`
+	Status                string                  `json:"status"`
+	Scope                 string                  `json:"scope,omitempty"`
+	FilesChanged          int                     `json:"files_changed,omitempty"`
+	TrackedFilesChanged   int                     `json:"tracked_files_changed,omitempty"`
+	UntrackedFilesChanged int                     `json:"untracked_files_changed,omitempty"`
+	StagedFilesChanged    int                     `json:"staged_files_changed,omitempty"`
+	Additions             int                     `json:"additions,omitempty"`
+	Deletions             int                     `json:"deletions,omitempty"`
+	DiffSummary           string                  `json:"diff_summary,omitempty"`
+	DiffContent           string                  `json:"diff_content,omitempty"`
+	ChangedFiles          []ChangedFileJSONOutput `json:"changed_files,omitempty"`
+	UntrackedFiles        []string                `json:"untracked_files,omitempty"`
+	OmittedFiles          []OmittedFileJSONOutput `json:"omitted_files,omitempty"`
+	Truncated             bool                    `json:"truncated,omitempty"`
+	DurationMs            int64                   `json:"duration_ms,omitempty"`
+	Error                 string                  `json:"error,omitempty"`
+}
+
+// OmittedFileJSONOutput reports an untracked file whose content was not
+// included in the diff body, so consumers can tell a complete diff from a
+// partial one instead of having to assume.
+type OmittedFileJSONOutput struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
 }
 
 // ChangedFileJSONOutput represents a changed file in JSON output
@@ -401,21 +496,34 @@ func displayDiffResultsStructured(result *repository.BulkDiffResult, format stri
 
 	for _, repo := range result.Repositories {
 		repoOutput := DiffRepositoryJSONOutput{
-			Path:           repo.RelativePath,
-			Branch:         repo.Branch,
-			Status:         repo.Status,
-			FilesChanged:   repo.FilesChanged,
-			Additions:      repo.Additions,
-			Deletions:      repo.Deletions,
-			DiffSummary:    repo.DiffSummary,
-			UntrackedFiles: repo.UntrackedFiles,
-			Truncated:      repo.Truncated,
-			DurationMs:     repo.Duration.Milliseconds(),
+			Path:                  repo.RelativePath,
+			Branch:                repo.Branch,
+			Status:                repo.Status,
+			Scope:                 repo.Scope,
+			FilesChanged:          repo.FilesChanged,
+			TrackedFilesChanged:   repo.TrackedFilesChanged,
+			UntrackedFilesChanged: repo.UntrackedFilesChanged,
+			StagedFilesChanged:    repo.StagedFilesChanged,
+			Additions:             repo.Additions,
+			Deletions:             repo.Deletions,
+			DiffSummary:           repo.DiffSummary,
+			UntrackedFiles:        repo.UntrackedFiles,
+			Truncated:             repo.Truncated,
+			DurationMs:            repo.Duration.Milliseconds(),
 		}
 
 		// Include diff content unless --no-content
 		if !diffNoDiffContent {
 			repoOutput.DiffContent = repo.DiffContent
+		}
+
+		// Omission reasons stay even under --no-content: they are metadata
+		// about completeness, not diff body.
+		for _, omitted := range repo.OmittedFiles {
+			repoOutput.OmittedFiles = append(repoOutput.OmittedFiles, OmittedFileJSONOutput{
+				Path:   omitted.Path,
+				Reason: omitted.Reason,
+			})
 		}
 
 		// Convert changed files

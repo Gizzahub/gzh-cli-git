@@ -389,52 +389,6 @@ func TestRepositoryCommitResult(t *testing.T) {
 	}
 }
 
-func TestParseDiffStats(t *testing.T) {
-	tests := []struct {
-		name              string
-		output            string
-		expectedAdditions int
-		expectedDeletions int
-	}{
-		{
-			name:              "Simple stats",
-			output:            " 3 files changed, 10 insertions(+), 5 deletions(-)",
-			expectedAdditions: 10,
-			expectedDeletions: 5,
-		},
-		{
-			name:              "Only insertions",
-			output:            " 1 file changed, 20 insertions(+)",
-			expectedAdditions: 20,
-			expectedDeletions: 0,
-		},
-		{
-			name:              "Only deletions",
-			output:            " 2 files changed, 15 deletions(-)",
-			expectedAdditions: 0,
-			expectedDeletions: 15,
-		},
-		{
-			name:              "Empty output",
-			output:            "",
-			expectedAdditions: 0,
-			expectedDeletions: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			additions, deletions := parseDiffStats(tt.output)
-			if additions != tt.expectedAdditions {
-				t.Errorf("Expected %d additions, got %d", tt.expectedAdditions, additions)
-			}
-			if deletions != tt.expectedDeletions {
-				t.Errorf("Expected %d deletions, got %d", tt.expectedDeletions, deletions)
-			}
-		})
-	}
-}
-
 func TestInferScopeFromFiles(t *testing.T) {
 	tests := []struct {
 		name     string

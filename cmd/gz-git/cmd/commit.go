@@ -25,6 +25,8 @@ var (
 	commitEdit     bool
 	commitJSON     string // --json: inline JSON messages
 	commitYAML     string // --yaml: inline YAML messages
+
+	commitAllowConflicted bool // --allow-conflicted: commit repos with unmerged paths
 )
 
 // commitCmd represents the commit command
@@ -68,6 +70,7 @@ func init() {
 	commitCmd.Flags().BoolVarP(&commitEdit, "edit", "e", false, "edit messages in $EDITOR before committing")
 	commitCmd.Flags().StringVar(&commitJSON, "json", "", `inline JSON with per-repo messages (e.g., '{"repo":"message"}')`)
 	commitCmd.Flags().StringVar(&commitYAML, "yaml", "", `inline YAML with per-repo messages`)
+	commitCmd.Flags().BoolVar(&commitAllowConflicted, "allow-conflicted", false, "commit repositories that still have unmerged paths (writes conflict markers into history)")
 }
 
 func runCommit(cmd *cobra.Command, args []string) error {
@@ -108,6 +111,7 @@ func runCommit(cmd *cobra.Command, args []string) error {
 		Yes:               commitYes,
 		Verbose:           verbose,
 		IncludeSubmodules: commitFlags.IncludeSubmodules,
+		AllowConflicted:   commitAllowConflicted,
 		IncludePattern:    commitFlags.Include,
 		ExcludePattern:    commitFlags.Exclude,
 		Logger:            logger,
@@ -257,7 +261,19 @@ func runCommit(cmd *cobra.Command, args []string) error {
 		displayCommitResults(result)
 	}
 
-	return errPartialFailure(result.TotalFailed, result.TotalDirty)
+	// Conflicted repositories were deliberately left uncommitted. They must
+	// reach the exit code, otherwise an unattended caller that only checks $?
+	// records the refusal as a clean success.
+	if result.TotalConflicted > 0 {
+		fmt.Fprintf(os.Stderr,
+			"\n%d repository(ies) skipped: unresolved merge conflicts. Resolve them and re-run, or pass --allow-conflicted.\n",
+			result.TotalConflicted)
+	}
+
+	return errPartialFailure(
+		result.TotalFailed+result.TotalConflicted,
+		result.TotalDirty+result.TotalConflicted,
+	)
 }
 
 // parseRepoMessage parses "repo:message" format
@@ -446,6 +462,9 @@ func displayCommitResults(result *repository.BulkCommitResult) {
 	fmt.Printf("Total dirty:     %d repositories\n", result.TotalDirty)
 	fmt.Printf("Total committed: %d repositories\n", result.TotalCommitted)
 	fmt.Printf("Total skipped:   %d repositories\n", result.TotalSkipped)
+	if result.TotalConflicted > 0 {
+		fmt.Printf("Total conflicted: %d repositories (not committed)\n", result.TotalConflicted)
+	}
 	fmt.Printf("Total failed:    %d repositories\n", result.TotalFailed)
 	fmt.Printf("Duration:        %s\n", result.Duration.Round(100_000_000)) // Round to 0.1s
 	fmt.Println()
@@ -472,8 +491,8 @@ func displayCommitResults(result *repository.BulkCommitResult) {
 	if commitFlags.Format == "compact" {
 		hasIssues := false
 		for _, repo := range result.Repositories {
-			if repo.Status == "error" || repo.Status == "success" {
-				if !hasIssues && repo.Status == "error" {
+			if repo.Status == "error" || repo.Status == "success" || repo.Status == "conflicted" {
+				if !hasIssues && repo.Status != "success" {
 					fmt.Println("Issues found:")
 					hasIssues = true
 				}
@@ -514,6 +533,8 @@ func displayCommitRepositoryResult(repo repository.RepositoryCommitResult) {
 		statusStr = "clean"
 	case "dirty", "would-commit":
 		statusStr = fmt.Sprintf("%d files changed", repo.FilesChanged)
+	case "conflicted":
+		statusStr = fmt.Sprintf("CONFLICT: %d unmerged", len(repo.ConflictedFiles))
 	case "error":
 		statusStr = "failed"
 	case "skipped":
@@ -536,6 +557,17 @@ func displayCommitRepositoryResult(repo repository.RepositoryCommitResult) {
 	}
 	fmt.Println(line)
 
+	// Conflicted repositories always list their unmerged paths, regardless of
+	// --verbose: this is a refusal the user has to act on, and burying it was
+	// exactly how the silent conflict-commit went unnoticed.
+	if repo.Status == "conflicted" {
+		for _, file := range repo.ConflictedFiles {
+			fmt.Printf("    unmerged: %s\n", file)
+		}
+		fmt.Println("    → resolve the merge, then re-run (or pass --allow-conflicted)")
+		return
+	}
+
 	// Show error details if present
 	if repo.Error != nil && verbose {
 		fmt.Printf("    Error: %v\n", repo.Error)
@@ -550,6 +582,8 @@ func getCommitStatusIcon(status string) string {
 		return "="
 	case "dirty", "would-commit":
 		return "⚠"
+	case "conflicted":
+		return "⊗"
 	case "error":
 		return "✗"
 	case "skipped":
@@ -561,57 +595,67 @@ func getCommitStatusIcon(status string) string {
 
 // CommitJSONOutput represents the JSON output structure for commit command
 type CommitJSONOutput struct {
-	TotalScanned   int                          `json:"total_scanned"`
-	TotalDirty     int                          `json:"total_dirty"`
-	TotalCommitted int                          `json:"total_committed"`
-	TotalSkipped   int                          `json:"total_skipped"`
-	TotalFailed    int                          `json:"total_failed"`
-	DurationMs     int64                        `json:"duration_ms"`
-	Summary        map[string]int               `json:"summary"`
-	Repositories   []CommitRepositoryJSONOutput `json:"repositories"`
+	TotalScanned    int                          `json:"total_scanned"`
+	TotalDirty      int                          `json:"total_dirty"`
+	TotalCommitted  int                          `json:"total_committed"`
+	TotalSkipped    int                          `json:"total_skipped"`
+	TotalConflicted int                          `json:"total_conflicted,omitempty"`
+	TotalFailed     int                          `json:"total_failed"`
+	DurationMs      int64                        `json:"duration_ms"`
+	Summary         map[string]int               `json:"summary"`
+	Repositories    []CommitRepositoryJSONOutput `json:"repositories"`
 }
 
 // CommitRepositoryJSONOutput represents a single repository in JSON output
 type CommitRepositoryJSONOutput struct {
-	Path             string   `json:"path"`
-	Branch           string   `json:"branch,omitempty"`
-	Status           string   `json:"status"`
-	CommitHash       string   `json:"commit_hash,omitempty"`
-	Message          string   `json:"message,omitempty"`
-	SuggestedMessage string   `json:"suggested_message,omitempty"`
-	FilesChanged     int      `json:"files_changed,omitempty"`
-	Additions        int      `json:"additions,omitempty"`
-	Deletions        int      `json:"deletions,omitempty"`
-	ChangedFiles     []string `json:"changed_files,omitempty"`
-	DurationMs       int64    `json:"duration_ms,omitempty"`
-	Error            string   `json:"error,omitempty"`
+	Path                  string   `json:"path"`
+	Branch                string   `json:"branch,omitempty"`
+	Status                string   `json:"status"`
+	CommitHash            string   `json:"commit_hash,omitempty"`
+	Message               string   `json:"message,omitempty"`
+	SuggestedMessage      string   `json:"suggested_message,omitempty"`
+	FilesChanged          int      `json:"files_changed,omitempty"`
+	TrackedFilesChanged   int      `json:"tracked_files_changed,omitempty"`
+	UntrackedFilesChanged int      `json:"untracked_files_changed,omitempty"`
+	StagedFilesChanged    int      `json:"staged_files_changed,omitempty"`
+	Additions             int      `json:"additions,omitempty"`
+	Deletions             int      `json:"deletions,omitempty"`
+	ChangedFiles          []string `json:"changed_files,omitempty"`
+	ConflictedFiles       []string `json:"conflicted_files,omitempty"`
+	DurationMs            int64    `json:"duration_ms,omitempty"`
+	Error                 string   `json:"error,omitempty"`
 }
 
 func displayCommitResultsStructured(result *repository.BulkCommitResult, format string) {
 	output := CommitJSONOutput{
-		TotalScanned:   result.TotalScanned,
-		TotalDirty:     result.TotalDirty,
-		TotalCommitted: result.TotalCommitted,
-		TotalSkipped:   result.TotalSkipped,
-		TotalFailed:    result.TotalFailed,
-		DurationMs:     result.Duration.Milliseconds(),
-		Summary:        result.Summary,
-		Repositories:   make([]CommitRepositoryJSONOutput, 0, len(result.Repositories)),
+		TotalScanned:    result.TotalScanned,
+		TotalDirty:      result.TotalDirty,
+		TotalCommitted:  result.TotalCommitted,
+		TotalSkipped:    result.TotalSkipped,
+		TotalConflicted: result.TotalConflicted,
+		TotalFailed:     result.TotalFailed,
+		DurationMs:      result.Duration.Milliseconds(),
+		Summary:         result.Summary,
+		Repositories:    make([]CommitRepositoryJSONOutput, 0, len(result.Repositories)),
 	}
 
 	for _, repo := range result.Repositories {
 		repoOutput := CommitRepositoryJSONOutput{
-			Path:             repo.RelativePath,
-			Branch:           repo.Branch,
-			Status:           repo.Status,
-			CommitHash:       repo.CommitHash,
-			Message:          repo.Message,
-			SuggestedMessage: repo.SuggestedMessage,
-			FilesChanged:     repo.FilesChanged,
-			Additions:        repo.Additions,
-			Deletions:        repo.Deletions,
-			ChangedFiles:     repo.ChangedFiles,
-			DurationMs:       repo.Duration.Milliseconds(),
+			Path:                  repo.RelativePath,
+			Branch:                repo.Branch,
+			Status:                repo.Status,
+			CommitHash:            repo.CommitHash,
+			Message:               repo.Message,
+			SuggestedMessage:      repo.SuggestedMessage,
+			FilesChanged:          repo.FilesChanged,
+			TrackedFilesChanged:   repo.TrackedFilesChanged,
+			UntrackedFilesChanged: repo.UntrackedFilesChanged,
+			StagedFilesChanged:    repo.StagedFilesChanged,
+			Additions:             repo.Additions,
+			Deletions:             repo.Deletions,
+			ChangedFiles:          repo.ChangedFiles,
+			ConflictedFiles:       repo.ConflictedFiles,
+			DurationMs:            repo.Duration.Milliseconds(),
 		}
 		if repo.Error != nil {
 			repoOutput.Error = repo.Error.Error()

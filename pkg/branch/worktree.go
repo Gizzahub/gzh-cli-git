@@ -54,6 +54,27 @@ func NewWorktreeManagerWithExecutor(executor *gitcmd.Executor) WorktreeManager {
 	}
 }
 
+// run executes a git command and turns a non-zero exit into an error.
+//
+// gitcmd.Executor.Run reports a failed git through Result.ExitCode and returns a
+// nil error unless the process itself could not be started, so a caller that
+// checks err alone accepts every git failure as a success. That is the wrong
+// default for every command in this file: a failed `worktree remove` would be
+// reported as a removal, a failed `worktree list` as a repository with no
+// worktrees, and a failed `status` as a worktree with nothing to lose.
+func (w *worktreeManager) run(ctx context.Context, dir string, args ...string) (*gitcmd.Result, error) {
+	result, err := w.executor.Run(ctx, dir, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(result.Stderr))
+	}
+
+	return result, nil
+}
+
 // Add adds a new worktree.
 func (w *worktreeManager) Add(ctx context.Context, repo *repository.Repository, opts AddOptions) (*Worktree, error) {
 	if repo == nil {
@@ -119,7 +140,7 @@ func (w *worktreeManager) Add(ctx context.Context, repo *repository.Repository, 
 	}
 
 	// Add worktree
-	if _, err := w.executor.Run(ctx, repo.Path, args...); err != nil {
+	if _, err := w.run(ctx, repo.Path, args...); err != nil {
 		return nil, fmt.Errorf("failed to add worktree: %w", err)
 	}
 
@@ -158,8 +179,15 @@ func (w *worktreeManager) Remove(ctx context.Context, repo *repository.Repositor
 			return fmt.Errorf("%w: %s", ErrWorktreeMain, opts.Path)
 		}
 
-		// Check for uncommitted changes
-		if dirty, err := w.isWorktreeDirty(ctx, opts.Path); err == nil && dirty {
+		// Check for uncommitted changes. A check that could not run is not a
+		// check that passed — this is the guard standing between an unforced
+		// remove and a worktree holding work that exists nowhere else.
+		dirty, dirtyErr := w.isWorktreeDirty(ctx, opts.Path)
+		if dirtyErr != nil {
+			return fmt.Errorf("cannot verify %s has no uncommitted changes: %w (use --force to remove anyway)", opts.Path, dirtyErr)
+		}
+
+		if dirty {
 			return fmt.Errorf("%w: %s (use --force to remove anyway)", ErrWorktreeDirty, opts.Path)
 		}
 
@@ -179,7 +207,7 @@ func (w *worktreeManager) Remove(ctx context.Context, repo *repository.Repositor
 	args = append(args, opts.Path)
 
 	// Remove worktree
-	if _, err := w.executor.Run(ctx, repo.Path, args...); err != nil {
+	if _, err := w.run(ctx, repo.Path, args...); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 
@@ -193,7 +221,7 @@ func (w *worktreeManager) List(ctx context.Context, repo *repository.Repository)
 	}
 
 	// Run git worktree list --porcelain
-	result, err := w.executor.Run(ctx, repo.Path, "worktree", "list", "--porcelain")
+	result, err := w.run(ctx, repo.Path, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -214,7 +242,7 @@ func (w *worktreeManager) Prune(ctx context.Context, repo *repository.Repository
 	}
 
 	// Run git worktree prune
-	if _, err := w.executor.Run(ctx, repo.Path, "worktree", "prune"); err != nil {
+	if _, err := w.run(ctx, repo.Path, "worktree", "prune"); err != nil {
 		return fmt.Errorf("failed to prune worktrees: %w", err)
 	}
 
@@ -354,9 +382,13 @@ func (w *worktreeManager) isBranchInUse(ctx context.Context, repo *repository.Re
 }
 
 // isWorktreeDirty checks if a worktree has uncommitted changes.
+//
+// Plain --porcelain is enough here: the answer is whether git reported anything
+// at all, so neither the C-quoting of unusual paths nor the collapsing of
+// untracked directories can change it.
 func (w *worktreeManager) isWorktreeDirty(ctx context.Context, path string) (bool, error) {
 	// Run git status in worktree
-	result, err := w.executor.Run(ctx, path, "status", "--porcelain")
+	result, err := w.run(ctx, path, "status", "--porcelain")
 	if err != nil {
 		return false, err
 	}

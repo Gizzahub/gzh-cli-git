@@ -143,6 +143,16 @@ line up, and all three are fixed:
 
 ### Fixed
 
+- `branch.WorktreeManager` no longer reports failed git commands as completed work.
+  Every command in the file checked only whether git could be *started*, while a failed
+  git is signalled through the exit code — so `Remove` and `Prune` returned success
+  without doing anything, `List` returned a repository with no worktrees, and the
+  uncommitted-changes check that guards an unforced `Remove` returned "clean". The guard
+  additionally discarded its own error, so a check that could not run counted as a check
+  that passed; `Remove` now refuses and names `--force` as the way past it.
+- The `workspace sync` preview lists repositories whose working tree it could not read.
+  The block is the preview's whole account of what a sync may overwrite, and a failed
+  check left the repository unlisted — among the ones that were checked and found safe.
 - `gz-git doctor` no longer reports a repository it could not read as healthy. Every
   repository check signals "nothing wrong" by producing no findings, so discarding the
   error from `git status` filed an unreadable repository under the same heading as one

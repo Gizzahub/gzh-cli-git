@@ -1362,6 +1362,13 @@ func executeSelfSync(ctx context.Context, cfg *config.Config, configDir string, 
 }
 
 // isWorkingTreeDirty checks if the git working tree has uncommitted changes.
+//
+// Plain --porcelain is enough here, unlike the call sites that read individual
+// records: the answer is whether git reported anything at all, so neither the
+// C-quoting of unusual paths nor the collapsing of untracked directories into a
+// single entry can change it. cmd.Output() also reports a non-zero exit as an
+// error, so an unreadable repository is not silently answered "clean" — every
+// caller must decide what to do with that error rather than inherit a false.
 func isWorkingTreeDirty(ctx context.Context, repoPath string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain")
 	output, err := cmd.Output()
@@ -1692,8 +1699,16 @@ func displayCompactSyncPreview(ctx context.Context, out io.Writer, s syncSummary
 			if path == "" {
 				continue
 			}
+			// This block is the preview's whole account of what a sync may
+			// overwrite, so a repository that could not be checked has to say so.
+			// Staying silent puts it among the repositories that were checked and
+			// found safe, which is the reading that leads to pressing enter.
 			isDirty, err := isWorkingTreeDirty(ctx, path)
-			if err == nil && isDirty {
+
+			switch {
+			case err != nil:
+				fmt.Fprintf(out, "  ⚠  %-28s  could not be checked for local changes: %v\n", action.Repo.Name, err)
+			case isDirty:
 				fmt.Fprintf(out, "  ⚠  %-28s  has local changes (may be overwritten)\n", action.Repo.Name)
 			}
 		}

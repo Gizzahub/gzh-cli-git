@@ -56,23 +56,13 @@ func NewWorktreeManagerWithExecutor(executor *gitcmd.Executor) WorktreeManager {
 
 // run executes a git command and turns a non-zero exit into an error.
 //
-// gitcmd.Executor.Run reports a failed git through Result.ExitCode and returns a
-// nil error unless the process itself could not be started, so a caller that
-// checks err alone accepts every git failure as a success. That is the wrong
-// default for every command in this file: a failed `worktree remove` would be
-// reported as a removal, a failed `worktree list` as a repository with no
-// worktrees, and a failed `status` as a worktree with nothing to lose.
+// Every command in this file asks git to do something rather than to answer a
+// yes/no question, so a non-zero exit always means the work did not happen: a
+// failed `worktree remove` would otherwise be reported as a removal, a failed
+// `worktree list` as a repository with no worktrees, and a failed `status` as a
+// worktree with nothing to lose. See runGit for why the distinction exists.
 func (w *worktreeManager) run(ctx context.Context, dir string, args ...string) (*gitcmd.Result, error) {
-	result, err := w.executor.Run(ctx, dir, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	if result.ExitCode != 0 {
-		return nil, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(result.Stderr))
-	}
-
-	return result, nil
+	return runGit(ctx, w.executor, dir, args...)
 }
 
 // Add adds a new worktree.

@@ -1,7 +1,8 @@
 # ISSUE: `pkg/branch`의 manager·cleanup이 실패한 git을 성공으로 읽는다
 
-- status: todo
+- status: done
 - priority: P2
+- completed_at: 2026-08-06T12:40:00+09:00
 - category: branch
 - created_at: 2026-08-06T10:10:00+09:00
 - affects: v0.7.0+
@@ -85,15 +86,85 @@ A와 B가 겹치면 **실패한 삭제를 사용자가 알 수 있는 경로가 
 
 ## Acceptance Criteria
 
-- [ ] git이 실패하는 상황에서 `Create`·`Create(Checkout:true)`·`Delete`·`List`·
-      `Current`가 각각 non-nil error를 돌려주는 테스트
-- [ ] `Create(Checkout:true)`가 성공을 반환했다면 HEAD가 실제로 옮겨갔음을 확인하는 테스트
-- [ ] 존재하지 않는 ref로 `Create` 시 `errors.Is(err, ErrInvalidRef)`
-- [ ] `Exists`가 여전히 "없는 브랜치 → `false, nil`"을 지킨다 (2번의 회귀 방지)
-- [ ] 삭제 실패가 하나라도 있으면 CLI 출력에 드러난다 (숫자 또는 목록)
-- [ ] `✓ Deleted N` 의 N이 후보 수가 아니라 삭제 수임을 확인하는 테스트
-- [ ] `make quality` 통과
-- [ ] CHANGELOG 기재
+- [x] git이 실패하는 상황에서 `Create`·`Create(Checkout:true)`·`Delete`·`List`·
+      `Current`가 각각 non-nil error를 돌려주는 테스트 — `pkg/branch/manager_failure_test.go`
+- [x] `Create(Checkout:true)`가 성공을 반환했다면 HEAD가 실제로 옮겨갔음을 확인하는 테스트
+      — `TestManager_CreateWithCheckoutMovesHEAD`
+- [x] 존재하지 않는 ref로 `Create` 시 `errors.Is(err, ErrInvalidRef)` —
+      `TestManager_CreateRejectsUnknownStartRef`
+- [x] `Exists`가 여전히 "없는 브랜치 → `false, nil`"을 지킨다 —
+      `TestManager_ExistsStillAnswersFalseForMissingBranch`
+- [x] 삭제 실패가 CLI 출력에 드러난다 — stderr에 브랜치명 + git 사유, exit 2
+- [x] `✓ Deleted N`의 N이 후보 수가 아니라 삭제 수임 — 위 둘 다
+      `TestCleanupBranchCountsDeletionsNotCandidates`(후보 2 / 삭제 0)
+- [x] `make quality` 통과 (`make lint` 잔여 19건은 모두 미수정 파일 — 아래 D4)
+- [x] CHANGELOG 기재
+
+## Decisions
+
+### D1. `Execute`의 반환형을 `(*ExecuteResult, error)`로 — 집계 에러가 아니라
+
+집계 에러(`errors.Join`)를 돌려주면 **부분 성공이 전체 실패로 읽힌다.** CLI는 `RunE`가
+non-nil이면 명령 전체를 실패로 종료하므로, 3개 중 1개가 실패한 정리가 "아무것도 못 했다"가
+된다. 반대로 nil을 유지하면 지금 고치려는 결함 그대로다.
+
+`Deleted`/`Failed` 두 목록은 이 둘 중 어느 쪽도 아니다 — 호출자가 **실제 수를 세어
+보고할 수 있는 유일한 형태**다. 공개 API 변경이지만 태스크 06의 선례가 있고,
+`internal/`이 아닌 `pkg/`라도 이 반환값은 없던 정보를 만든 것이지 의미를 바꾼 것이 아니다.
+
+### D2. 헬퍼를 패키지 단위 `runGit`으로, 타입별 `run`은 얇은 위임으로
+
+`worktree.go`의 `run`(`7eecc6c`)은 메서드였다. `manager`·`cleanupService`도 같은 것이
+필요한데 세 벌을 두면 세 벌이 갈라진다. `gitrun.go`에 패키지 함수 `runGit`을 두고 각
+타입의 `run`은 여기에 위임만 한다.
+
+타입별 메서드를 남긴 이유는 **주석 위치** 때문이다. 각 파일의 `run` 주석이 그 파일에서
+왜 이 판정이 옳은지를 적는다 — `manager.go`는 "`Exists`만 예외", `cleanup.go`는 "모든
+읽기가 삭제 판단으로 흘러간다", `worktree.go`는 "전부 명령이지 질문이 아니다". 호출부
+10곳에 같은 문장을 반복하지 않으면서 지점별 근거를 남기는 자리다.
+
+### D3. `manager.go:315`(`Exists`)는 헬퍼를 쓰지 않는다
+
+`rev-parse --verify`의 exit code가 **곧 답**이다. 헬퍼를 태우면 "그런 브랜치 없음"이
+에러가 되고 `Create`·`Delete`의 존재 확인이 전부 무너진다. 본문에 `result.ExitCode`가
+그대로 보이는 것이 이 지점이 어느 쪽 독법인지 말해준다는 점도 의도적이다.
+회귀 방지 테스트를 별도로 뒀다.
+
+### D4. `make lint` 잔여 19건은 이 커밋에서 손대지 않는다
+
+`make quality`는 `lint-check`를 의도적으로 제외한다(`.make/quality.mk:314`).
+`make lint`를 직접 돌리면 19건이 남는데 **전부 이 태스크가 건드리지 않은 파일**이다
+(`pkg/config/keyring.go`, `pkg/repository/bulk_exec*.go`, `pkg/reposync/*`) — 범위 밖,
+별도 태스크 감. 이 커밋이 새로 만든 2건(`noctx`)은 관례대로 `//nolint`로 처리했다.
+
+### D5. CLI 테스트는 `.git/refs/heads`를 읽기 전용으로 만들어 실패를 만든다
+
+CLI 경로는 `Force: true`(`git branch -D`)라서 미머지 브랜치로는 실패가 안 난다. ref 파일을
+지우지 못하게 디렉터리 퍼미션을 `0o500`으로 내리면 git이 lock 파일을 만들지 못해 실패한다.
+읽기는 그대로 되므로 `Analyze`는 정상 동작하고, 후보 2 / 삭제 0이라는 갈라진 두 수가 나온다.
+
+브랜치명에 `/`를 쓰지 않는 것이 조건이다 — `feature/one`은 `refs/heads/feature/` 하위에
+생겨 chmod가 닿지 않는다. root로 돌면 퍼미션이 unlink를 막지 못하므로 `t.Skip`.
+
+## Verification
+
+`runGit`의 `ExitCode` 검사를 무력화한 상태에서 신규 테스트 7건 중 4건이 원래 증상 그대로
+실패한다:
+
+```
+Create() on a non-repository returned nil, want failure
+Create() with an unknown start ref = <nil>, want ErrInvalidRef
+Delete() of an unmerged branch with -d returned nil, want git's refusal
+List() on a non-repository returned 0 branches and a nil error, want failure
+```
+
+나머지 3건은 재현이 아니라 가드다 — `CreateWithCheckoutMovesHEAD`(성공 경로),
+`ExistsStillAnswersFalseForMissingBranch`(D3 회귀), `CurrentFailsOnNonRepository`
+(빈 이름이 `Get("")`의 가드에 걸려 **우연히** 에러가 나던 자리. 바뀐 것은 에러의
+종류지 유무가 아니다 — 테스트 주석에 명시).
+
+CLI 쪽은 출력 라인을 `report.CountBranches()`로 되돌리고 실패 보고 블록을 끄면
+`TestCleanupBranchCountsDeletionsNotCandidates`의 assertion 5개가 전부 실패한다.
 
 ## References
 

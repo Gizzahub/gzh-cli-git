@@ -53,6 +53,16 @@ func NewManagerWithExecutor(executor *gitcmd.Executor) BranchManager {
 	}
 }
 
+// run executes a git command and turns a non-zero exit into an error.
+//
+// Exists is the one method here that must not use it: its whole answer is the
+// exit code of `rev-parse --verify`, so it calls the executor directly. Every
+// other command in this file either changes the repository or produces output to
+// parse, and for those a non-zero exit means the result is not there.
+func (m *manager) run(ctx context.Context, dir string, args ...string) (*gitcmd.Result, error) {
+	return runGit(ctx, m.executor, dir, args...)
+}
+
 // Create creates a new branch.
 func (m *manager) Create(ctx context.Context, repo *repository.Repository, opts CreateOptions) error {
 	if repo == nil {
@@ -86,8 +96,11 @@ func (m *manager) Create(ctx context.Context, repo *repository.Repository, opts 
 		startRef = "HEAD"
 	}
 
-	// Verify start ref exists
-	if _, err := m.executor.Run(ctx, repo.Path, "rev-parse", "--verify", startRef); err != nil {
+	// Verify start ref exists. A ref that does not resolve is reported by the
+	// exit code, so checking only err let every bad start ref through this guard
+	// and down to `git branch`, which failed with its own wording — ErrInvalidRef
+	// was unreachable.
+	if _, err := m.run(ctx, repo.Path, "rev-parse", "--verify", startRef); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidRef, startRef)
 	}
 
@@ -105,13 +118,15 @@ func (m *manager) Create(ctx context.Context, repo *repository.Repository, opts 
 	args = append(args, opts.Name, startRef)
 
 	// Create branch
-	if _, err := m.executor.Run(ctx, repo.Path, args...); err != nil {
+	if _, err := m.run(ctx, repo.Path, args...); err != nil {
 		return fmt.Errorf("failed to create branch: %w", err)
 	}
 
-	// Checkout if requested
+	// Checkout if requested. This one is the reason Create must not report a
+	// failed git as success: a caller told the branch was created and checked out
+	// goes on to commit, and HEAD never moved.
 	if opts.Checkout {
-		if _, err := m.executor.Run(ctx, repo.Path, "checkout", opts.Name); err != nil {
+		if _, err := m.run(ctx, repo.Path, "checkout", opts.Name); err != nil {
 			return fmt.Errorf("failed to checkout branch: %w", err)
 		}
 	}
@@ -174,7 +189,10 @@ func (m *manager) Delete(ctx context.Context, repo *repository.Repository, opts 
 		deleteFlag = "-D"
 	}
 
-	if _, err := m.executor.Run(ctx, repo.Path, "branch", deleteFlag, opts.Name); err != nil {
+	// `git branch -d` refuses to delete an unmerged branch — that refusal arrives
+	// as a non-zero exit, so checking only err turned git's last safety net into a
+	// reported deletion.
+	if _, err := m.run(ctx, repo.Path, "branch", deleteFlag, opts.Name); err != nil {
 		return fmt.Errorf("failed to delete branch: %w", err)
 	}
 
@@ -187,7 +205,7 @@ func (m *manager) Delete(ctx context.Context, repo *repository.Repository, opts 
 				remote := parts[0]
 				remoteBranch := strings.Join(parts[1:], "/")
 
-				if _, err := m.executor.Run(ctx, repo.Path, "push", remote, "--delete", remoteBranch); err != nil {
+				if _, err := m.run(ctx, repo.Path, "push", remote, "--delete", remoteBranch); err != nil {
 					return fmt.Errorf("failed to delete remote branch: %w", err)
 				}
 			}
@@ -221,8 +239,10 @@ func (m *manager) List(ctx context.Context, repo *repository.Repository, opts Li
 		args = append(args, opts.Pattern)
 	}
 
-	// Run command
-	result, err := m.executor.Run(ctx, repo.Path, args...)
+	// Run command. A failed `git branch` leaves Stdout empty, which parses into
+	// an empty slice — a repository with no branches, which is not a state git
+	// can actually be in and is exactly what cleanup reads as "nothing to do".
+	result, err := m.run(ctx, repo.Path, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list branches: %w", err)
 	}
@@ -284,8 +304,10 @@ func (m *manager) Current(ctx context.Context, repo *repository.Repository) (*Br
 		return nil, fmt.Errorf("repository cannot be nil")
 	}
 
-	// Get current branch name
-	result, err := m.executor.Run(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
+	// Get current branch name. A failed rev-parse leaves Stdout empty, and an
+	// empty name is not "HEAD", so the detached-HEAD branch below is skipped and
+	// Get is asked for a branch called "".
+	result, err := m.run(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current branch: %w", err)
 	}
@@ -311,7 +333,12 @@ func (m *manager) Exists(ctx context.Context, repo *repository.Repository, name 
 		return false, fmt.Errorf("branch name is required")
 	}
 
-	// Try to get branch ref
+	// Try to get branch ref.
+	//
+	// Deliberately not m.run: here the exit code IS the answer, so turning a
+	// non-zero exit into an error would make "branch does not exist" a failure.
+	// This is the one place in the file where checking err alone is correct,
+	// because err genuinely means only that git could not be run.
 	result, err := m.executor.Run(ctx, repo.Path, "rev-parse", "--verify", fmt.Sprintf("refs/heads/%s", name))
 	if err != nil {
 		// Sanitization or other error

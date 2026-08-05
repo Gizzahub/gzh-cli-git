@@ -141,6 +141,37 @@ line up, and all three are fixed:
   record is missing, which was passed through as a rename with an empty origin — a shape
   git never emits and a caller cannot distinguish from a real one.
 
+---
+
+`gz-git cleanup branch` reported deletions that never happened. Three defects stacked, and
+a run in which git refused every single deletion still printed `✓ Deleted N branch(es)`
+and exited 0:
+
+- **`branch.Manager` no longer reports a failed git as completed work.** The same defect
+  fixed in `WorktreeManager` above ran through `manager.go` and `cleanup.go`: only the
+  ability to *start* git was checked, while a failed git is signalled through the exit
+  code. `Create` returned success for a branch that was never created, `Create` with
+  `Checkout` returned success with HEAD never moved — so the caller's next commit landed
+  on the old branch — `Delete` reported `git branch -d`'s refusal to remove an unmerged
+  branch as a deletion, `List` returned a repository with no branches, and `Current`
+  produced an empty branch name. `Exists` is unchanged and still answers `false, nil` for
+  a branch that does not exist: there the exit code *is* the answer.
+- **`Create` with an unresolvable start ref returns `ErrInvalidRef`.** The guard that
+  verifies the start ref could not fire, so callers matching on the sentinel saw
+  `git branch`'s own wording instead.
+- **`✓ Deleted N branch(es)` counts branches actually deleted.** N was
+  `report.CountBranches()` — the number of *candidates* the analysis found — printed
+  whether or not any deletion succeeded. Failures are now listed on stderr with git's
+  reason, and a run in which any deletion failed exits `cliutil.ExitPartialFailed` (2)
+  instead of 0.
+
+API note: `branch.CleanupService.Execute` now returns `(*ExecuteResult, error)` instead of
+`error`. It previously discarded every per-branch deletion error, which left no way to
+tell a run that deleted everything from one that deleted nothing. The new `ExecuteResult`
+carries `Deleted []string` and `Failed []DeleteFailure`. The policy is unchanged — one
+branch failing does not stop the rest — but the failures are now reported rather than
+dropped. A non-nil error still means the run never started.
+
 ### Fixed
 
 - `branch.WorktreeManager` finds worktrees whose path goes through a symlink. `Get`

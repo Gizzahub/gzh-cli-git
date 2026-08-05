@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -159,12 +160,29 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 			Exclude: excludePatterns,
 		}
 
-		if err := svc.Execute(ctx, repo, report, executeOpts); err != nil {
+		result, err := svc.Execute(ctx, repo, report, executeOpts)
+		if err != nil {
 			return fmt.Errorf("failed to execute cleanup: %w", err)
 		}
 
+		// Report what was deleted, not what was a candidate. The old count came
+		// from the report, so it was announced whether or not a single deletion
+		// went through — and Execute discarded the failures on its way out.
 		if !quiet {
-			fmt.Printf("\n✓ Deleted %d branch(es)\n", report.CountBranches())
+			fmt.Printf("\n✓ Deleted %d branch(es)\n", len(result.Deleted))
+		}
+
+		if len(result.Failed) > 0 {
+			fmt.Fprintf(os.Stderr, "\n✗ Failed to delete %d branch(es):\n", len(result.Failed))
+			for _, f := range result.Failed {
+				fmt.Fprintf(os.Stderr, "  %-30s %v\n", f.Branch, f.Err)
+			}
+
+			// Exit 2, the code this CLI reserves for "some of the work failed",
+			// so a script can tell a partial cleanup from a tool error (1).
+			return cliutil.NewExitError(cliutil.ExitPartialFailed,
+				fmt.Errorf("%d of %d branches failed to delete",
+					len(result.Failed), len(result.Deleted)+len(result.Failed)))
 		}
 	} else {
 		if !quiet {

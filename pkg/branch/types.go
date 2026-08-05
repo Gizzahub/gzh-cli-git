@@ -182,6 +182,22 @@ type ExecuteOptions struct {
 	Exclude []string // Additional patterns to exclude
 }
 
+// ExecuteResult reports what a cleanup run actually did.
+//
+// Execute deletes each branch independently and does not stop at the first
+// failure, so neither "it returned an error" nor "it returned nil" describes the
+// outcome. Deleted and Failed together do.
+type ExecuteResult struct {
+	Deleted []string        // Branches removed
+	Failed  []DeleteFailure // Branches that could not be removed, and why
+}
+
+// DeleteFailure records a branch that Execute could not delete.
+type DeleteFailure struct {
+	Branch string
+	Err    error
+}
+
 // CleanupReport summarizes branches eligible for cleanup.
 type CleanupReport struct {
 	Merged    []*Branch // Fully merged branches

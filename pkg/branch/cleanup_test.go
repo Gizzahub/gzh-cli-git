@@ -30,7 +30,7 @@ func TestCleanupService_Execute_NilRepository(t *testing.T) {
 	svc := NewCleanupService()
 	report := &CleanupReport{}
 
-	err := svc.Execute(ctx, nil, report, ExecuteOptions{})
+	_, err := svc.Execute(ctx, nil, report, ExecuteOptions{})
 	if err == nil {
 		t.Error("Execute() with nil repository should return error")
 	}
@@ -41,7 +41,7 @@ func TestCleanupService_Execute_NilReport(t *testing.T) {
 	svc := NewCleanupService()
 	repo := &repository.Repository{Path: "/tmp/test"}
 
-	err := svc.Execute(ctx, repo, nil, ExecuteOptions{})
+	_, err := svc.Execute(ctx, repo, nil, ExecuteOptions{})
 	if err == nil {
 		t.Error("Execute() with nil report should return error")
 	}
@@ -325,9 +325,13 @@ func TestCleanupService_Execute_EmptyReport(t *testing.T) {
 		Orphaned: []*Branch{},
 	}
 
-	err := svc.Execute(ctx, repo, report, ExecuteOptions{DryRun: true})
+	result, err := svc.Execute(ctx, repo, report, ExecuteOptions{DryRun: true})
 	if err != nil {
 		t.Errorf("Execute() with empty report error = %v, want nil", err)
+	}
+
+	if len(result.Deleted) != 0 || len(result.Failed) != 0 {
+		t.Errorf("Execute() on empty report = %+v, want nothing deleted and nothing failed", result)
 	}
 }
 
@@ -346,12 +350,19 @@ func TestCleanupService_Execute_SkipsProtected(t *testing.T) {
 		Orphaned: []*Branch{},
 	}
 
-	// Execute with DryRun won't actually delete but should process
-	err := svc.Execute(ctx, repo, report, ExecuteOptions{DryRun: true})
-	// This will fail since /tmp/test is not a real repo, but we're testing the logic flow
-	if err == nil {
-		// If no error, the protected branches were correctly identified
-		t.Log("Execute correctly handled protected branches")
+	// DryRun deletes nothing, so this asserts the shape of a preview run rather
+	// than the outcome of a deletion: no branch is reported as removed and none
+	// as failed, even though /tmp/test is not a repository.
+	result, err := svc.Execute(ctx, repo, report, ExecuteOptions{
+		DryRun:  true,
+		Exclude: []string{"main", "master"},
+	})
+	if err != nil {
+		t.Fatalf("Execute() dry run error = %v, want nil", err)
+	}
+
+	if len(result.Deleted) != 0 || len(result.Failed) != 0 {
+		t.Errorf("Execute() dry run = %+v, want nothing deleted and nothing failed", result)
 	}
 }
 

@@ -325,8 +325,22 @@ func (w *BranchCleanupWizard) processRepository(ctx context.Context, repoPath st
 			Confirm: true, // Skip confirmation (we already confirmed)
 		}
 
-		if err := w.cleanupService.Execute(ctx, repo, filteredReport, executeOpts); err != nil {
+		result, err := w.cleanupService.Execute(ctx, repo, filteredReport, executeOpts)
+		if err != nil {
 			w.printer.PrintError(fmt.Sprintf("Failed to delete %s: %v", branchName, err))
+			continue
+		}
+
+		// The report is filtered down to this one branch, so its outcome is the
+		// whole result. A nil error only says the run started; Failed says whether
+		// the branch is gone.
+		if len(result.Failed) > 0 {
+			w.printer.PrintError(fmt.Sprintf("Failed to delete %s: %v", branchName, result.Failed[0].Err))
+			continue
+		}
+
+		if len(result.Deleted) == 0 {
+			w.printer.PrintError(fmt.Sprintf("Skipped %s: excluded from cleanup", branchName))
 			continue
 		}
 

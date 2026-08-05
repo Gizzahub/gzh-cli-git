@@ -18,8 +18,10 @@ type CleanupService interface {
 	// Analyze analyzes branches for cleanup.
 	Analyze(ctx context.Context, repo *repository.Repository, opts AnalyzeOptions) (*CleanupReport, error)
 
-	// Execute performs cleanup based on report.
-	Execute(ctx context.Context, repo *repository.Repository, report *CleanupReport, opts ExecuteOptions) error
+	// Execute performs cleanup based on report. The result names which branches
+	// were deleted and which were not; a non-nil error means the run never
+	// started, not that nothing was deleted.
+	Execute(ctx context.Context, repo *repository.Repository, report *CleanupReport, opts ExecuteOptions) (*ExecuteResult, error)
 }
 
 // cleanupService implements CleanupService.
@@ -42,6 +44,15 @@ func NewCleanupServiceWithDeps(executor *gitcmd.Executor, branchManager BranchMa
 		executor:      executor,
 		branchManager: branchManager,
 	}
+}
+
+// run executes a git command and turns a non-zero exit into an error.
+//
+// Every git read in this file feeds a decision about deleting a branch, and each
+// one answers "no evidence" the same way it answers "the read failed" — so a
+// failure that stays silent becomes a verdict.
+func (c *cleanupService) run(ctx context.Context, dir string, args ...string) (*gitcmd.Result, error) {
+	return runGit(ctx, c.executor, dir, args...)
 }
 
 // Analyze analyzes branches for cleanup.
@@ -122,13 +133,18 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 }
 
 // Execute performs cleanup based on report.
-func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repository, report *CleanupReport, opts ExecuteOptions) error {
+//
+// A failure on one branch does not stop the others — that policy is deliberate
+// and unchanged. What it returns is the account of which ones succeeded, because
+// without it the caller has no way to tell a run that deleted everything from one
+// that deleted nothing.
+func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repository, report *CleanupReport, opts ExecuteOptions) (*ExecuteResult, error) {
 	if repo == nil {
-		return fmt.Errorf("repository cannot be nil")
+		return nil, fmt.Errorf("repository cannot be nil")
 	}
 
 	if report == nil {
-		return fmt.Errorf("cleanup report cannot be nil")
+		return nil, fmt.Errorf("cleanup report cannot be nil")
 	}
 
 	// Collect all branches to delete
@@ -148,9 +164,11 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		toDelete = filtered
 	}
 
+	result := &ExecuteResult{}
+
 	// Dry run - just return
 	if opts.DryRun {
-		return nil
+		return result, nil
 	}
 
 	// Delete branches
@@ -162,14 +180,18 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 			Confirm: opts.Confirm,
 		}
 
+		// Carry the failure rather than dropping it. Continuing past a branch that
+		// could not be deleted is the right policy; doing so silently meant the
+		// caller counted the report and announced that many deletions.
 		if err := c.branchManager.Delete(ctx, repo, deleteOpts); err != nil {
-			// Log error but continue with other branches
-			// In a real implementation, we'd use a logger here
+			result.Failed = append(result.Failed, DeleteFailure{Branch: branch.Name, Err: err})
 			continue
 		}
+
+		result.Deleted = append(result.Deleted, branch.Name)
 	}
 
-	return nil
+	return result, nil
 }
 
 // detectBaseBranch detects the main/master branch.
@@ -190,7 +212,7 @@ func (c *cleanupService) detectBaseBranch(ctx context.Context, repo *repository.
 // isBranchMerged checks if a branch is fully merged into base.
 func (c *cleanupService) isBranchMerged(ctx context.Context, repo *repository.Repository, branch, base string) (bool, error) {
 	// Run git branch --merged base
-	result, err := c.executor.Run(ctx, repo.Path, "branch", "--merged", base)
+	result, err := c.run(ctx, repo.Path, "branch", "--merged", base)
 	if err != nil {
 		return false, err
 	}
@@ -211,7 +233,7 @@ func (c *cleanupService) isBranchMerged(ctx context.Context, repo *repository.Re
 // isBranchStale checks if a branch has no recent activity.
 func (c *cleanupService) isBranchStale(ctx context.Context, repo *repository.Repository, branch string, threshold time.Duration) (bool, error) {
 	// Get last commit date
-	result, err := c.executor.Run(ctx, repo.Path, "log", "-1", "--format=%ct", branch)
+	result, err := c.run(ctx, repo.Path, "log", "-1", "--format=%ct", branch)
 	if err != nil {
 		return false, err
 	}
@@ -244,8 +266,10 @@ func (c *cleanupService) isBranchOrphaned(ctx context.Context, repo *repository.
 
 	remoteName := parts[0]
 
-	// Check if remote exists
-	result, err := c.executor.Run(ctx, repo.Path, "remote")
+	// Check if remote exists. This is the one read here whose silent failure
+	// points at deletion: an empty remote list matches nothing, and the function
+	// reads "matched nothing" as "orphaned".
+	result, err := c.run(ctx, repo.Path, "remote")
 	if err != nil {
 		return false, err
 	}

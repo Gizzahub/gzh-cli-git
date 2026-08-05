@@ -1,6 +1,6 @@
 # ISSUE: `worktreeManager.Get`이 심볼릭 링크를 풀지 않아 워크트리를 못 찾는다
 
-- status: todo
+- status: done
 - priority: P2
 - category: branch
 - created_at: 2026-08-06T10:20:00+09:00
@@ -72,15 +72,43 @@ macOS는 `/var` → `/private/var`, `/tmp` → `/private/tmp`가 기본이다. �
 
 ## Acceptance Criteria
 
-- [ ] 심볼릭 링크 하위(`t.TempDir()` 원본 그대로, macOS에서 `/var/...`)에 워크트리를
-      만들고 `Add`가 nil error + 유효한 `*Worktree`를 반환하는 테스트
-- [ ] 같은 경로로 `Exists`가 `true`, `Remove`가 성공
-- [ ] 해석된 경로(`EvalSymlinks` 적용)로도 동일하게 동작 — 양방향 확인
-- [ ] 존재하지 않는 경로에 `Exists`가 여전히 `false, nil` (Scope 2 회귀 방지)
-- [ ] `worktree_failure_test.go`에서 `EvalSymlinks` 우회 제거
-- [ ] 우회 제거 후 기존 테스트가 통과 (제거 전 상태에서 실패하는 것도 확인 — 뮤테이션 검증)
-- [ ] `make quality` 통과
-- [ ] CHANGELOG 기재
+- [x] 심볼릭 링크 하위에 워크트리를 만들고 `Add`가 nil error + 유효한 `*Worktree`를
+      반환 — `TestWorktreeManager_AddThroughSymlinkedPath`
+- [x] 같은 경로로 `Exists`가 `true`, `Remove`가 성공 —
+      `..._GetMatchesEitherSpelling`, `..._RemoveThroughSymlinkedPath`
+- [x] 해석된 경로로도 동일 동작 — `..._GetMatchesEitherSpelling` 의 두 서브테스트
+- [x] 존재하지 않는 경로에 `Exists`가 `false, nil` — `..._ExistsOnAbsentPath`
+- [x] `worktree_failure_test.go`의 `EvalSymlinks` 우회 제거
+- [x] 뮤테이션 검증: `EvalSymlinks` 호출을 항등으로 되돌리면 4건이
+      `worktree not found: /var/folders/...` 로 실패. `ExistsOnAbsentPath`는 통과 —
+      그 테스트는 링크 해석에 의존하지 않으므로 올바른 결과다
+- [x] `make quality` 통과
+- [x] CHANGELOG 기재
+
+## Decisions
+
+### D1. Scope 1~4를 `samePath` 하나로 합쳤다
+
+태스크는 헬퍼를 두라고만 했지만(Scope 4), 실제 형태는 "정규화 함수"가 아니라
+**비교 함수**여야 했다. 정규화 함수는 값 하나를 받아 값 하나를 돌려주므로 폴백
+(Scope 2)을 표현할 수 없다 — 해석 실패 시 어떤 값을 돌려주든 반대편이 무엇으로
+정규화됐는지 모른 채 비교당한다. `samePath(a, b) bool`은 양변을 함께 보므로
+"철자가 같으면 즉시 참, 아니면 양쪽 해석 후 비교, 한쪽이라도 해석 불가면 거짓"을
+한 곳에 담는다.
+
+### D2. 철자 비교를 먼저 두어 Scope 3의 회귀를 막았다
+
+`absA == absB`를 앞에 둔 것은 최적화가 아니다. **디렉터리가 삭제된 워크트리**는
+`git worktree list`에 여전히 나타나고(prunable), 그것을 지우는 것은 호출자가 실제로
+하는 일이다. 그런 경로는 `EvalSymlinks`가 실패하므로, 철자 비교가 없으면 해석
+단계에서 거짓이 되어 **지울 방법이 사라진다.** 기존 코드의 `continue`가 우연히
+막아 주던 것을 명시적 분기로 바꿨다.
+
+### D3. `Get`의 `filepath.Abs` 에러 검사는 남겼다
+
+`samePath` 안에서도 `Abs`를 부르지만, 호출자가 준 경로의 `Abs` 실패
+(`os.Getwd()` 실패)는 "워크트리 없음"이 아니라 환경 오류다. `Get` 상단의 검사를
+지웠다면 그 구분이 사라진다. 중복 호출 1회의 비용보다 계약 보존이 크다.
 
 ## References
 

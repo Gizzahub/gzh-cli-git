@@ -58,15 +58,10 @@ func TestWorktreeManager_RemoveFailsOnNonRepository(t *testing.T) {
 func TestWorktreeManager_RemoveRefusesDirtyWorktree(t *testing.T) {
 	repoPath := testutil.TempGitRepoWithCommit(t)
 
-	// Resolve symlinks in the temp root: git reports worktree paths resolved,
-	// while Get compares them with filepath.Abs, which does not resolve. On macOS
-	// /var is a symlink to /private/var, so an unresolved path never matches.
-	parent, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-
-	worktreePath := filepath.Join(parent, "feature-wt")
+	// t.TempDir() is deliberately not passed through EvalSymlinks: on macOS it
+	// sits under /var, a symlink to /private/var, which is exactly the shape Get
+	// has to handle. See TestWorktreeManager_GetFindsWorktreeUnderSymlinkedPath.
+	worktreePath := filepath.Join(t.TempDir(), "feature-wt")
 
 	mgr := NewWorktreeManager()
 	repo := &repository.Repository{Path: repoPath}
@@ -82,7 +77,7 @@ func TestWorktreeManager_RemoveRefusesDirtyWorktree(t *testing.T) {
 
 	write(t, worktreePath, "wip.txt", "unsaved work\n")
 
-	err = mgr.Remove(ctx, repo, RemoveOptions{Path: worktreePath})
+	err := mgr.Remove(ctx, repo, RemoveOptions{Path: worktreePath})
 	if !errors.Is(err, ErrWorktreeDirty) {
 		t.Fatalf("Remove() error = %v, want %v", err, ErrWorktreeDirty)
 	}

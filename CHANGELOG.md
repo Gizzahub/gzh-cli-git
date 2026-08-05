@@ -143,6 +143,14 @@ line up, and all three are fixed:
 
 ### Fixed
 
+- `branch.WorktreeManager` finds worktrees whose path goes through a symlink. `Get`
+  compared paths normalized with `filepath.Abs`, which is string arithmetic and never
+  resolves links, against the paths `git worktree list` reports with every link already
+  resolved — so on macOS, where `/var` is a symlink to `/private/var`, no worktree under
+  a temp directory ever matched. `Add` was the worst of it: it created the worktree, then
+  failed to describe it, and reported the whole operation as an error while leaving the
+  worktree on disk. `Remove` and `Exists` reported such a worktree as absent, which left
+  the CLI with no way to undo what `Add` had done.
 - `branch.WorktreeManager` no longer reports failed git commands as completed work.
   Every command in the file checked only whether git could be *started*, while a failed
   git is signalled through the exit code — so `Remove` and `Prune` returned success

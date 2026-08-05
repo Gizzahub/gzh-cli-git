@@ -273,17 +273,48 @@ func (w *worktreeManager) Get(ctx context.Context, repo *repository.Repository, 
 
 	// Find matching worktree
 	for _, wt := range worktrees {
-		wtAbsPath, err := filepath.Abs(wt.Path)
-		if err != nil {
-			continue
-		}
-
-		if wtAbsPath == absPath {
+		if samePath(absPath, wt.Path) {
 			return wt, nil
 		}
 	}
 
 	return nil, fmt.Errorf("worktree not found: %s", path)
+}
+
+// samePath reports whether two paths name the same directory.
+//
+// Comparing the two spellings is not enough. filepath.Abs is string arithmetic —
+// it prepends the working directory and folds "." and ".." without ever touching
+// the filesystem — while `git worktree list` reports paths with every symlink
+// already resolved. On macOS /var is a symlink to /private/var, so a worktree the
+// caller knows as /var/folders/… is reported as /private/var/folders/…, and an
+// Abs-only comparison never matches it.
+func samePath(a, b string) bool {
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+
+	if errA != nil || errB != nil {
+		return false
+	}
+
+	// Identical spellings need no filesystem walk, and this is the only branch
+	// that can match a worktree whose directory has been deleted — those are
+	// still listed by git, and removing one is a thing callers do.
+	if absA == absB {
+		return true
+	}
+
+	resolvedA, errA := filepath.EvalSymlinks(absA)
+	resolvedB, errB := filepath.EvalSymlinks(absB)
+
+	// EvalSymlinks fails on a path that does not exist, which is an ordinary
+	// question here — Exists is built on Get. The spelling comparison above has
+	// already given the only answer available.
+	if errA != nil || errB != nil {
+		return false
+	}
+
+	return resolvedA == resolvedB
 }
 
 // Exists checks if a worktree exists at the given path.

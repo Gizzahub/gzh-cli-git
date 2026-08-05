@@ -101,6 +101,11 @@ func collectChangeSet(ctx context.Context, ex CommandExecutor, repoPath string, 
 
 기존 키(`files_changed`, `additions`, `deletions`, `changed_files`, `untracked_files`, `diff_summary`, `diff_content`, `truncated`)는 **이름·타입 그대로 유지**하고 값만 정확해지게 한다. 축약 엔트리가 실경로로 확장되어 카운트가 늘어나는 것은 의도된 정정이므로 CHANGELOG에 breaking-fix로 명시.
 
+> **완료 (2026-08-05)**: `CHANGELOG.md` `[Unreleased]`에 `Fixed (behavior change)` 절을 만들어
+> 값이 바뀌는 5개 항목(파일 수 증가, 라인 수 재계산, conflict exit code, net-zero 예고,
+> 경로 unquoting)을 일반 `Fixed`와 분리해 기재했다. 소비자가 "더 정확해졌다"와
+> "파싱을 확인하라"를 구분할 수 있어야 하기 때문.
+
 신규 키는 전부 `omitempty`로만 추가:
 `tracked_files_changed`, `untracked_files_changed`, `staged_files_changed`, `scope`(`"head"|"staged"|"worktree"`)
 

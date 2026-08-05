@@ -7,6 +7,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (behavior change)
+
+`diff` and `commit` parsed `git status --porcelain` independently and disagreed on what
+counts as the change set, so a commit message written from a diff could omit files the
+commit then recorded (reported case: `diff` said 4 files, `commit` recorded 7). Both now
+share a single collector (`git status --porcelain -z -uall`) whose definition matches what
+`git add -A` actually stages. The following values change for existing consumers:
+
+- **`files_changed` grows on repositories with untracked directories.** Collapsed
+  `?? docs/` entries are now expanded to their individual paths, so a preview that
+  reported 1 reports N. The old number was wrong, not smaller — the commit always
+  recorded N.
+- **`additions` / `deletions` change on several shapes.** They are now derived from a
+  single `git diff --numstat -z HEAD` instead of summing `git diff --stat --cached` and
+  `git diff --stat`. Edits that were both staged and re-edited are no longer counted
+  twice, untracked file lines are now counted at all, and file names are no longer
+  mis-parsed as counts (`9-changed-deletions.txt` used to report `deletions: 9`).
+- **`gz-git commit` exits non-zero when repositories are left uncommitted for unresolved
+  merge conflicts** (`cliutil.ExitPartialFailed`, 2). It previously exited 0. A caller
+  that only checks `$?` used to record the refusal as a clean success.
+- **Repositories whose net change against HEAD is empty now preview as `clean`, not
+  `would-commit`.** A `MM file` where the worktree happens to match HEAD would fail at
+  commit time with "nothing to commit" — and, because the failure arrived after the
+  preview, exit 0. Binary and mode-only changes are still previewed as committable:
+  the decision uses the numstat record count, not the line totals, which are `0`/`0`
+  for both.
+- **Paths containing spaces or non-ASCII characters are emitted unquoted.** Porcelain
+  C-quoting was previously passed through verbatim, producing paths that did not exist
+  on disk and leaking quotes into generated commit subjects
+  (`chore("dir with space): update 5 files`).
+
+Key names and types in the JSON output are unchanged; only the values are corrected.
+
+### Fixed
+
+- `gz-git commit` no longer commits repositories with unresolved merge conflicts.
+  `git add -A` marks conflicts as resolved, so `<<<<<<<` markers were staged as ordinary
+  content and recorded into a two-parent merge commit — after which the repository
+  reported clean, making the damage effectively undetectable. Conflicted repositories are
+  now reported with an `⊗` status, their unmerged paths listed regardless of `--verbose`.
+- `gz-git diff --include-untracked` no longer dereferences symlinks. It read untracked
+  files with `os.ReadFile`, which follows links, so a convenience symlink such as
+  `ln -s ~/.aws/credentials creds` inlined the target's plaintext into diff output and
+  therefore into LLM prompts and CI artifacts. Symlinks are now reported the way git
+  reports them: `mode 120000` plus the link path.
+- `gz-git diff --include-untracked` no longer reads a file before checking it against
+  `--max-size`. A 191 MB untracked file under `--max-size 1` took RSS from 20 MB to
+  1.21 GB (4.17 GB at `--parallel 3`; the default is `--parallel 10`) and then discarded
+  the result. Size is now checked from `Lstat` before opening, and reads stream through
+  `io.LimitReader`.
+- `gz-git diff --include-untracked` is no longer a silent no-op on untracked
+  directories, and no longer drops files without a signal. Every skip is now recorded in
+  the new `omitted_files` key and surfaced in the human-readable formats.
+- `gz-git diff` reports content and line counts for changes that are already staged.
+  It ran `git diff` (worktree vs index), so a fully staged repository listed its files
+  but reported empty content and zero lines.
+- `git` command failures are no longer read as "no changes". `gitcmd.Executor.Run`
+  signals failure through `Result.ExitCode` and returns a nil error unless the process
+  could not be started, so code that checked only the error inverted a broken `status`
+  into a clean repository and a broken `ls-files --unmerged` into a conflict-free one.
+- `gz-git commit`'s `Total skipped` is computed from the filtered repository set and
+  before the `--dry-run` early return. It previously counted repositories excluded by
+  `--include`/`--exclude` as skipped, and always reported 0 under `--dry-run`.
+- Untracked files ending without a trailing newline no longer gain a spurious blank
+  `+` line; git's `\ No newline at end of file` marker is emitted instead.
+
+### Added
+
+- `gz-git commit --allow-conflicted` commits repositories that still have unmerged paths,
+  for the rare case where writing conflict markers into history is intended.
+- JSON output gains `tracked_files_changed`, `untracked_files_changed` and
+  `staged_files_changed` on both `diff` and `commit`, so a consumer can tell which set
+  each count describes rather than inferring it. `staged_files_changed` overlaps the
+  other two rather than partitioning them.
+- `gz-git diff --format json` gains `scope` (`head` | `staged` | `worktree`), naming the
+  comparison the numbers describe, and `omitted_files` (`{path, reason}`; reason is
+  `not-regular-file`, `too-large` or `read-error`).
+- `gz-git commit --format json` gains `total_conflicted` and per-repository
+  `conflicted_files`.
+- `gz-git diff`'s default and compact formats show untracked counts. Default prints
+  `4 files (+3 untracked)`; compact grows an `Untracked` column and renames `Files` to
+  `Tracked`, both only when some repository has untracked files. Files omitted from the
+  diff body are flagged in every human-readable format.
+
+### Internal
+
+- New `pkg/repository/changeset.go`: `collectChangeSet` is the single change-set
+  collector shared by `BulkDiff` and `BulkCommit`. The two inline porcelain parsers are
+  gone; `parseDiffStats` and `extractDiffSummaryLine` are deleted.
+- New `pkg/repository/bulk_diff_untracked.go` holds the read-only untracked enumeration
+  and defensive file reading (`Lstat` pre-check, re-`Stat` on the open descriptor to
+  close the TOCTOU window, chunked streaming).
+- Golden tests for `gz-git diff`'s default, compact, json and llm formats
+  (`cmd/gz-git/cmd/testdata/*.golden`, regenerate with `-update-golden`).
+
+> Two follow-ups are tracked but not fixed here: the same porcelain parsing defects
+> remain in the status/health paths (`pkg/repository/bulk.go`, `pkg/repository/client.go`),
+> and `--format llm` emits map keys in random order because the formatter lives in
+> `gzh-cli-core`. See `tasks/issue/06-*` and `tasks/issue/07-*`.
+
 ## [0.7.0] - 2026-07-02
 
 ### BREAKING CHANGES

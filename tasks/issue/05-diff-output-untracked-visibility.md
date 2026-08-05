@@ -113,7 +113,10 @@ $ git add -A --dry-run | wc -l → 28        ← 6 + 22
 
 ## Follow-up
 
-1. default/compact 출력 컬럼 변경은 CHANGELOG에 breaking-fix로 명시 필요 (본 태스크 범위 밖).
+1. ~~default/compact 출력 컬럼 변경은 CHANGELOG에 breaking-fix로 명시 필요 (본 태스크 범위 밖).~~
+   → **완료 (2026-08-05)**: `CHANGELOG.md` `[Unreleased]`의 `Added` 절에 기재.
+   조건부 컬럼(untracked가 있을 때만)이므로 값 정정이 아닌 추가로 분류했다 —
+   기존 출력 형태가 사라지는 게 아니라 새 상황에서만 넓어진다.
 
 2. **LLM 포맷의 맵 출력 순서가 비결정적이다** — `gzh-cli-core/cli/llm_formatter.go:177`이
    `reflect.Value.MapRange`로 정렬 없이 순회하므로, `SUMMARY:`처럼 키가 2개 이상인 맵은

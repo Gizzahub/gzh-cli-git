@@ -27,6 +27,7 @@ tasks/
 | 04 | [commit-stats-accuracy-numstat](issue/04-commit-stats-accuracy-numstat.md) | P2 | `additions`/`deletions` 부정확, 실패가 exit code에 안 드러남 ✅ |
 | 05 | [diff-output-untracked-visibility](issue/05-diff-output-untracked-visibility.md) | P2 | default/compact 포맷에 untracked 신호 전무 ✅ |
 | 06 | [porcelain-parsers-outside-diff-commit](issue/06-porcelain-parsers-outside-diff-commit.md) | P3 | 동일 porcelain 결함이 `bulk.go`·`client.go`의 상태/헬스 경로에 잔존 — 패키지 단일 파서(`porcelain.go`)로 통합, `internal/parser.ParseStatus` 삭제 ✅ <br>⚠️ **완료 후 세션 리뷰에서 신규 파서에 P0 유입 확인** — 수정 완료, 아래 "P0 유입과 수정" 참조 |
+| 10 | [porcelain-parsers-outside-pkg-repository](issue/10-porcelain-parsers-outside-pkg-repository.md) | P2 | `pkg/repository` 밖 재파싱 6곳 — `internal/porcelain` 단일 파서로 통합, `AA`/`DD` 충돌 누락 수정, 읽기 실패를 "정상"으로 렌더하던 3경로 정정 ✅ (2026-08-06) |
 
 **검증**: `go build`·`go vet`·`gofumpt`·전체 테스트 통과.
 01~05는 `golangci-lint`(신규 결함 0)까지 통과. 06 시점에는 설치본이 go1.25로 빌드되어 있고
@@ -72,7 +73,6 @@ tasks/
 | # | 태스크 | 우선순위 | 요지 |
 |---|--------|---------|------|
 | 09 | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2 | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip |
-| 10 | [porcelain-parsers-outside-pkg-repository](issue/10-porcelain-parsers-outside-pkg-repository.md) | P2 | `pkg/repository` 밖 재파싱 6곳, 2곳이 실제 결함. `pkg/reposync`는 `AA`/`DD` 충돌을 놓친다 |
 | 11 | [status-consumer-and-fixture-test-gaps](issue/11-status-consumer-and-fixture-test-gaps.md) | P2 | status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킴 |
 | 08 | [conflict-guard-fail-open-on-git-failure](issue/08-conflict-guard-fail-open-on-git-failure.md) | P2 | **Scope 1·2·3·4 해소** — 3(`diagnostic_executor.go`의 "assume clean on error")은 P0 수정과 함께 제거. **같은 날 내린 P3 강등은 철회**(근거였던 "잔여는 표시 경로뿐"이 사실이 아니었다). 잔여: `pkg/repository` 전역의 `executor.Run`+`ExitCode`-only 지점 선별. 10의 Finding 2·3이 같은 계열 |
 | 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | `gzh-cli-core` 쪽 **수정 완료**(정렬 방출 + 100회 결정성 테스트, 미커밋). 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 — CI는 `GOWORK: off`로 pinned core를 쓴다 |
@@ -167,6 +167,16 @@ classifyHealth → HealthHealthy
 - `pkg/repository` × `pkg/reposync` 교차 테스트가 `//go:build integration` 뒤에 있어
   기본 `go test ./...`에서 **한 번도 실행되지 않았다**. 신규
   `diagnostic_worktree_test.go`는 의도적으로 태그를 붙이지 않았다.
+
+### 2026-08-06 — 10 완료 (12·13 분리)
+
+최초 판정 "재파싱 6곳 중 2곳만 결함" → 재조사 결과 **5곳이 결함**. 오판의 축은 하나다:
+각 지점이 불리언 하나만 본다는 관찰은 옳았고, 놓친 것은 **그 불리언을 읽어내는 방법**이었다.
+커밋 `174c0ab`(`internal/porcelain` 신설) → `b0caf10`(reposync) → `7d1fc41`(doctor) →
+`7eecc6c`(branch/worktree + sync 프리뷰). 상세·결정 근거는 태스크 문서 참조.
+
+범위가 달라 분리한 잔여: **12**(죽은 `internal/parser` 삭제), **13**(`pkg/branch`
+`manager.go`·`cleanup.go` 잔여 fail-open + `worktreeManager.Get` 심볼릭 링크 미해석).
 
 ---
 

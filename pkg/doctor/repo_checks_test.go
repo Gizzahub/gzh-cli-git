@@ -279,6 +279,91 @@ func TestCheckConflicts_Clean(t *testing.T) {
 	}
 }
 
+func TestCheckConflicts_Unmerged(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepoWithCommit(t, dir)
+
+	// Both sides add the same path with different content, producing an AA
+	// record — an unmerged code with no 'U' in it.
+	runGit(t, dir, "checkout", "-b", "feature")
+	writeFile(t, dir, "both.txt", "from feature\n")
+	runGit(t, dir, "add", "both.txt")
+	runGit(t, dir, "commit", "-m", "add both.txt on feature")
+
+	runGit(t, dir, "checkout", "-")
+	writeFile(t, dir, "both.txt", "from base\n")
+	runGit(t, dir, "add", "both.txt")
+	runGit(t, dir, "commit", "-m", "add both.txt on base")
+
+	// A conflicting merge exits non-zero; that is the point of the fixture.
+	mergeCmd := exec.CommandContext(context.Background(), "git", "merge", "feature")
+	mergeCmd.Dir = dir
+	_, _ = mergeCmd.CombinedOutput()
+
+	ctx := context.Background()
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkConflicts(ctx, executor, dir, "test-repo")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for conflicted repo, got %d: %+v", len(results), results)
+	}
+	if results[0].Status != StatusError {
+		t.Errorf("Status = %v, want %v", results[0].Status, StatusError)
+	}
+}
+
+// TestCheckConflicts_UnreadableRepo pins the difference between "examined and
+// found healthy" and "not examined".
+//
+// Every check here signals a healthy repository by returning no results, so
+// discarding the error from git status filed an unreadable repository under the
+// same heading as a clean one — in the one command whose entire job is to tell
+// those apart.
+func TestCheckConflicts_UnreadableRepo(t *testing.T) {
+	dir := t.TempDir() // not a git repository
+
+	ctx := context.Background()
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkConflicts(ctx, executor, dir, "test-repo")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for an unreadable repo, got %d: %+v", len(results), results)
+	}
+	if results[0].Status == StatusOK {
+		t.Errorf("Status = %v, want a non-OK status", results[0].Status)
+	}
+}
+
+// --- checkDirtyBehind ---
+
+func TestCheckDirtyBehind_UnreadableRepo(t *testing.T) {
+	dir := t.TempDir() // not a git repository
+
+	ctx := context.Background()
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkDirtyBehind(ctx, executor, dir, "test-repo")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for an unreadable repo, got %d: %+v", len(results), results)
+	}
+	if results[0].Status == StatusOK {
+		t.Errorf("Status = %v, want a non-OK status", results[0].Status)
+	}
+}
+
+func TestCheckDirtyBehind_Clean(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepoWithCommit(t, dir)
+
+	ctx := context.Background()
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkDirtyBehind(ctx, executor, dir, "test-repo")
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results for clean repo, got %d: %+v", len(results), results)
+	}
+}
+
 // --- checkDevelopMainDistance ---
 
 func TestCheckDevelopMainDistance_NoDevelop(t *testing.T) {

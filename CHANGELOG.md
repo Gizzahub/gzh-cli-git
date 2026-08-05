@@ -143,6 +143,12 @@ line up, and all three are fixed:
 
 ### Fixed
 
+- `gz-git doctor` no longer reports a repository it could not read as healthy. Every
+  repository check signals "nothing wrong" by producing no findings, so discarding the
+  error from `git status` filed an unreadable repository under the same heading as one
+  that was examined and found clean — in the command whose whole purpose is telling those
+  apart. Such a repository now produces a `worktree-unreadable` warning naming the git
+  error, and its conflict and dirty-worktree checks are reported as skipped.
 - The post-sync badge in `gz-git sync` and `gz-git workspace sync` recognizes every
   conflicted state. It tested each porcelain status letter against `U`, which covers five
   of git's seven unmerged codes; `AA` (both added) and `DD` (both deleted) contain no `U`,

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/internal/porcelain"
 )
 
 // Thresholds for repository health checks.
@@ -219,20 +220,54 @@ func checkIncompleteOps(repoPath, name string) []CheckResult {
 	return results
 }
 
-func checkConflicts(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {
-	output, err := executor.RunOutput(ctx, repoPath, "status", "--porcelain")
+// readStatus returns the working tree records for a repository.
+//
+// It goes through Executor.Run rather than RunOutput because RunOutput trims its
+// result, and the leading space of a `-z` record is significant — " M file"
+// would arrive as "M file", shifting the path by a byte and turning an unstaged
+// change into a staged one.
+func readStatus(ctx context.Context, executor *gitcmd.Executor, repoPath string) ([]porcelain.Record, error) {
+	// No -uall: both callers only ask whether the record set is non-empty and
+	// which codes are unmerged. A collapsed `dir/` entry answers the first, and
+	// untracked files are never the second, so expanding them would only cost a
+	// walk of every untracked tree in every scanned repository.
+	result, err := executor.Run(ctx, repoPath, "status", "--porcelain", "-z")
 	if err != nil {
-		return nil
+		return nil, err
+	}
+
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("git status exited %d: %s", result.ExitCode, strings.TrimSpace(result.Stderr))
+	}
+
+	return porcelain.Parse(result.Stdout)
+}
+
+// unreadableWorkTree reports a status read that failed.
+//
+// Every check in this file signals "nothing wrong" by returning no results, so a
+// failed read must produce a result of its own. Returning nil would file the
+// repository under the same heading as one that was examined and found healthy —
+// and doctor exists precisely to tell those two apart.
+func unreadableWorkTree(name string, err error) CheckResult {
+	return CheckResult{
+		Name:     fmt.Sprintf("repo:%s:worktree-unreadable", name),
+		Category: CategoryRepo,
+		Status:   StatusWarning,
+		Message:  fmt.Sprintf("%s: could not read working tree: %v", name, err),
+		Detail:   "conflict and dirty-worktree checks were skipped for this repository",
+	}
+}
+
+func checkConflicts(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {
+	records, err := readStatus(ctx, executor, repoPath)
+	if err != nil {
+		return []CheckResult{unreadableWorkTree(name, err)}
 	}
 
 	conflictCount := 0
-	for line := range strings.SplitSeq(output, "\n") {
-		if len(line) < 2 {
-			continue
-		}
-		// Unmerged status codes: UU, AA, DD, AU, UA, DU, UD
-		x, y := line[0], line[1]
-		if x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D') {
+	for _, rec := range records {
+		if porcelain.IsUnmerged(rec.Code) {
 			conflictCount++
 		}
 	}
@@ -251,9 +286,13 @@ func checkConflicts(ctx context.Context, executor *gitcmd.Executor, repoPath, na
 
 func checkDirtyBehind(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {
 	// Check dirty
-	dirty, err := executor.RunOutput(ctx, repoPath, "status", "--porcelain")
-	if err != nil || strings.TrimSpace(dirty) == "" {
-		return nil // clean or error
+	records, err := readStatus(ctx, executor, repoPath)
+	if err != nil {
+		return []CheckResult{unreadableWorkTree(name, err)}
+	}
+
+	if len(records) == 0 {
+		return nil // clean
 	}
 
 	// Check behind

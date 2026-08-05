@@ -60,7 +60,7 @@ func TestWorktreeManager_RemoveRefusesDirtyWorktree(t *testing.T) {
 
 	// t.TempDir() is deliberately not passed through EvalSymlinks: on macOS it
 	// sits under /var, a symlink to /private/var, which is exactly the shape Get
-	// has to handle. See TestWorktreeManager_GetFindsWorktreeUnderSymlinkedPath.
+	// has to handle. See TestWorktreeManager_GetMatchesEitherSpelling.
 	worktreePath := filepath.Join(t.TempDir(), "feature-wt")
 
 	mgr := NewWorktreeManager()

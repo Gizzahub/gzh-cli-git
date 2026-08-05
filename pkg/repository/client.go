@@ -443,14 +443,16 @@ func (c *client) GetStatus(ctx context.Context, repo *Repository) (*Status, erro
 
 	c.logger.Debug("Getting repository status for %s", repo.Path)
 
-	// Execute git status --porcelain
-	output, err := c.executor.RunOutput(ctx, repo.Path, "status", "--porcelain")
+	// -z -uall, and runGit rather than RunOutput: see parsePorcelainZ for why all
+	// three matter. RunOutput trims its result, which used to strip the leading
+	// space off the first record and reclassify an unstaged edit as a staged one.
+	output, err := c.runGit(ctx, repo.Path, "status", "--porcelain", "-z", "-uall")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository status: %w", err)
 	}
 
 	// Parse status output
-	status, err := parseStatus(output)
+	status, err := statusFromRecords(parsePorcelainZ(output))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse status output: %w", err)
 	}
@@ -481,133 +483,6 @@ func parseAheadBehind(output string) (ahead, behind int, err error) {
 	return ahead, behind, nil
 }
 
-// parseStatus parses the output of "git status --porcelain".
-// The porcelain format is designed to be easy for scripts to parse.
-//
-// Format:
-// XY PATH
-// where X = index status, Y = worktree status
-//
-// Status codes:
-// ' ' = unmodified
-// M = modified
-// A = added
-// D = deleted
-// R = renamed
-// C = copied
-// U = updated but unmerged
-// ? = untracked
-// ! = ignored.
-func parseStatus(output string) (*Status, error) {
-	status := &Status{
-		IsClean:        true,
-		ModifiedFiles:  []string{},
-		StagedFiles:    []string{},
-		UntrackedFiles: []string{},
-		ConflictFiles:  []string{},
-		DeletedFiles:   []string{},
-		RenamedFiles:   []RenamedFile{},
-	}
-
-	if output == "" {
-		// Empty output means clean working tree
-		return status, nil
-	}
-
-	lines := strings.Split(output, "\n")
-	for i, line := range lines {
-		// Don't trim the line itself as git status --porcelain has specific format
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		// Minimum length: "XY PATH" = 3 characters + space + path
-		if len(line) < 4 {
-			return nil, fmt.Errorf("line %d too short for status format: %q", i, line)
-		}
-
-		indexStatus := rune(line[0])
-		worktreeStatus := rune(line[1])
-		filePath := strings.TrimSpace(line[3:])
-
-		// Handle renamed files (format: "old -> new")
-		if indexStatus == 'R' || worktreeStatus == 'R' {
-			parts := strings.Split(filePath, " -> ")
-			if len(parts) == 2 {
-				status.RenamedFiles = append(status.RenamedFiles, RenamedFile{
-					OldPath: strings.TrimSpace(parts[0]),
-					NewPath: strings.TrimSpace(parts[1]),
-				})
-				status.StagedFiles = append(status.StagedFiles, parts[1])
-				status.IsClean = false
-				continue
-			}
-		}
-
-		// Parse status codes
-		if err := parseStatusCode(status, indexStatus, worktreeStatus, filePath); err != nil {
-			return nil, fmt.Errorf("line %d: %w (content: %q)", i, err, line)
-		}
-	}
-
-	return status, nil
-}
-
-// parseStatusCode interprets the two-character status code.
-func parseStatusCode(status *Status, index, worktree rune, path string) error {
-	// Index status (staged changes)
-	switch index {
-	case 'M': // Modified in index
-		status.StagedFiles = append(status.StagedFiles, path)
-		status.IsClean = false
-	case 'A': // Added to index
-		status.StagedFiles = append(status.StagedFiles, path)
-		status.IsClean = false
-	case 'D': // Deleted from index
-		status.StagedFiles = append(status.StagedFiles, path)
-		status.DeletedFiles = append(status.DeletedFiles, path)
-		status.IsClean = false
-	case 'R': // Renamed in index
-		status.StagedFiles = append(status.StagedFiles, path)
-		status.IsClean = false
-	case 'C': // Copied in index
-		status.StagedFiles = append(status.StagedFiles, path)
-		status.IsClean = false
-	case 'U': // Unmerged (conflict)
-		status.ConflictFiles = append(status.ConflictFiles, path)
-		status.IsClean = false
-	case '?': // Untracked
-		status.UntrackedFiles = append(status.UntrackedFiles, path)
-		status.IsClean = false
-	case '!': // Ignored
-		// We typically don't track ignored files in status
-	case ' ': // Unchanged in index
-		// No action needed for index
-	default:
-		return fmt.Errorf("unknown index status code: %c", index)
-	}
-
-	// Worktree status (unstaged changes)
-	switch worktree {
-	case 'M': // Modified in worktree
-		status.ModifiedFiles = append(status.ModifiedFiles, path)
-		status.IsClean = false
-	case 'D': // Deleted from worktree
-		status.DeletedFiles = append(status.DeletedFiles, path)
-		status.IsClean = false
-	case 'U': // Unmerged (conflict)
-		status.ConflictFiles = append(status.ConflictFiles, path)
-		status.IsClean = false
-	case '?': // Untracked (second character for untracked files)
-		// Already handled by index status
-	case ' ': // Unchanged in worktree
-		// No action needed
-	default:
-		// Some status codes only appear in index, not worktree
-		if worktree != 'A' && worktree != 'R' && worktree != 'C' {
-			return fmt.Errorf("unknown worktree status code: %c", worktree)
-		}
-	}
-
-	return nil
-}
+// Porcelain status parsing lives in porcelain.go: parsePorcelainZ splits the
+// wire format, statusFromRecords projects it onto Status. Both are shared with
+// collectChangeSet and checkRepositoryState so the package has one parser.

@@ -186,7 +186,7 @@ func displayFetchResults(result *repository.BulkFetchResult) {
 			Duration:         repo.Duration,
 			CommitsAhead:     repo.CommitsAhead,
 			CommitsBehind:    repo.CommitsBehind,
-			UncommittedFiles: repo.UncommittedFiles,
+			UncommittedFiles: repo.TrackedChangedFiles,
 			UntrackedFiles:   repo.UntrackedFiles,
 		})
 	}

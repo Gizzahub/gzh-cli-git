@@ -40,6 +40,96 @@ share a single collector (`git status --porcelain -z -uall`) whose definition ma
 
 Key names and types in the JSON output are unchanged; only the values are corrected.
 
+---
+
+The status and health paths still parsed `git status --porcelain` the way `diff` and
+`commit` used to, each with its own answer to "how many uncommitted files". All call
+sites now share one parser over `git status --porcelain -z -uall`. File counts reported
+by `gz-git status`, `gz-git info`, `fetch`, `pull` and `push` move in **three different
+directions** — a consumer that only expects them to grow will read the shrinking cases as
+a regression:
+
+- **`untracked_files` grows on repositories with untracked directories** (values
+  *increase*). Plain `--porcelain` collapses an untracked directory into one `docs/`
+  entry, so two new files under it were reported as one. Observed on a fixture with two
+  files in one untracked directory: `untracked_files` 1 → 2.
+- **`uncommitted_files` shrinks in `status` and `info`** (values *decrease*). It was the
+  raw porcelain line count, untracked entries included — which `untracked_files` then
+  reported a second time. It now counts tracked paths only. Observed on this repository:
+  `uncommitted_files` 21 → 18 against 18 tracked changes and 3 untracked files.
+- **`uncommitted_files` shrinks where one path is both staged and modified** (values
+  *decrease*). `fetch`/`pull`/`push` computed
+  `len(StagedFiles) + len(ModifiedFiles)`, so an `MM` path counted twice.
+- **`uncommitted_files` grows where a file was deleted in the working tree only** (values
+  *increase*). The same sum omitted ` D` paths, which are recorded as deletions and
+  neither staged nor modified, so deleting a tracked file could leave the count at 0.
+- **The first entry of a status listing is no longer misclassified** (values *move*
+  between fields). The porcelain payload was whitespace-trimmed before being parsed by
+  column offset, so the leading space of the first record was eaten: ` M README.md` was
+  read as `M EADME.md` — staged instead of modified, with the path shifted one byte.
+  Only the first record was affected, which is why it survived a table of fixtures that
+  checked later ones. Observed on a fixture with two working-tree deletions:
+  `uncommitted_files` 1 → 2.
+- **Paths containing spaces or non-ASCII characters are emitted unquoted**, matching the
+  `diff`/`commit` fix above.
+- **A conflicted repository reports its unmerged paths from the index** rather than from
+  porcelain, so the paths are never C-quoted and do not depend on the working tree.
+- **`checkRepositoryState` now fails instead of reporting a clean, conflict-free
+  repository when git fails.** It checked only the error return, but the executor reports
+  a failed git through an exit code and returns no error — so a repository whose
+  `.git/index` was corrupt (git exit 128) read as having no conflicts, and the `push`
+  conflict guard opened. Callers now receive the error.
+
+API note: `UncommittedFiles` on `RepositoryFetchResult`, `RepositoryPullResult`,
+`RepositoryPushResult` and `RepositoryStatusResult` is **deprecated** in favour of
+`TrackedChangedFiles`, `StagedFiles` and `UnstagedFiles`. It still carries a value —
+now the same as `TrackedChangedFiles`. `Status` gains `StagedCount`, `UnstagedCount` and
+`TrackedChangedCount`; these cannot be derived from the existing slices, which keep only
+the union of the two porcelain status characters. `internal/parser.ParseStatus`, an
+unused duplicate of the same parser, is removed.
+
+JSON key names are unchanged, including `uncommitted_files`.
+
+Two further consequences of that shared parser, previously undocumented:
+
+- **`gz-git status` and `gz-git info` classify a working-tree-only deletion as dirty.**
+  The health check summed `len(ModifiedFiles) + len(StagedFiles)`, and a ` D` path is
+  recorded in `DeletedFiles` alone — so `rm` on a tracked file left the repository
+  reporting `clean` / `healthy`. It now uses `TrackedChangedCount`, which also stops a
+  path that is both staged and modified from counting twice.
+- **`gz-git switch`'s skip message names both counts.** `Has uncommitted changes
+  (%d files) - skipping` became `Has uncommitted changes (%d tracked, %d untracked) -
+  skipping`. The single number was `len(ModifiedFiles) + len(StagedFiles)` while the
+  skip gate itself is `IsClean`, so a repository held back for untracked files alone
+  announced `(0 files)`. Scripts matching on this string need updating.
+
+---
+
+A rename whose destination is intent-to-added made `gz-git status` report a repository
+holding uncommitted work as **healthy, "No action needed", exit 0**. Three defects had to
+line up, and all three are fixed:
+
+- **`git status -z` rename records are now paired on either status column.** `-z` drops
+  the ` -> ` separator and moves the source path into the *next* record; the parser
+  claimed that record only when the rename letter sat on the index side (`R `, `RM`,
+  `RD`). git also emits it on the worktree side — ` R` — when the destination is
+  intent-to-added while the source deletion stays unstaged (`mv a b && git add -N b`).
+  The unclaimed source path was then re-read as a status line, so `handler.go` became
+  XY code `ha` and the whole status read failed with `unknown index status code: h`.
+  Affects `status`, `info`, `fetch`, `pull`, `push`, `diff` and `commit`, which share
+  the parser. Copies (`C`) are paired the same way.
+- **Intent-to-add (` A`, `git add -N`) is reported as an unstaged modification.** It was
+  a silent no-op: the path raised `TrackedChangedCount` while appearing in no file list,
+  so a consumer cross-checking the count against the lists saw them disagree. It is
+  filed under `ModifiedFiles`, matching git's own reading — the index holds the path
+  with empty content, so every byte is unstaged.
+- **`gz-git status` no longer reports a repository whose working tree it could not read
+  as clean.** The health check set `WorkTreeClean` on a failed `GetStatus` — promoting
+  "the read failed" to "there is nothing to commit". This is the amplifier that turned
+  the parse failure above into a silent wrong answer, and it predates it: a corrupt
+  `.git/index` already produced `✓ All 1 repositories are healthy`, exit 0. Such a
+  repository is now `HealthError`, exit 2, with the underlying git error preserved.
+
 ### Fixed
 
 - `gz-git commit` no longer commits repositories with unresolved merge conflicts.
@@ -90,6 +180,20 @@ Key names and types in the JSON output are unchanged; only the values are correc
   `4 files (+3 untracked)`; compact grows an `Untracked` column and renames `Files` to
   `Tracked`, both only when some repository has untracked files. Files omitted from the
   diff body are flagged in every human-readable format.
+- `reposync.WorkTreeStatus` gains `WorkTreeUnknown` (`"unknown"`), distinct from
+  `WorkTreeClean`: the question was asked and went unanswered. The empty zero value still
+  means "not checked", which is what `CheckWorkTree: false` leaves behind. It renders as
+  `state-unreadable` in the TUI formatter and `UNREADABLE` in `gz-git status`, and carries
+  the recommendation *"Working tree state could not be read. Run 'git status' in the
+  repository to see the underlying error"*. A consumer switching on `WorkTreeStatus`
+  without a `default` will silently render nothing for it.
+
+### Changed
+
+- `checkRepositoryState` reads `git status --porcelain -z -uno` instead of `-uall`. It
+  consumes only `ConflictFiles`, and a conflicted path is by definition tracked, so
+  `-uall` was forcing a full recursive walk of every untracked directory to produce
+  entries nothing read. No output value changes.
 
 ### Internal
 
@@ -101,11 +205,17 @@ Key names and types in the JSON output are unchanged; only the values are correc
   close the TOCTOU window, chunked streaming).
 - Golden tests for `gz-git diff`'s default, compact, json and llm formats
   (`cmd/gz-git/cmd/testdata/*.golden`, regenerate with `-update-golden`).
+- New `pkg/reposync/diagnostic_worktree_test.go` covers `pkg/repository` and
+  `pkg/reposync` together. It is deliberately untagged: the rename defect above was
+  only ever visible at that join, and the existing cross-package coverage sits behind
+  `//go:build integration`, so it never ran.
 
-> Two follow-ups are tracked but not fixed here: the same porcelain parsing defects
-> remain in the status/health paths (`pkg/repository/bulk.go`, `pkg/repository/client.go`),
-> and `--format llm` emits map keys in random order because the formatter lives in
-> `gzh-cli-core`. See `tasks/issue/06-*` and `tasks/issue/07-*`.
+> One follow-up is tracked but not fixed here: `--format llm` emits map keys in random
+> order because the formatter lives in `gzh-cli-core`. See `tasks/issue/07-*`.
+> Four issues opened during review remain open: porcelain parsers outside
+> `pkg/repository` (`10-*`), the parser's silent skip of malformed records (`09-*`),
+> the remaining `Executor.Run` fail-open sites (`08-*`), and status-consumer test
+> coverage (`11-*`).
 
 ## [0.7.0] - 2026-07-02
 

@@ -82,6 +82,13 @@ const (
 
 	// WorkTreeMergeInProgress means a merge is in progress.
 	WorkTreeMergeInProgress WorkTreeStatus = "merge-in-progress"
+
+	// WorkTreeUnknown means the working tree could not be read (for example a
+	// corrupt .git/index). It is deliberately distinct from WorkTreeClean: the
+	// question was asked and went unanswered, which is not the same as an answer
+	// of "no changes". The empty zero value still means "not checked", which is
+	// what CheckWorkTree=false leaves behind.
+	WorkTreeUnknown WorkTreeStatus = "unknown"
 )
 
 // RepoHealth represents the diagnostic result for a single repository.

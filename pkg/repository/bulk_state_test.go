@@ -79,12 +79,12 @@ func TestCheckRepositoryState(t *testing.T) {
 		if state.MergeInProgress {
 			t.Error("Expected no merge in progress")
 		}
-		if state.IsDirty {
-			t.Error("Expected clean repository")
+		if len(state.ConflictedFiles) != 0 {
+			t.Errorf("Expected no conflicted files, got %v", state.ConflictedFiles)
 		}
 	})
 
-	t.Run("dirty repository", func(t *testing.T) {
+	t.Run("dirty repository is not conflicted", func(t *testing.T) {
 		// Modify file
 		if err := os.WriteFile(testFile, []byte("modified content"), 0o644); err != nil {
 			t.Fatalf("Failed to modify test file: %v", err)
@@ -95,11 +95,24 @@ func TestCheckRepositoryState(t *testing.T) {
 			t.Fatalf("Failed to check repository state: %v", err)
 		}
 
-		if !state.IsDirty {
-			t.Error("Expected dirty repository")
+		// checkRepositoryState no longer reports counts; a merely modified file
+		// must not be mistaken for an unmerged one.
+		if state.HasConflicts {
+			t.Errorf("Expected no conflicts for a modified file, got %v", state.ConflictedFiles)
 		}
-		if state.UncommittedFiles == 0 {
-			t.Error("Expected uncommitted files")
+
+		status, err := c.GetStatus(ctx, &Repository{Path: repoPath})
+		if err != nil {
+			t.Fatalf("Failed to get status: %v", err)
+		}
+		if status.TrackedChangedCount != 1 {
+			t.Errorf("TrackedChangedCount = %d, want 1", status.TrackedChangedCount)
+		}
+		if status.UnstagedCount != 1 {
+			t.Errorf("UnstagedCount = %d, want 1", status.UnstagedCount)
+		}
+		if status.StagedCount != 0 {
+			t.Errorf("StagedCount = %d, want 0", status.StagedCount)
 		}
 
 		// Clean up - reset the file

@@ -164,17 +164,29 @@ func (e DiagnosticExecutor) checkOne(ctx context.Context, client repo.Client, lo
 	if opts.CheckWorkTree {
 		status, err := client.GetStatus(ctx, r)
 		if err != nil {
+			// Not WorkTreeClean. This used to assume clean, which promoted "the
+			// status read failed" to "there is nothing to commit" — the strongest
+			// possible claim built on no evidence at all. Every downstream verdict
+			// (classifyHealth, the recommendation, the JSON summary) then agreed
+			// the repository needed no attention. A single upstream parse defect
+			// was enough to make a repository with uncommitted work report as
+			// healthy, silently, with exit code 0.
 			logger.Warn("failed to check working tree", "repo", descriptor.TargetPath, "error", err)
-			health.WorkTreeStatus = WorkTreeClean // Assume clean on error
+			health.WorkTreeStatus = WorkTreeUnknown
+			health.Error = fmt.Errorf("failed to check working tree: %w", err)
 		} else {
-			health.ModifiedFiles = len(status.ModifiedFiles) + len(status.StagedFiles)
+			// TrackedChangedCount rather than len(ModifiedFiles)+len(StagedFiles):
+			// the sum counted a path that is both staged and modified twice, and
+			// missed working-tree-only deletions, which land in DeletedFiles
+			// alone and so read as a clean tree.
+			health.ModifiedFiles = status.TrackedChangedCount
 			health.UntrackedFiles = len(status.UntrackedFiles)
 			health.ConflictFiles = len(status.ConflictFiles)
 
 			switch {
 			case len(status.ConflictFiles) > 0:
 				health.WorkTreeStatus = WorkTreeConflict
-			case len(status.ModifiedFiles)+len(status.StagedFiles) > 0:
+			case status.TrackedChangedCount > 0:
 				health.WorkTreeStatus = WorkTreeDirty
 			default:
 				health.WorkTreeStatus = WorkTreeClean
@@ -274,6 +286,16 @@ func classifyHealth(health RepoHealth) HealthStatus {
 		return HealthWarning
 	}
 
+	// Error if the working tree could not be read. Placed ahead of every
+	// content-based verdict below because those all rest on data we do not have:
+	// with no status, "no conflicts" and "not dirty" are absences of evidence,
+	// not evidence of absence. Ranked Error rather than Warning because the
+	// causes — a corrupt index, a half-written .git — are exactly the states that
+	// tend to carry an unfinished merge with them.
+	if health.WorkTreeStatus == WorkTreeUnknown {
+		return HealthError
+	}
+
 	// Error if conflicts exist
 	if health.WorkTreeStatus == WorkTreeConflict {
 		return HealthError
@@ -309,6 +331,9 @@ func generateRecommendation(health RepoHealth) string {
 		return "Check network connection and verify remote URL is accessible"
 
 	case HealthError:
+		if health.WorkTreeStatus == WorkTreeUnknown {
+			return "Working tree state could not be read. Run 'git status' in the repository to see the underlying error"
+		}
 		if health.WorkTreeStatus == WorkTreeConflict {
 			return "Resolve merge conflicts, then commit or reset"
 		}

@@ -168,6 +168,29 @@ func TestClassifyHealth(t *testing.T) {
 			},
 			expected: HealthHealthy,
 		},
+		{
+			// "Could not read the tree" is not "the tree is fine". Every verdict
+			// below the WorkTreeUnknown check rests on status output we do not
+			// have, so no repository in this state may be called healthy.
+			name: "working tree unreadable (error, never healthy)",
+			health: RepoHealth{
+				NetworkStatus:  NetworkOK,
+				WorkTreeStatus: WorkTreeUnknown,
+				DivergenceType: DivergenceNone,
+			},
+			expected: HealthError,
+		},
+		{
+			// Outranks the divergence warnings that follow it, for the same reason.
+			name: "working tree unreadable outranks divergence",
+			health: RepoHealth{
+				NetworkStatus:  NetworkOK,
+				WorkTreeStatus: WorkTreeUnknown,
+				DivergenceType: DivergenceAhead,
+				AheadBy:        2,
+			},
+			expected: HealthError,
+		},
 	}
 
 	for _, tt := range tests {

@@ -306,7 +306,7 @@ func (c *client) applyPullStrategy(ctx context.Context, opts CloneOrUpdateOption
 		// Continue with pull attempt
 	} else if !status.IsClean {
 		// Working tree has uncommitted changes
-		uncommittedCount := len(status.ModifiedFiles) + len(status.StagedFiles) + len(status.DeletedFiles)
+		uncommittedCount := status.TrackedChangedCount
 		untrackedCount := len(status.UntrackedFiles)
 		logger.Info("working tree is dirty, cannot pull", "uncommitted", uncommittedCount, "untracked", untrackedCount)
 		return &CloneOrUpdateResult{
@@ -403,7 +403,7 @@ func (c *client) applyRebaseStrategy(ctx context.Context, opts CloneOrUpdateOpti
 		// Continue with rebase attempt
 	} else if !status.IsClean {
 		// Working tree has uncommitted changes
-		uncommittedCount := len(status.ModifiedFiles) + len(status.StagedFiles) + len(status.DeletedFiles)
+		uncommittedCount := status.TrackedChangedCount
 		untrackedCount := len(status.UntrackedFiles)
 		logger.Info("working tree is dirty, cannot rebase", "uncommitted", uncommittedCount, "untracked", untrackedCount)
 		return &CloneOrUpdateResult{

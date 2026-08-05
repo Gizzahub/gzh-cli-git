@@ -26,29 +26,147 @@ tasks/
 | 03 | [untracked-read-loop-security-and-oom](issue/03-untracked-read-loop-security-and-oom.md) | **P0** | `--include-untracked`의 `os.ReadFile` 루프 — 정보유출·OOM·무음 누락 ✅ |
 | 04 | [commit-stats-accuracy-numstat](issue/04-commit-stats-accuracy-numstat.md) | P2 | `additions`/`deletions` 부정확, 실패가 exit code에 안 드러남 ✅ |
 | 05 | [diff-output-untracked-visibility](issue/05-diff-output-untracked-visibility.md) | P2 | default/compact 포맷에 untracked 신호 전무 ✅ |
+| 06 | [porcelain-parsers-outside-diff-commit](issue/06-porcelain-parsers-outside-diff-commit.md) | P3 | 동일 porcelain 결함이 `bulk.go`·`client.go`의 상태/헬스 경로에 잔존 — 패키지 단일 파서(`porcelain.go`)로 통합, `internal/parser.ParseStatus` 삭제 ✅ <br>⚠️ **완료 후 세션 리뷰에서 신규 파서에 P0 유입 확인** — 수정 완료, 아래 "P0 유입과 수정" 참조 |
 
-**검증**: `go build`·`go vet`·`gofumpt`·`golangci-lint`(신규 결함 0)·전체 테스트 통과.
+**검증**: `go build`·`go vet`·`gofumpt`·전체 테스트 통과.
+01~05는 `golangci-lint`(신규 결함 0)까지 통과. 06 시점에는 설치본이 go1.25로 빌드되어 있고
+모듈이 go1.26을 타깃해 `golangci-lint`가 기동 자체를 못 한다(환경 문제, 변경과 무관).
+
 실 `gzh-cli-gitforge` 작업 트리에서 diff(6+22)/commit--dry-run(28)/`git add -A`(28) 3자 일치 확인.
+06은 추가로 `info`/`status` 경로를 git ground truth와 대조 (아래 표).
 
 ### 의존 관계 (실행 완료)
 
 ```
-01 (change-set 통일) ──┬── 04 (stats 정확도)    ✅
-                       └── 05 (출력 가시성)     ✅
-02 (conflict guard)  ── 독립                   ✅
-03 (untracked 읽기)  ── 독립                   ✅
+01 (change-set 통일) ──┬── 04 (stats 정확도)     ✅
+                       ├── 05 (출력 가시성)      ✅
+                       └── 06 (상태/헬스 경로)   ✅ ─┬─ 08 Scope 1·2·4 동반 해소
+                                                     └─ P0 유입 → 세션 리뷰에서 적발·수정
+                                                        (그 과정에 08 Scope 3도 해소)
+02 (conflict guard)  ── 독립                    ✅
+03 (untracked 읽기)  ── 독립                    ✅
 ```
 
-**착수 순서**(02 → 03 → 01 → 04 → 05)대로 전부 완료.
+**착수 순서**(02 → 03 → 01 → 04 → 05 → 06)대로 완료.
+
+### 06 실측 대조 (`uncommitted` + `untracked`)
+
+| 픽스처 | git 실제 | v0.7.0 | 수정 후 |
+|--------|---------|--------|--------|
+| 이 리포 (`info`) | 18 + 3 | 21 + 3 | **18 + 3** |
+| 워크트리 삭제 2 + untracked 디렉터리(파일 2) (`info`) | 2 + 2 | 3 + 1 | **2 + 2** |
+| 같은 픽스처 (`status --skip-fetch`, 헬스 경로) | 2 + 2 | 1 + 1 | **2 + 2** |
+
+### 06 공개 API 변경 (CHANGELOG 기재됨)
+
+- `RepositoryFetchResult`/`PullResult`/`PushResult`/`StatusResult`의 `UncommittedFiles`
+  **deprecate** → `TrackedChangedFiles` + `StagedFiles`/`UnstagedFiles` 신설.
+  값은 정정되고 **JSON 키는 불변**(`uncommitted_files` 유지).
+- `Status`에 `StagedCount`/`UnstagedCount`/`TrackedChangedCount` 신설.
+- `internal/parser.ParseStatus` **삭제** (프로덕션 호출자 0건).
 
 ---
 
-## Open Issues (후속 — 구현 미착수)
+## Open Issues (후속)
 
 | # | 태스크 | 우선순위 | 요지 |
 |---|--------|---------|------|
-| 06 | [porcelain-parsers-outside-diff-commit](issue/06-porcelain-parsers-outside-diff-commit.md) | P3 | 동일 porcelain 결함이 `bulk.go:1813`·`client.go:447`에 잔존 (상태/헬스 경로, 비가역 아님) |
-| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | `gzh-cli-core` LLM 포맷이 맵 키를 정렬 없이 방출 — cross-repo, 회귀 테스트용 정규화로 우회 중 |
+| 09 | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2 | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip |
+| 10 | [porcelain-parsers-outside-pkg-repository](issue/10-porcelain-parsers-outside-pkg-repository.md) | P2 | `pkg/repository` 밖 재파싱 6곳, 2곳이 실제 결함. `pkg/reposync`는 `AA`/`DD` 충돌을 놓친다 |
+| 11 | [status-consumer-and-fixture-test-gaps](issue/11-status-consumer-and-fixture-test-gaps.md) | P2 | status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킴 |
+| 08 | [conflict-guard-fail-open-on-git-failure](issue/08-conflict-guard-fail-open-on-git-failure.md) | P2 | **Scope 1·2·3·4 해소** — 3(`diagnostic_executor.go`의 "assume clean on error")은 P0 수정과 함께 제거. **같은 날 내린 P3 강등은 철회**(근거였던 "잔여는 표시 경로뿐"이 사실이 아니었다). 잔여: `pkg/repository` 전역의 `executor.Run`+`ExitCode`-only 지점 선별. 10의 Finding 2·3이 같은 계열 |
+| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | `gzh-cli-core` 쪽 **수정 완료**(정렬 방출 + 100회 결정성 테스트, 미커밋). 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 — CI는 `GOWORK: off`로 pinned core를 쓴다 |
+
+### 2026-08-05 — 06 착수 전 조사에서 추가 확인 (전부 처리됨)
+
+- **08 (신규)**: `Executor.Run`이 exit≠0에 nil error를 돌려주는데 `checkRepositoryState`가
+  `err`만 검사한다. `processPushRepository`는 앞단에 `GetStatus`가 없어 마스킹되지 않는다.
+  잘린 `.git/index`로 재현 확인 (status exit=128, `rev-parse` exit=0).
+  → **06의 `runGit` 전환으로 해소**, `TestCheckRepositoryStateFailsOnBrokenGit`이 고정.
+  P2였던 이유(push 가드 fail-open)가 사라져 ~~**P3로 강등**~~, 잔여 범위만 남기고 열어 둠.
+  → **이 강등은 오판이었고 같은 날 철회했다.** "잔여는 표시 경로뿐"이라는 근거가 사실이
+  아니었다 — `diagnostic_executor.go`의 fail-open이 남아 있었고, 그것이 `gz-git status`를
+  "healthy, exit 0"으로 만드는 증폭기였다. **P2로 환원.**
+- **06에 흡수**: `RunOutput`의 `strings.TrimSpace`(`executor.go:211`)가 `parseStatus`의
+  컬럼 오프셋 파싱과 충돌해 **첫 레코드**를 오독한다. v0.7.0 실측 재현
+  (워크트리 전용 삭제 2건 → `uncommitted_files: 1`, 기대 0). → 해소.
+- **`UncommittedFiles`는 표시 전용 확인** → 06의 P3 유지. 실제 더티 가드는 전부
+  `status.IsClean`(불리언, 축약에 둔감)을 쓴다. `repositoryState.IsDirty`는 리더 0건.
+  → 필드 deprecate + 세분화로 처리, `IsDirty`는 삭제.
+- **`internal/parser.ParseStatus`는 프로덕션 호출자 0건** → 삭제로 종결.
+- **06 진행 중 추가 발견**: 구 `parseStatusCode`는 `T`(typechange)를 `default`로 흘려
+  파싱 전체를 실패시켰다. 신규 파서에서 정상 분류 + 회귀 테스트.
+
+### 2026-08-05 (저녁) — 07 수정
+
+- **07 수정 완료** (`gzh-cli-core`, 미커밋). 헬퍼 제거만 릴리스에 묶여 있다 —
+  로컬은 `go.work`로 수정본을, CI는 `GOWORK: off`로 pinned 구버전을 쓴다. 실측 확인.
+- **`internal/parser`는 패키지 전체가 죽은 코드**. 06이 지운 `ParseStatus` 외 7함수도
+  호출자 0건이고, `pkg/doctor`는 `parseAheadBehind` 사본을 따로 갖고 있다. → 10에 병합.
+- 09·10·11은 병행 실행된 `/quality:review:session`이 생성. 10에 **검증 결과 1건 정정**을
+  덧붙였다(아래 태스크 문서 참조).
+
+### 2026-08-05 (밤) — 06이 유입시킨 P0 적발과 수정
+
+세션 리뷰가 **06 자체에 P0를 유입시켰음**을 찾아냈다. 06은 "porcelain 파서 통합"이었고,
+통합된 신규 파서가 rename 페어링을 잘못 구현했다.
+
+#### 인과 사슬 (전부 실측 확인)
+
+```
+porcelain.go:59  rename 소스 레코드를 Code[0]로만 페어링
+  ↓  git은 ` R dst\0src\0` 도 낸다 (mv a b && git add -N b)
+소스 경로 handler.go 가 스트림에 남아 상태 라인으로 재해석
+  ↓  Code="ha"
+applyStatusCode → "unknown index status code: h"  ← 여기까진 시끄러운 실패
+  ↓
+diagnostic_executor.go:168  GetStatus 에러를 WorkTreeClean 으로 삼킴  ← 증폭기
+  ↓
+classifyHealth → HealthHealthy
+  ↓
+"No action needed, repository is up-to-date", exit 0   ← 조용한 오답
+```
+
+**두 결함이 겹쳐야 성립한다.** 하나만 있었으면 시끄러운 에러로 끝났다.
+
+#### 바이너리 실측 (`tmp/bin/gz-git`, v0.7.0 대조)
+
+| 픽스처 | v0.7.0 | 수정 후 |
+|--------|--------|--------|
+| `mv` + `add -N` (`status --skip-fetch`) | `✓ healthy` | **`⚠ [1 modified]`** |
+| 같은 픽스처 (`info`) | `Status: error` | **`Status: dirty (1 uncommitted)`** |
+| `.git/index` 파손 (`status`) | `✓ All 1 repositories are healthy`, exit 0 | **`✗ 1 error`, exit 2** |
+
+세 번째 줄은 **06 이전부터 있던 v0.7.0 fail-open**이다. `diagnostic_executor.go` 수정의
+부수 효과로 함께 닫혔다.
+
+#### 수정 내역
+
+| 파일 | 변경 |
+|---|---|
+| `pkg/repository/porcelain.go` | `isRenameOrCopyCode` — X/Y 어느 쪽이든 `R`/`C`면 페어링. worktree측 `R`/`C`를 `RenamedFiles`에, ` A`(intent-to-add)를 `ModifiedFiles`에 분류 |
+| `pkg/reposync/diagnostic.go` | `WorkTreeUnknown` 신설 — `WorkTreeClean`과 구분 |
+| `pkg/reposync/diagnostic_executor.go` | fail-open 제거. 읽기 실패 → `WorkTreeUnknown` + `HealthError` + 에러 보존 |
+| `pkg/tui/formatter.go`, `pkg/reposynccli/status_command.go` | 신규 상태 렌더링 (`default` 없는 switch라 안 넣으면 무음 누락) |
+| `pkg/repository/bulk.go` | `checkRepositoryState`: `-uall` → `-uno` (`ConflictFiles`만 읽으므로 효과 0인 전체 워크) |
+| `docs/.claude-context/common-tasks.md` | 06이 지운 안티패턴을 그대로 가르치고 있던 절 교체 |
+
+#### 뮤테이션 검증 (테스트가 실제로 붙잡는지)
+
+| 되돌린 수정 | 결과 |
+|---|---|
+| 페어링 → `Code[0]`만 | `TestParseStatus`·`TestGetStatusPairsWorktreeSideRename`·`TestCheckHealthSeesWorktreeSideRename` FAIL |
+| fail-open 복원 | `TestCheckHealthDoesNotCallUnreadableTreeHealthy`가 `clean`/`healthy`/`No action needed`로 P0 재현하며 FAIL |
+
+둘 다 되돌림 완료. 06에 있던 `TestCheckRepositoryStateExpandsUntrackedDirectories`는
+**아무것도 검증하지 않는 테스트**여서 `...SeparatesDirtyFromConflicted`로 교체했다.
+
+#### 왜 06에서 안 걸렸나 (11로 추적)
+
+- 파서 테이블 테스트에 ` R` 케이스가 없었다 — 있는 줄 알았던 건 `R ` 였다.
+- `pkg/repository` × `pkg/reposync` 교차 테스트가 `//go:build integration` 뒤에 있어
+  기본 `go test ./...`에서 **한 번도 실행되지 않았다**. 신규
+  `diagnostic_worktree_test.go`는 의도적으로 태그를 붙이지 않았다.
 
 ---
 

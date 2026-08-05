@@ -152,8 +152,22 @@ type RepositoryFetchResult struct {
 	// CommitsAhead is the number of commits ahead of remote after fetch
 	CommitsAhead int
 
-	// UncommittedFiles is the number of uncommitted files (modified/staged) - checked after fetch
+	// Deprecated: use TrackedChangedFiles. The name promised "uncommitted files"
+	// but the value was len(StagedFiles)+len(ModifiedFiles), which counted a path
+	// that is both staged and modified twice and missed working-tree-only
+	// deletions entirely. It now carries the TrackedChangedFiles value.
 	UncommittedFiles int
+
+	// TrackedChangedFiles is the number of distinct tracked paths with
+	// uncommitted changes, staged or not - checked after fetch
+	TrackedChangedFiles int
+
+	// StagedFiles is the number of paths whose index differs from HEAD - checked after fetch
+	StagedFiles int
+
+	// UnstagedFiles is the number of tracked paths whose working tree differs
+	// from the index - checked after fetch
+	UnstagedFiles int
 
 	// UntrackedFiles is the number of untracked files - checked after fetch
 	UntrackedFiles int
@@ -267,8 +281,20 @@ type RepositoryPullResult struct {
 	// Stashed indicates if local changes were stashed
 	Stashed bool
 
-	// UncommittedFiles is the number of uncommitted files (modified/staged) - checked after pull
+	// Deprecated: use TrackedChangedFiles. See RepositoryFetchResult for why the
+	// old value was wrong; it now carries the TrackedChangedFiles value.
 	UncommittedFiles int
+
+	// TrackedChangedFiles is the number of distinct tracked paths with
+	// uncommitted changes, staged or not - checked after pull
+	TrackedChangedFiles int
+
+	// StagedFiles is the number of paths whose index differs from HEAD - checked after pull
+	StagedFiles int
+
+	// UnstagedFiles is the number of tracked paths whose working tree differs
+	// from the index - checked after pull
+	UnstagedFiles int
 
 	// UntrackedFiles is the number of untracked files - checked after pull
 	UntrackedFiles int
@@ -385,8 +411,20 @@ type RepositoryPushResult struct {
 	// PushedCommits is the number of commits pushed
 	PushedCommits int
 
-	// UncommittedFiles is the number of uncommitted files (modified/staged) - checked after push
+	// Deprecated: use TrackedChangedFiles. See RepositoryFetchResult for why the
+	// old value was wrong; it now carries the TrackedChangedFiles value.
 	UncommittedFiles int
+
+	// TrackedChangedFiles is the number of distinct tracked paths with
+	// uncommitted changes, staged or not - checked after push
+	TrackedChangedFiles int
+
+	// StagedFiles is the number of paths whose index differs from HEAD - checked after push
+	StagedFiles int
+
+	// UnstagedFiles is the number of tracked paths whose working tree differs
+	// from the index - checked after push
+	UnstagedFiles int
 
 	// UntrackedFiles is the number of untracked files - checked after push
 	UntrackedFiles int
@@ -491,8 +529,23 @@ type RepositoryStatusResult struct {
 	// CommitsAhead is how many commits ahead of remote
 	CommitsAhead int
 
-	// UncommittedFiles is the number of uncommitted files (modified/staged)
+	// Deprecated: use TrackedChangedFiles. Unlike the other three results, this
+	// one was assigned the raw porcelain line count, so it also included every
+	// untracked entry — which UntrackedFiles below then reported a second time.
+	// It now carries the TrackedChangedFiles value and untracked paths appear
+	// once, in UntrackedFiles.
 	UncommittedFiles int
+
+	// TrackedChangedFiles is the number of distinct tracked paths with
+	// uncommitted changes, staged or not
+	TrackedChangedFiles int
+
+	// StagedFiles is the number of paths whose index differs from HEAD
+	StagedFiles int
+
+	// UnstagedFiles is the number of tracked paths whose working tree differs
+	// from the index
+	UnstagedFiles int
 
 	// UntrackedFiles is the number of untracked files
 	UntrackedFiles int
@@ -1365,7 +1418,10 @@ func (c *client) populateFetchDirtyStatus(ctx context.Context, repo *Repository,
 	if err != nil {
 		return
 	}
-	result.UncommittedFiles = len(status.StagedFiles) + len(status.ModifiedFiles)
+	result.TrackedChangedFiles = status.TrackedChangedCount
+	result.UncommittedFiles = status.TrackedChangedCount
+	result.StagedFiles = status.StagedCount
+	result.UnstagedFiles = status.UnstagedCount
 	result.UntrackedFiles = len(status.UntrackedFiles)
 }
 
@@ -1763,7 +1819,10 @@ func (c *client) populatePullDirtyStatus(ctx context.Context, repo *Repository, 
 	if err != nil {
 		return
 	}
-	result.UncommittedFiles = len(status.StagedFiles) + len(status.ModifiedFiles)
+	result.TrackedChangedFiles = status.TrackedChangedCount
+	result.UncommittedFiles = status.TrackedChangedCount
+	result.StagedFiles = status.StagedCount
+	result.UnstagedFiles = status.UnstagedCount
 	result.UntrackedFiles = len(status.UntrackedFiles)
 }
 
@@ -1790,47 +1849,60 @@ func calculatePullSummary(results []RepositoryPullResult) map[string]int {
 }
 
 // repositoryState represents the current state of a git repository.
+//
+// It carries no file counts. It used to hold UncommittedFiles (the raw porcelain
+// line count, untracked entries included) and IsDirty, but the sole caller also
+// holds a *Status and was adding the untracked paths a second time from there.
+// Counts belong to Status, which is the one value that saw the XY codes; this
+// type answers only "what operation is this repository in the middle of".
 type repositoryState struct {
 	HasConflicts     bool
 	RebaseInProgress bool
 	MergeInProgress  bool
-	IsDirty          bool
 	ConflictedFiles  []string
-	UncommittedFiles int
 }
 
 // checkRepositoryState checks the detailed state of a repository.
 func (c *client) checkRepositoryState(ctx context.Context, repoPath string) (*repositoryState, error) {
-	state := &repositoryState{}
+	state := &repositoryState{
+		RebaseInProgress: IsRebaseInProgress(repoPath),
+		MergeInProgress:  IsMergeInProgress(repoPath),
+	}
 
-	// Check for rebase in progress
-	state.RebaseInProgress = IsRebaseInProgress(repoPath)
-
-	// Check for merge in progress
-	state.MergeInProgress = IsMergeInProgress(repoPath)
-
-	// Check status for conflicts and uncommitted changes
-	statusResult, err := c.executor.Run(ctx, repoPath, "status", "--porcelain")
+	// -z through runGit, for the three reasons parsePorcelainZ documents plus a
+	// fourth specific to this caller: runGit surfaces a non-zero exit, which the
+	// previous `err != nil` check could not. Executor.Run reports a failed git
+	// through Result.ExitCode and returns a nil error, so a git that died here
+	// read as a conflict-free, clean repository — and the push guard built on
+	// HasConflicts opened.
+	//
+	// -uno, not -uall: this function reads only ConflictFiles, and a conflicted
+	// path is by definition tracked. -uall would force a full recursive walk of
+	// every untracked directory to produce entries nothing here looks at, and
+	// processStatusRepository already pays for one such walk in GetStatus. If a
+	// future field here needs untracked paths, take them from that Status rather
+	// than widening this call back out.
+	stdout, err := c.runGit(ctx, repoPath, "status", "--porcelain", "-z", "-uno")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository status: %w", err)
 	}
 
-	if statusResult.ExitCode == 0 && statusResult.Stdout != "" {
-		lines := strings.Split(strings.TrimSpace(statusResult.Stdout), "\n")
-		state.UncommittedFiles = len(lines)
+	status, err := statusFromRecords(parsePorcelainZ(stdout))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository status: %w", err)
+	}
 
-		// Check for conflicts (lines starting with "UU", "AA", "DD", "AU", "UA", "DU", "UD")
-		for _, line := range lines {
-			if len(line) >= 2 {
-				status := line[:2]
-				if strings.Contains(status, "U") || status == "AA" || status == "DD" {
-					state.HasConflicts = true
-					state.ConflictedFiles = append(state.ConflictedFiles, strings.TrimSpace(line[3:]))
-				}
-			}
+	state.HasConflicts = len(status.ConflictFiles) > 0
+
+	if state.HasConflicts {
+		// Detection comes from porcelain, the path list from the index: ls-files
+		// reads stages 1-3 directly and does not depend on how the working tree
+		// currently looks. Fall back to the porcelain paths when it yields
+		// nothing, so a detected conflict is never reported with no files.
+		state.ConflictedFiles = c.collectConflictedPaths(ctx, repoPath)
+		if len(state.ConflictedFiles) == 0 {
+			state.ConflictedFiles = status.ConflictFiles
 		}
-
-		state.IsDirty = state.UncommittedFiles > 0
 	}
 
 	return state, nil
@@ -2291,8 +2363,10 @@ func (c *client) populateDirtyStatus(ctx context.Context, repo *Repository, resu
 		return
 	}
 
-	// Count uncommitted files (staged + modified)
-	result.UncommittedFiles = len(status.StagedFiles) + len(status.ModifiedFiles)
+	result.TrackedChangedFiles = status.TrackedChangedCount
+	result.UncommittedFiles = status.TrackedChangedCount
+	result.StagedFiles = status.StagedCount
+	result.UnstagedFiles = status.UnstagedCount
 	result.UntrackedFiles = len(status.UntrackedFiles)
 }
 
@@ -2451,7 +2525,10 @@ func (c *client) processStatusRepository(ctx context.Context, rootDir, repoPath 
 	result.RebaseInProgress = repoState.RebaseInProgress
 	result.MergeInProgress = repoState.MergeInProgress
 	result.ConflictFiles = repoState.ConflictedFiles
-	result.UncommittedFiles = repoState.UncommittedFiles
+	result.TrackedChangedFiles = status.TrackedChangedCount
+	result.UncommittedFiles = status.TrackedChangedCount
+	result.StagedFiles = status.StagedCount
+	result.UnstagedFiles = status.UnstagedCount
 	result.UntrackedFiles = len(status.UntrackedFiles)
 
 	// Determine status
@@ -2484,7 +2561,7 @@ func (c *client) processStatusRepository(ctx context.Context, rootDir, repoPath 
 	case !status.IsClean:
 		result.Status = StatusDirty
 		result.Message = fmt.Sprintf("Working tree has %d uncommitted file(s), %d untracked file(s)",
-			result.UncommittedFiles, result.UntrackedFiles)
+			result.TrackedChangedFiles, result.UntrackedFiles)
 	default:
 		result.Status = StatusClean
 		switch {

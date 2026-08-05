@@ -247,6 +247,28 @@ type Status struct {
 
 	// RenamedFiles are files that have been renamed.
 	RenamedFiles []RenamedFile
+
+	// StagedCount is the number of paths whose index differs from HEAD.
+	//
+	// The three counts below cannot be recovered from the slices above, which is
+	// why they are stored rather than derived: porcelain reports a two-character
+	// XY code per path, and the slices keep only the union of the two sides. A
+	// path deleted in the working tree and one deleted from the index both land
+	// in DeletedFiles; len() over any combination of slices therefore cannot tell
+	// staged from unstaged, and double-counts every path that appears in two of
+	// them. These are computed once, where XY is still intact.
+	StagedCount int
+
+	// UnstagedCount is the number of tracked paths whose working tree differs
+	// from the index.
+	UnstagedCount int
+
+	// TrackedChangedCount is the number of distinct tracked paths with any
+	// uncommitted change — staged, unstaged, or conflicted. Untracked and ignored
+	// paths are excluded. A path that is both staged and modified counts once
+	// here but in each of StagedCount and UnstagedCount, so the two do not sum to
+	// this value.
+	TrackedChangedCount int
 }
 
 // RenamedFile represents a file that has been renamed.

@@ -69,6 +69,8 @@ func FormatStatusText(health reposync.RepoHealth) string {
 		parts = append(parts, "rebase-in-progress")
 	case reposync.WorkTreeMergeInProgress:
 		parts = append(parts, "merge-in-progress")
+	case reposync.WorkTreeUnknown:
+		parts = append(parts, "state-unreadable")
 	}
 
 	var result strings.Builder

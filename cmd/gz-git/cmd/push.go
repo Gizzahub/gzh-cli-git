@@ -205,7 +205,7 @@ func displayPushResults(result *repository.BulkPushResult) {
 			Duration:         repo.Duration,
 			CommitsAhead:     repo.CommitsAhead,
 			PushedCommits:    repo.PushedCommits,
-			UncommittedFiles: repo.UncommittedFiles,
+			UncommittedFiles: repo.TrackedChangedFiles,
 			UntrackedFiles:   repo.UntrackedFiles,
 		})
 	}

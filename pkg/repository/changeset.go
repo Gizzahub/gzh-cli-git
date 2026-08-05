@@ -112,28 +112,12 @@ func (c *client) collectChangeSet(ctx context.Context, repoPath string, scope Ch
 
 	cs := &ChangeSet{Scope: scope, Entries: make([]ChangeEntry, 0, 8)}
 
-	records := strings.Split(stdout, "\x00")
-	for i := 0; i < len(records); i++ {
-		// "XY PATH": two status characters, a space, then the path.
-		if len(records[i]) < 4 {
-			continue
-		}
-
-		code, path := records[i][:2], records[i][3:]
-
-		var oldPath string
-		if code[0] == 'R' || code[0] == 'C' {
-			// -z drops the " -> " separator and reverses the field order: the
-			// destination is in this record and the source is the next one.
-			if i+1 < len(records) {
-				i++
-				oldPath = records[i]
-			}
-		}
+	for _, rec := range parsePorcelainZ(stdout) {
+		code := rec.Code
 
 		entry := ChangeEntry{
-			Path:       path,
-			OldPath:    oldPath,
+			Path:       rec.Path,
+			OldPath:    rec.OldPath,
 			Status:     parseGitStatus(code),
 			Untracked:  code == "??",
 			Conflicted: isUnmergedCode(code),

@@ -423,7 +423,7 @@ func displayStatusResultsStructured(result *repository.BulkStatusResult, format 
 			Path:             repo.RelativePath,
 			Branch:           repo.Branch,
 			Status:           repo.Status,
-			UncommittedFiles: repo.UncommittedFiles,
+			UncommittedFiles: repo.TrackedChangedFiles,
 			UntrackedFiles:   repo.UntrackedFiles,
 			CommitsAhead:     repo.CommitsAhead,
 			CommitsBehind:    repo.CommitsBehind,

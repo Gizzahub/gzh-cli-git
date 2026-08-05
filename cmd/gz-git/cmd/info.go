@@ -155,8 +155,8 @@ func displayInfoResultsDetailed(result *repository.BulkStatusResult) {
 
 		// 3. Status
 		status := repo.Status
-		if repo.Status != "clean" && repo.UncommittedFiles > 0 {
-			status = fmt.Sprintf("%s (%d uncommitted)", repo.Status, repo.UncommittedFiles)
+		if repo.Status != "clean" && repo.TrackedChangedFiles > 0 {
+			status = fmt.Sprintf("%s (%d uncommitted)", repo.Status, repo.TrackedChangedFiles)
 		}
 		if repo.StashCount > 0 {
 			status += fmt.Sprintf(", %d stash(es)", repo.StashCount)

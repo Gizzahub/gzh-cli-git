@@ -102,18 +102,36 @@ func (e *Executor) Run(ctx context.Context, args ...string) error {
 
 ### Where to add
 
-`internal/parser/` - git output parsing
+`pkg/repository/porcelain.go` — the single `git status --porcelain` parser for the
+package. Do not add a second one; the defect class this file exists to close was
+four call sites each re-parsing porcelain their own way.
 
 ### Example
 
 ```go
-// internal/parser/status.go
-func ParseStatus(output string) (*Status, error) {
-    lines := strings.Split(output, "\n")
-    // Parse git status output
-    return &Status{}, nil
+// pkg/repository/porcelain.go
+stdout, err := c.runGit(ctx, repoPath, "status", "--porcelain", "-z", "-uall")
+if err != nil {
+    return nil, fmt.Errorf("failed to read status: %w", err)
 }
+status, err := statusFromRecords(parsePorcelainZ(stdout))
 ```
+
+### Rules that are not optional
+
+- **`-z`, never plain `--porcelain`.** Without it git C-quotes any path holding a
+  space or non-ASCII byte, so the string names no real file, and a path
+  containing a newline splits one entry into two.
+- **`runGit`, never `Executor.Run` or `RunOutput`.** `Run` reports a failed git
+  through `Result.ExitCode` and returns a nil error, so `err != nil` alone turns
+  "git failed" into "git found nothing". `RunOutput` trims its result, which eats
+  the leading space of the first record — the load-bearing distinction between
+  ` M` (unstaged) and `M ` (staged).
+- **`-uall` when counting untracked files**, or git collapses a directory into
+  one `dir/` entry and N new files are reported as one. Omit it (prefer `-uno`)
+  when the caller only reads tracked state, since it forces a full recursive walk.
+- **Never split on `\n` and never `TrimSpace` a record.** Both columns of the XY
+  code carry meaning, and `X` is `' '` for every worktree-only change.
 
 ## Adding Public APIs
 

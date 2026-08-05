@@ -172,10 +172,16 @@ func (c *client) processSwitchRepository(ctx context.Context, rootDir, repoPath 
 	if !status.IsClean && !opts.Force {
 		result.Status = StatusDirty
 		result.HasUncommittedChanges = true
-		uncommittedCount := len(status.ModifiedFiles) + len(status.StagedFiles)
-		result.Message = fmt.Sprintf("Has uncommitted changes (%d files) - skipping", uncommittedCount)
+		// Untracked files are reported separately: the gate above is IsClean, so
+		// a repository holding nothing but untracked files reaches here and the
+		// tracked count alone would render as "(0 files)".
+		uncommittedCount := status.TrackedChangedCount
+		untrackedCount := len(status.UntrackedFiles)
+		result.Message = fmt.Sprintf("Has uncommitted changes (%d tracked, %d untracked) - skipping",
+			uncommittedCount, untrackedCount)
 		result.Duration = time.Since(startTime)
-		logger.Warn("skipping dirty repository", "path", result.RelativePath, "files", uncommittedCount)
+		logger.Warn("skipping dirty repository", "path", result.RelativePath,
+			"files", uncommittedCount, "untracked", untrackedCount)
 		return result
 	}
 

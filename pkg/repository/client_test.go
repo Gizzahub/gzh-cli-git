@@ -184,7 +184,26 @@ func TestCloneValidation(t *testing.T) {
 	}
 }
 
+// porcelainZ builds a `git status --porcelain -z` payload from records.
+//
+// git terminates every record with a NUL, including the last, so the fixture
+// does too — the trailing empty split element it produces is part of what the
+// parser has to tolerate.
+func porcelainZ(records ...string) string {
+	out := ""
+	for _, rec := range records {
+		out += rec + "\x00"
+	}
+
+	return out
+}
+
 // TestParseStatus verifies status parsing logic.
+//
+// Fixtures are in -z record form, not newline-delimited: several of the cases
+// below (renames, paths with spaces) have no faithful newline representation,
+// and the "first record" cases exist specifically because the previous
+// implementation read newline-delimited, whitespace-trimmed output.
 func TestParseStatus(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -207,22 +226,50 @@ func TestParseStatus(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "modified file",
-			output: " M README.md",
+			// Regression: RunOutput trimmed the whole payload, so the leading
+			// space of the FIRST record was eaten and " M" was read as "M " —
+			// an unstaged edit reported as staged, with the path shifted a byte
+			// to "EADME.md". A case in second position cannot catch this.
+			name:   "unstaged modify as first record",
+			output: porcelainZ(" M README.md", " M second.md"),
 			want: &Status{
 				IsClean:        false,
-				ModifiedFiles:  []string{"README.md"},
+				ModifiedFiles:  []string{"README.md", "second.md"},
 				StagedFiles:    []string{},
 				UntrackedFiles: []string{},
 				ConflictFiles:  []string{},
 				DeletedFiles:   []string{},
 				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       2,
+				TrackedChangedCount: 2,
+			},
+			wantErr: false,
+		},
+		{
+			// Same regression, deletion flavour: this is the shape that made
+			// v0.7.0 report uncommitted_files=1 for two worktree-only deletes.
+			name:   "worktree-only delete as first record",
+			output: porcelainZ(" D a.txt", " D b.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{"a.txt", "b.txt"},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       2,
+				TrackedChangedCount: 2,
 			},
 			wantErr: false,
 		},
 		{
 			name:   "staged file",
-			output: "M  README.md",
+			output: porcelainZ("M  README.md"),
 			want: &Status{
 				IsClean:        false,
 				ModifiedFiles:  []string{},
@@ -231,12 +278,36 @@ func TestParseStatus(t *testing.T) {
 				ConflictFiles:  []string{},
 				DeletedFiles:   []string{},
 				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// One path, both sides changed: it counts once as a changed path but
+			// once on each side. len(StagedFiles)+len(ModifiedFiles) reported 2.
+			name:   "staged and modified counts once",
+			output: porcelainZ("MM README.md"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"README.md"},
+				StagedFiles:    []string{"README.md"},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         1,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
 			},
 			wantErr: false,
 		},
 		{
 			name:   "added file",
-			output: "A  newfile.go",
+			output: porcelainZ("A  newfile.go"),
 			want: &Status{
 				IsClean:        false,
 				ModifiedFiles:  []string{},
@@ -245,12 +316,16 @@ func TestParseStatus(t *testing.T) {
 				ConflictFiles:  []string{},
 				DeletedFiles:   []string{},
 				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
 			},
 			wantErr: false,
 		},
 		{
 			name:   "untracked file",
-			output: "?? untracked.txt",
+			output: porcelainZ("?? untracked.txt"),
 			want: &Status{
 				IsClean:        false,
 				ModifiedFiles:  []string{},
@@ -259,12 +334,38 @@ func TestParseStatus(t *testing.T) {
 				ConflictFiles:  []string{},
 				DeletedFiles:   []string{},
 				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       0,
+				TrackedChangedCount: 0,
 			},
 			wantErr: false,
 		},
 		{
+			// -z disables C-quoting, so a path with a space or a non-ASCII byte
+			// arrives verbatim. Without it these came back as "\"docs/한글 파일.md\""
+			// with the inner bytes escaped — a string naming no file on disk.
+			name:   "paths with spaces and non-ASCII survive intact",
+			output: porcelainZ(" M docs/한글 파일.md", "?? my notes.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"docs/한글 파일.md"},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{"my notes.txt"},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// -z drops " -> " and puts the source in the NEXT record.
 			name:   "renamed file",
-			output: "R  old.txt -> new.txt",
+			output: porcelainZ("R  new.txt", "old.txt"),
 			want: &Status{
 				IsClean:        false,
 				ModifiedFiles:  []string{},
@@ -275,12 +376,105 @@ func TestParseStatus(t *testing.T) {
 				RenamedFiles: []RenamedFile{
 					{OldPath: "old.txt", NewPath: "new.txt"},
 				},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// The source record must not be mistaken for a record of its own.
+			name:   "rename followed by another record",
+			output: porcelainZ("R  new.txt", "old.txt", "?? extra.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{},
+				StagedFiles:    []string{"new.txt"},
+				UntrackedFiles: []string{"extra.txt"},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles: []RenamedFile{
+					{OldPath: "old.txt", NewPath: "new.txt"},
+				},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// The rename letter on the WORKTREE side, emitted for
+			// `mv a b && git add -N b`. Pairing keyed on the index column alone
+			// left "old.txt" loose in the stream, where the next iteration read
+			// it as a status line and took "ol" for an XY code — failing the
+			// whole parse on `unknown index status code: o`.
+			name:   "worktree-side rename pairs its source",
+			output: porcelainZ(" R new.txt", "old.txt", "?? extra.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"new.txt"},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{"extra.txt"},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles: []RenamedFile{
+					{OldPath: "old.txt", NewPath: "new.txt"},
+				},
+
+				StagedCount:         0,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// Both columns set: git still emits exactly one source record, so one
+			// lookahead is right for RM as much as for "R " and " R".
+			name:   "rename staged then modified again",
+			output: porcelainZ("RM new.txt", "old.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"new.txt"},
+				StagedFiles:    []string{"new.txt"},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles: []RenamedFile{
+					{OldPath: "old.txt", NewPath: "new.txt"},
+				},
+
+				StagedCount:         1,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// Intent-to-add (`git add -N`). Treating worktree 'A' as a no-op let
+			// this raise TrackedChangedCount while landing in no list at all, so
+			// the counts and the lists disagreed about the same file.
+			name:   "intent-to-add is an unstaged addition",
+			output: porcelainZ(" A staged-later.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"staged-later.txt"},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
 			},
 			wantErr: false,
 		},
 		{
 			name:   "deleted file (staged)",
-			output: "D  removed.go",
+			output: porcelainZ("D  removed.go"),
 			want: &Status{
 				IsClean:        false,
 				ModifiedFiles:  []string{},
@@ -289,12 +483,74 @@ func TestParseStatus(t *testing.T) {
 				ConflictFiles:  []string{},
 				DeletedFiles:   []string{"removed.go"},
 				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// AA and DD are unmerged too. The old code filed them as staged
+			// adds/deletes and left ConflictFiles empty.
+			name:   "all unmerged codes are conflicts, not changes",
+			output: porcelainZ("UU both.txt", "AA added.txt", "DD gone.txt", "AU au.txt", "UD ud.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{"both.txt", "added.txt", "gone.txt", "au.txt", "ud.txt"},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       0,
+				TrackedChangedCount: 5,
+			},
+			wantErr: false,
+		},
+		{
+			// T (typechange, e.g. file to symlink) used to hit the default
+			// branch and fail the whole parse.
+			name:   "typechange",
+			output: porcelainZ("T  link.txt", " T other.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"other.txt"},
+				StagedFiles:    []string{"link.txt"},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         1,
+				UnstagedCount:       1,
+				TrackedChangedCount: 2,
+			},
+			wantErr: false,
+		},
+		{
+			name:   "ignored entries are not changes",
+			output: porcelainZ("!! build/out.bin", " M real.go"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"real.go"},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         0,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
 			},
 			wantErr: false,
 		},
 		{
 			name:   "multiple files",
-			output: "M  file1.go\nA  file2.go\n?? file3.go",
+			output: porcelainZ("M  file1.go", "A  file2.go", "?? file3.go"),
 			want: &Status{
 				IsClean:        false,
 				ModifiedFiles:  []string{},
@@ -303,21 +559,40 @@ func TestParseStatus(t *testing.T) {
 				ConflictFiles:  []string{},
 				DeletedFiles:   []string{},
 				RenamedFiles:   []RenamedFile{},
+
+				StagedCount:         2,
+				UnstagedCount:       0,
+				TrackedChangedCount: 2,
 			},
 			wantErr: false,
+		},
+		{
+			name:    "unknown status code",
+			output:  porcelainZ("X  weird.txt"),
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseStatus(tt.output)
+			got, err := statusFromRecords(parsePorcelainZ(tt.output))
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseStatus() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("statusFromRecords() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if err != nil {
 				return
+			}
+
+			if got.StagedCount != tt.want.StagedCount {
+				t.Errorf("StagedCount = %v, want %v", got.StagedCount, tt.want.StagedCount)
+			}
+			if got.UnstagedCount != tt.want.UnstagedCount {
+				t.Errorf("UnstagedCount = %v, want %v", got.UnstagedCount, tt.want.UnstagedCount)
+			}
+			if got.TrackedChangedCount != tt.want.TrackedChangedCount {
+				t.Errorf("TrackedChangedCount = %v, want %v", got.TrackedChangedCount, tt.want.TrackedChangedCount)
 			}
 
 			// Verify IsClean

@@ -383,6 +383,8 @@ func printHealthReportCompact(cmd *cobra.Command, report *reposync.HealthReport)
 			status += " REBASE"
 		case reposync.WorkTreeMergeInProgress:
 			status += " MERGE"
+		case reposync.WorkTreeUnknown:
+			status += " UNREADABLE"
 		case reposync.WorkTreeClean:
 			// clean — no suffix needed
 		}

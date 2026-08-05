@@ -172,6 +172,35 @@ carries `Deleted []string` and `Failed []DeleteFailure`. The policy is unchanged
 branch failing does not stop the rest — but the failures are now reported rather than
 dropped. A non-nil error still means the run never started.
 
+---
+
+`gz-git cleanup branch --gone` did nothing at all in a single repository. The flag was
+accepted, no gone branches were ever reported, and the command exited 0 — which reads as
+"there are none". Three independent defects each produced that outcome on their own:
+
+- **"Gone" now means what git means by it.** The single-repository path asked whether a
+  *remote-tracking* branch's remote was still registered in `git remote`. That is a
+  different question from the one the flag names: git marks a **local** branch `[gone]`
+  when the upstream it tracks no longer resolves, and that is what the bulk path
+  (`gz-git cleanup branch <dir> --gone`) has always used. The two implementations had
+  drifted onto different concepts; the single-repository one is replaced by the same
+  `for-each-ref --format=%(refname:short) %(upstream:track)` read, preceded by a
+  best-effort `fetch --prune` so the marker is current.
+  The check it replaces could never fire regardless: it required a `remotes/` name prefix
+  that `git branch -vv` parsing strips before the check ever sees it. It also failed open
+  — a failed `git remote` read reported *every* branch as orphaned — which this removes.
+- **`AnalyzeOptions` gained `IncludeGone`.** There was no field for the flag to reach.
+  Gone detection was gated on `IncludeRemote`, so `--gone` without `--remote` did not even
+  list the branches it would have judged.
+- **The single-repository command passes `--gone` to the analysis.** Its `AnalyzeOptions`
+  omitted the field entirely. The bulk path always passed it, which is why the flag looked
+  implemented.
+
+`--gone` deletes the local ref and never the branch on the server: a local ref is
+recoverable from the reflog, a shared remote branch is not. Passing `--remote` alongside
+`--gone` does not change that — gone branches are local, and the remote deletion path is
+reached only for remote branches.
+
 ### Fixed
 
 - `branch.WorktreeManager` finds worktrees whose path goes through a symlink. `Get`

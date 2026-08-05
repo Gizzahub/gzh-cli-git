@@ -169,6 +169,7 @@ type AnalyzeOptions struct {
 	IncludeStale   bool          // Include stale branches (no activity)
 	StaleThreshold time.Duration // Threshold for stale (default: 30 days)
 	IncludeRemote  bool          // Include remote branches
+	IncludeGone    bool          // Include local branches whose upstream is gone
 	Exclude        []string      // Patterns to exclude
 	BaseBranch     string        // Base branch for merge detection (default: main/master)
 }
@@ -200,9 +201,15 @@ type DeleteFailure struct {
 
 // CleanupReport summarizes branches eligible for cleanup.
 type CleanupReport struct {
-	Merged    []*Branch // Fully merged branches
-	Stale     []*Branch // Stale branches
-	Orphaned  []*Branch // Orphaned tracking branches
+	Merged []*Branch // Fully merged branches
+	Stale  []*Branch // Stale branches
+
+	// Orphaned holds *local* branches whose upstream no longer exists — what git
+	// marks `[gone]` and what the CLI calls `--gone`. These are refs under
+	// refs/heads, so deleting one removes only the local ref; the branch it used
+	// to track is already gone from the remote.
+	Orphaned []*Branch
+
 	Protected []*Branch // Protected (won't delete)
 	Total     int       // Total branches analyzed
 }

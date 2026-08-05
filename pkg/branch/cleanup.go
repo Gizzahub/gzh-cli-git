@@ -92,6 +92,17 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 		Total:     len(branches),
 	}
 
+	// Ask git which branches it marks [gone] before the loop: the answer comes
+	// from one for-each-ref over all of refs/heads, not from a per-branch query.
+	gone := map[string]bool{}
+
+	if opts.IncludeGone {
+		gone, err = c.findGoneBranches(ctx, repo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find gone branches: %w", err)
+		}
+	}
+
 	// Analyze each branch
 	for _, branch := range branches {
 		// Skip current branch
@@ -121,11 +132,9 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 			}
 		}
 
-		// Check if orphaned (remote tracking branch with no remote)
-		if branch.IsRemote {
-			if orphaned, err := c.isBranchOrphaned(ctx, repo, branch.Name); err == nil && orphaned {
-				report.Orphaned = append(report.Orphaned, branch)
-			}
+		// Check if the upstream this branch tracked is gone
+		if gone[branch.Name] {
+			report.Orphaned = append(report.Orphaned, branch)
 		}
 	}
 
@@ -251,38 +260,38 @@ func (c *cleanupService) isBranchStale(ctx context.Context, repo *repository.Rep
 	return age > threshold, nil
 }
 
-// isBranchOrphaned checks if a remote tracking branch has no remote.
-func (c *cleanupService) isBranchOrphaned(ctx context.Context, repo *repository.Repository, branch string) (bool, error) {
-	// Remote branches should start with "remotes/"
-	if !strings.HasPrefix(branch, "remotes/") {
-		return false, nil
-	}
+// findGoneBranches returns the set of local branches whose upstream is gone.
+//
+// git answers this directly through %(upstream:track), which reads "[gone]" when
+// a branch's configured upstream no longer resolves. The marker only appears once
+// the stale remote-tracking ref has been pruned, so the prune runs first; it is
+// best-effort because a repository with no reachable remote still has a truthful
+// answer for every branch whose upstream was already pruned.
+//
+// This mirrors the bulk path (pkg/repository, getGoneBranches), which is the
+// implementation `gz-git cleanup branch <dir> --gone` has always used.
+func (c *cleanupService) findGoneBranches(ctx context.Context, repo *repository.Repository) (map[string]bool, error) {
+	_, _ = c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "fetch", "--prune") //nolint:errcheck // best-effort; the for-each-ref below is the read that decides
 
-	// Extract remote name (e.g., "remotes/origin/feature" -> "origin")
-	parts := strings.SplitN(strings.TrimPrefix(branch, "remotes/"), "/", 2)
-	if len(parts) < 2 {
-		return false, nil
-	}
-
-	remoteName := parts[0]
-
-	// Check if remote exists. This is the one read here whose silent failure
-	// points at deletion: an empty remote list matches nothing, and the function
-	// reads "matched nothing" as "orphaned".
-	result, err := c.run(ctx, repo.Path, "remote")
+	result, err := c.run(ctx, repo.Path,
+		"for-each-ref", "--format=%(refname:short) %(upstream:track)", "refs/heads/")
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	// Parse remotes
-	remotes := strings.SplitSeq(strings.TrimSpace(result.Stdout), "\n")
-	for remote := range remotes {
-		if strings.TrimSpace(remote) == remoteName {
-			return false, nil // Remote exists, not orphaned
+	gone := make(map[string]bool)
+
+	for line := range strings.SplitSeq(strings.TrimSpace(result.Stdout), "\n") {
+		if !strings.Contains(line, "[gone]") {
+			continue
+		}
+
+		if name, _, ok := strings.Cut(line, " "); ok && name != "" {
+			gone[name] = true
 		}
 	}
 
-	return true, nil // Remote doesn't exist, orphaned
+	return gone, nil
 }
 
 // isProtectedBranch checks if a branch is protected.

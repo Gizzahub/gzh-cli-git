@@ -122,6 +122,7 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 		IncludeStale:   cleanupBranchStale,
 		StaleThreshold: time.Duration(cleanupBranchStaleDays) * 24 * time.Hour,
 		IncludeRemote:  cleanupBranchRemote,
+		IncludeGone:    cleanupBranchGone,
 		Exclude:        excludePatterns,
 		BaseBranch:     cleanupBranchBaseBranch,
 	}

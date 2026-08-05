@@ -30,6 +30,7 @@ tasks/
 | 10 | [porcelain-parsers-outside-pkg-repository](issue/10-porcelain-parsers-outside-pkg-repository.md) | P2 | `pkg/repository` 밖 재파싱 6곳 — `internal/porcelain` 단일 파서로 통합, `AA`/`DD` 충돌 누락 수정, 읽기 실패를 "정상"으로 렌더하던 3경로 정정 ✅ (2026-08-06) |
 | 14 | [worktree-get-does-not-resolve-symlinks](issue/14-worktree-get-does-not-resolve-symlinks.md) | P2 | `Get`의 `filepath.Abs`가 심볼릭 링크를 안 풀어 macOS `/var` 하위 워크트리를 못 찾음 — `samePath`로 교체 ✅ (2026-08-06) |
 | 13 | [branch-manager-cleanup-fail-open-on-git-failure](issue/13-branch-manager-cleanup-fail-open-on-git-failure.md) | P2 | `manager.go`·`cleanup.go` 10곳이 실패한 git을 성공으로 읽음 — 패키지 `runGit` 도입. `Execute`가 삭제 실패를 버리던 것을 `ExecuteResult`로 반환, `✓ Deleted N`이 후보 수 대신 삭제 수를 출력하고 실패 시 exit 2 ✅ (2026-08-06) |
+| 15 | [cleanup-gone-flag-is-a-no-op](issue/15-cleanup-gone-flag-is-a-no-op.md) | P2 | 단일 리포 `--gone`이 무동작 — 독립 결함 3개. "고아"의 정의가 벌크 경로와 달랐던 것이 본질(로컬 `[gone]` vs 원격추적 ref). `findGoneBranches`로 통일, `IncludeGone` 추가, CLI 배선 ✅ (2026-08-06) |
 
 **검증**: `go build`·`go vet`·`gofumpt`·전체 테스트 통과.
 01~05는 `golangci-lint`(신규 결함 0)까지 통과. 06 시점에는 설치본이 go1.25로 빌드되어 있고
@@ -76,7 +77,6 @@ tasks/
 |---|--------|---------|------|
 | 09 | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2 | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip |
 | 11 | [status-consumer-and-fixture-test-gaps](issue/11-status-consumer-and-fixture-test-gaps.md) | P2 | status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킴 |
-| 15 | [cleanup-gone-flag-is-a-no-op](issue/15-cleanup-gone-flag-is-a-no-op.md) | P2 | `isBranchOrphaned`가 이미 제거된 `remotes/` 접두어를 검사 — `--gone`은 한 번도 동작한 적이 없다. **미결정 사항 있음**(`--gone` × `--remote` 관계) |
 | 12 | [internal-parser-is-dead-code](issue/12-internal-parser-is-dead-code.md) | P3 | 임포터 0건인 패키지 8.9KB를 테스트 21KB가 검증 중. `pkg/doctor`가 `parseAheadBehind` 사본을 따로 씀 |
 | 08 | [conflict-guard-fail-open-on-git-failure](issue/08-conflict-guard-fail-open-on-git-failure.md) | P2 | **Scope 1·2·3·4 해소** — 3(`diagnostic_executor.go`의 "assume clean on error")은 P0 수정과 함께 제거. **같은 날 내린 P3 강등은 철회**(근거였던 "잔여는 표시 경로뿐"이 사실이 아니었다). 잔여: `pkg/repository` 전역의 `executor.Run`+`ExitCode`-only 지점 선별. 10의 Finding 2·3이 같은 계열 |
 | 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | `gzh-cli-core` 쪽 **수정 완료**(정렬 방출 + 100회 결정성 테스트, 미커밋). 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 — CI는 `GOWORK: off`로 pinned core를 쓴다 |
@@ -183,7 +183,7 @@ classifyHealth → HealthHealthy
 `manager.go`·`cleanup.go` 잔여 fail-open 10곳), **14**(`worktreeManager.Get` 심볼릭
 링크 미해석 — 실측 재현됨). 13 조사 중 **15**(`cleanup branch --gone` 무동작) 파생.
 
-### 2026-08-06 — 14·13 완료
+### 2026-08-06 — 14·13·15 완료
 
 **14** (`4679fdc`): `samePath`가 철자 비교 후 `EvalSymlinks`로 떨어진다. 철자 비교를
 먼저 두는 것은 최적화가 아니라 **디렉터리가 이미 삭제된 워크트리를 매칭할 수 있는 유일한
@@ -195,8 +195,16 @@ git이 전부 거부해도 `✓ Deleted N` + exit 0이 나왔다. 패키지 `run
 집계 에러를 쓰지 않은 이유는 **부분 성공이 전체 실패로 읽히기 때문**(태스크 D1).
 `Exists`는 exit code가 곧 답이라 헬퍼에서 제외하고 회귀 테스트를 붙였다.
 
-잔여 미결: **15**는 `--gone` × `--remote` 관계를 정해야 착수 가능(태스크 문서 Decisions).
-**12**(P3)는 독립.
+**15**: 단일 리포 `--gone` 무동작. 미결로 남겼던 `--gone` × `--remote` 관계는 **고를
+필요가 없었다** — 벌크 경로(`bulk_cleanup.go:462`)가 이미 (c)를 구현하고 있었다.
+착수하고 나서야 결함이 접두어 버그 하나가 아니라 **"고아"의 정의가 두 경로에서 서로
+달랐던 것**임이 드러났다: 벌크는 git이 `[gone]`으로 표시한 **로컬** 브랜치, 단일은
+"등록되지 않은 remote를 가리키는 **원격추적** ref". 이름만 같고 다른 개념이다.
+후자를 버리고 `findGoneBranches`로 통일했으며, 여기 딸린 독립 결함 둘(`AnalyzeOptions`에
+`IncludeGone` 부재, 단일 경로 CLI가 플래그를 `Analyze`에 미전달)도 함께 고쳤다.
+셋 중 어느 하나만 고쳐도 `--gone`은 여전히 무동작이었다.
+
+잔여: **12**(P3)는 독립. **08**·**11**은 미착수.
 
 ---
 

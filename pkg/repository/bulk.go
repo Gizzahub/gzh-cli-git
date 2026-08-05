@@ -26,6 +26,18 @@ var nonInteractiveEnv = []string{
 	"GIT_TERMINAL_PROMPT=0",
 }
 
+// NonInteractiveEnv returns the environment that disables git credential
+// prompts, so a command against an unreachable or private remote fails with an
+// error instead of blocking on a terminal that may not be there.
+//
+// It is exported because pkg/branch runs the same kind of best-effort fetch and
+// needs the same protection; sharing the list keeps the two from drifting apart
+// if git ever gains another prompting channel. The returned slice is a copy —
+// callers may append their own entries to it.
+func NonInteractiveEnv() []string {
+	return slices.Clone(nonInteractiveEnv)
+}
+
 // authErrorPatterns contains common patterns that indicate authentication failures.
 var authErrorPatterns = []string{
 	"could not read Username",

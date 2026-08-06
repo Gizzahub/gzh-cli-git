@@ -311,6 +311,18 @@ reached only for remote branches.
   `-uall` was forcing a full recursive walk of every untracked directory to produce
   entries nothing read. No output value changes.
 
+### Removed
+
+- The `internal/parser` package is deleted. Nothing imported it: after the change-set
+  work removed `ParseStatus`, the remaining 20 exported functions had zero callers in
+  the module, and 21KB of tests were validating 8.9KB of code no command could reach.
+  It is under `internal/`, so this is **not a public API change** — no importer outside
+  this module could have depended on it.
+
+  The three live `parseAheadBehind` implementations (`pkg/repository/client.go`,
+  `pkg/branch/manager.go`, `pkg/doctor/repo_checks.go`) are untouched. Removing dead
+  code and consolidating live parsers are separate jobs; only the first is done here.
+
 ### Internal
 
 - New `pkg/repository/changeset.go`: `collectChangeSet` is the single change-set

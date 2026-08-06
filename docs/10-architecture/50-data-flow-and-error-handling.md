@@ -25,7 +25,7 @@ Library Consumer (gzh-cli)
             │    (internal/gitcmd/Executor)
             │
             ├──▶ Parse Git output
-            │    (internal/parser)
+            │    (pkg/repository)
             │
             ▼
   ┌───────────────────┐

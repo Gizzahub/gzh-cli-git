@@ -31,6 +31,7 @@ tasks/
 | 14 | [worktree-get-does-not-resolve-symlinks](issue/14-worktree-get-does-not-resolve-symlinks.md) | P2 | `Get`의 `filepath.Abs`가 심볼릭 링크를 안 풀어 macOS `/var` 하위 워크트리를 못 찾음 — `samePath`로 교체 ✅ (2026-08-06) |
 | 13 | [branch-manager-cleanup-fail-open-on-git-failure](issue/13-branch-manager-cleanup-fail-open-on-git-failure.md) | P2 | `manager.go`·`cleanup.go` 10곳이 실패한 git을 성공으로 읽음 — 패키지 `runGit` 도입. `Execute`가 삭제 실패를 버리던 것을 `ExecuteResult`로 반환, `✓ Deleted N`이 후보 수 대신 삭제 수를 출력하고 실패 시 exit 2 ✅ (2026-08-06) |
 | 15 | [cleanup-gone-flag-is-a-no-op](issue/15-cleanup-gone-flag-is-a-no-op.md) | P2 | 단일 리포 `--gone`이 무동작 — 독립 결함 3개. "고아"의 정의가 벌크 경로와 달랐던 것이 본질(로컬 `[gone]` vs 원격추적 ref). `findGoneBranches`로 통일, `IncludeGone` 추가, CLI 배선 ✅ (2026-08-06) |
+| 12 | [internal-parser-is-dead-code](issue/12-internal-parser-is-dead-code.md) | P3 | 임포터 0건 패키지 `internal/parser` 삭제(소스 8.9KB + 테스트 21KB). `internal/` 하위라 공개 API 변경 아님. 살아있는 `parseAheadBehind` **3개** 사본은 통합 대상이 아니라 별건으로 보존 ✅ (2026-08-06) |
 
 **검증**: `go build`·`go vet`·`gofumpt`·전체 테스트 통과.
 01~05는 `golangci-lint`(신규 결함 0)까지 통과. 06 시점에는 설치본이 go1.25로 빌드되어 있고
@@ -77,7 +78,6 @@ tasks/
 |---|--------|---------|------|
 | 09 | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2 | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip |
 | 11 | [status-consumer-and-fixture-test-gaps](issue/11-status-consumer-and-fixture-test-gaps.md) | P2 | status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킴 |
-| 12 | [internal-parser-is-dead-code](issue/12-internal-parser-is-dead-code.md) | P3 | 임포터 0건인 패키지 8.9KB를 테스트 21KB가 검증 중. `pkg/doctor`가 `parseAheadBehind` 사본을 따로 씀 |
 | 08 | [conflict-guard-fail-open-on-git-failure](issue/08-conflict-guard-fail-open-on-git-failure.md) | P2 | **Scope 1·2·3·4 해소** — 3(`diagnostic_executor.go`의 "assume clean on error")은 P0 수정과 함께 제거. **같은 날 내린 P3 강등은 철회**(근거였던 "잔여는 표시 경로뿐"이 사실이 아니었다). 잔여: `pkg/repository` 전역의 `executor.Run`+`ExitCode`-only 지점 선별. 10의 Finding 2·3이 같은 계열 |
 | 17 | [execute-skips-protected-screen-when-exclude-empty](issue/17-execute-skips-protected-screen-when-exclude-empty.md) | P3 | `cleanup.Execute`의 보호 브랜치 검사가 `len(opts.Exclude) > 0`일 때만 실행 — 오늘 안전한 것은 모든 호출자가 `Analyze`를 거치는 우연 덕분 |
 | 16 | [goheader-rule-rejects-every-file](issue/16-goheader-rule-rejects-every-file.md) | P3 | `.golangci.yml`이 `Archmagece`를 기대하는데 저장소 198개 파일 중 0개가 일치. `max-same-issues: 5`가 전수 위반을 5건으로 보여 lint 건수가 실행마다 흔들린다. **미결정**(저작권자 표기) |
@@ -206,7 +206,22 @@ git이 전부 거부해도 `✓ Deleted N` + exit 0이 나왔다. 패키지 `run
 `IncludeGone` 부재, 단일 경로 CLI가 플래그를 `Analyze`에 미전달)도 함께 고쳤다.
 셋 중 어느 하나만 고쳐도 `--gone`은 여전히 무동작이었다.
 
-잔여: **12**(P3)는 독립. **08**·**11**은 미착수.
+### 2026-08-06 — 12 완료
+
+`internal/parser` 패키지 삭제. 임포터 0건은 착수 직전에 다시 확인했다 — 태스크 작성과
+착수 사이에 새 호출자가 생겼을 수 있으므로 문서의 과거 측정을 믿지 않는다.
+
+착수 중 Findings의 사실 하나가 틀린 것을 확인했다. "`pkg/doctor`가 사본을 따로 갖고
+있다"고 단수로 적었으나 실제로는 **셋**이다(`pkg/repository/client.go:468`,
+`pkg/branch/manager.go:441`, `pkg/doctor/repo_checks.go:469`). 셋 다 살아 있고
+호출자가 있어 이 태스크의 대상이 아니다 — 통합은 정본 시그니처 선택이 걸린 별개 판단이다.
+
+`parser/`만 지우면 구조표가 여전히 틀리므로 `internal/` 하위를 실측(`gitcmd`·
+`porcelain`·`config`·`testutil`)에 맞췄다. **`docs/specs/` 3건은 정정하지 못했다** —
+전역 규칙이 `specs/`를 AI 수정 금지로 지정한다. 저장소 소유자 조치 필요(태스크 D3에
+파일·행 명시). CHANGELOG의 4건은 이력이므로 의도적으로 남겼다.
+
+잔여: **08**·**11**은 미착수. **16**·**17**은 신규(P3), 16은 미결정 포함.
 
 ---
 

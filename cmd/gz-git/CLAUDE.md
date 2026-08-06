@@ -86,7 +86,6 @@ func init() {
 ```go
 import (
     "github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
-    "github.com/gizzahub/gzh-cli-gitforge/internal/parser"
 )
 
 func runClone(url, path string) error {
@@ -175,8 +174,8 @@ ______________________________________________________________________
 
 - `github.com/spf13/cobra` - CLI framework
 - `internal/gitcmd` - Safe git execution
-- `internal/parser` - Output parsing
-- `pkg/*` - Business logic packages
+- `pkg/*` - Business logic packages (git output parsing lives with its consumer,
+  e.g. `pkg/repository/porcelain.go`)
 
 ______________________________________________________________________
 

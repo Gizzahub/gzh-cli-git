@@ -26,7 +26,8 @@ LLM-optimized guidance for gzh-cli-gitforge.
 cmd/gz-git/          # CLI commands (AGENTS.md inside)
 internal/
   gitcmd/            # Git command executor
-  parser/            # Output parsing
+  porcelain/         # git status --porcelain -z parser
+  config/            # Internal config helpers
   testutil/          # Git test helpers
 pkg/
   repository/        # Repository abstraction + bulk ops

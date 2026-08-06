@@ -21,7 +21,7 @@ This document is intentionally short. Canonical agent guidance lives in `CLAUDE.
 
 - `cmd/gz-git/cmd/`: Cobra commands and CLI output formatting
 - `pkg/`: public library packages (reusable, no Cobra deps)
-- `internal/`: internal helpers (`internal/gitcmd`, `internal/parser`, `internal/testutil`)
+- `internal/`: internal helpers (`internal/gitcmd`, `internal/porcelain`, `internal/testutil`)
 - `tests/`: integration + e2e tests for CLI workflows
 
 ## CLI Docs

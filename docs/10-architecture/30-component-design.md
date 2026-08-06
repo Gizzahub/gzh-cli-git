@@ -51,11 +51,6 @@ gzh-cli-gitforge/
 │   │   ├── executor.go           # Command executor
 │   │   ├── sanitize.go           # Input sanitization
 │   │   └── errors.go             # Error types
-│   ├── parser/                   # Git output parsing
-│   │   ├── status.go             # Parse git status
-│   │   ├── log.go                # Parse git log
-│   │   ├── diff.go               # Parse git diff
-│   │   └── common.go             # Shared parsing utilities
 │   └── validation/               # Input validation
 │       ├── validator.go          # Validation logic
 │       └── patterns.go           # Regex patterns

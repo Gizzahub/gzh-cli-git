@@ -146,7 +146,9 @@ gzh-cli-gitforge/
 │
 ├── internal/                # Internal implementation (not importable)
 │   ├── gitcmd/              # Git command execution & security
-│   └── parser/              # Output parsing
+│   ├── porcelain/           # git status --porcelain -z parser
+│   ├── config/              # Internal config helpers
+│   └── testutil/            # Git test helpers
 │
 ├── cmd/gz-git/             # CLI application
 │   └── cmd/                 # CLI commands (Cobra)

@@ -50,6 +50,9 @@ docs/.claude-context/ # Context docs
 | `fetch` / `pull`       | Fetch/pull all repos                                   |
 | `push`                 | Push all repos (refspec: `develop:master`)             |
 | `commit`               | Commit all dirty repos (**ALWAYS use `--json`**)       |
+| `handoff check`        | Can I walk away? Reports work that exists only here    |
+| `handoff end`          | Commit + push all movable work (screens for secrets)   |
+| `handoff start`        | Pull --rebase + prune all repos on arrival             |
 | `cleanup branch`       | Clean merged/stale/gone branches                       |
 | `forge from`           | Sync from GitHub/GitLab/Gitea org                      |
 | `forge config generate`| Generate config from Forge API                         |
@@ -106,6 +109,24 @@ gz-git workspace init . -d 3   # scan depth 3
 gz-git workspace sync --dry-run
 gz-git workspace add https://github.com/user/repo.git
 ```
+
+## Handoff Usage (multi-device / multi-agent)
+
+`sync` aligns the **set** of repositories against a config. `handoff` moves the **work
+state** of the repositories already present — do not confuse the two.
+
+```bash
+gz-git handoff check              # verdict: SAFE TO LEAVE / NOT YET / BLOCKED (no network)
+gz-git handoff end                # commit + push everything movable, before leaving
+gz-git handoff end --dry-run      # what would be committed, and what the guard flags
+gz-git handoff end --no-push      # checkpoint offline
+gz-git handoff start              # pull --rebase + prune, on arrival
+```
+
+`handoff end` screens every repository before committing: credential filenames and
+contents, files over 5 MiB, untracked build output missing from `.gitignore`. Flagged
+repositories are held back, not committed — `--force` overrides. Stash entries are never
+moved automatically; they are invisible to every other machine by design.
 
 ## Forge Usage
 

@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `gz-git handoff` moves work between machines and agents. Where `status` reports how
+  healthy a repository is and `sync` aligns the *set* of repositories against a config,
+  `handoff` reports and moves the *work state*: whatever exists only on this machine.
+  - `handoff check` gives one verdict — `SAFE TO LEAVE`, `NOT YET`, or `BLOCKED` —
+    across every scanned repository, distinguishing what `handoff end` clears on its own
+    (uncommitted files, unpushed commits, a missing upstream) from what needs a decision
+    here (conflicts, an interrupted rebase, a detached HEAD, no remote, a stash). No
+    network is used: unpushed commits are counted against the remote tracking ref, which
+    only advances when this machine pushes.
+  - `handoff end` commits and pushes everything movable, and leaves the rest untouched.
+    Before committing, every repository is screened for credentials (by filename and by
+    content — private key blocks, AWS/GitHub/GitLab/Slack/Google tokens), files over
+    5 MiB, and untracked build output that `.gitignore` does not cover. Anything flagged
+    is held back with the file named rather than swept into history; `--force` commits it
+    anyway. `--no-push` checkpoints without a network.
+  - `handoff start` pulls every repository with a rebase and prunes deleted remote
+    branches, so commits that are still only here are replayed on top of what the remote
+    gained instead of producing a merge commit. Repositories with uncommitted work are
+    fetched but never rebased.
+  - Stash entries are never treated as movable: they are invisible to every other machine,
+    and turning one into a commit is a decision, not a cleanup step.
+  - Exit codes follow the diagnostic convention: `0` nothing outstanding, `1` work remains,
+    `2` the command could not run.
 - `gz-git config recommended` audits the git configuration that a multi-device,
   multi-agent workflow depends on: `pull.rebase`, `rebase.autoStash`, `fetch.prune`,
   `push.autoSetupRemote`, `push.default`, `rerere.enabled`, `merge.conflictStyle`.

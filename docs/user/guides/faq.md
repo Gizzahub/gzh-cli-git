@@ -50,8 +50,13 @@ Basic branch creation/deletion is intentionally left to native `git`.
 `gz-git` currently focuses on:
 
 - `gz-git branch list` (bulk)
+- `gz-git branch name` (build a task's branch name; prints it, creates nothing)
 - `gz-git cleanup branch` (merged/stale/gone cleanup; dry-run by default)
-- `gz-git switch` (bulk branch switching)
+- `gz-git switch` (bulk branch switching, `--create` to create)
+
+`branch name` is the one addition that is not creation: it works out the branch
+name a task should have on this device or under this agent, which plain `git`
+cannot, and leaves creating it to `switch --create`.
 
 ## Where can I see all flags for a command?
 

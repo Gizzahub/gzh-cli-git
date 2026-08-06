@@ -113,6 +113,15 @@ branch:
     - develop
     - release/*
 
+  # Branch-name templates used by 'gz-git branch name <task>', one per role.
+  # Placeholders: {task}, {device}, {agent}. Each is slugified before it is
+  # substituted, so a hostname like Daves-MacBook.local becomes a legal segment.
+  # Every key is optional; an unset one keeps the default shown here.
+  naming:
+    work: feat/{task}              # a task with one writer
+    device: feat/{task}/{device}   # one machine's slice of a shared task
+    agent: agent/{task}/{agent}    # one agent's, kept out of a person's
+
 # Fetch Command Settings
 fetch:
   # Fetch all remotes, not just origin

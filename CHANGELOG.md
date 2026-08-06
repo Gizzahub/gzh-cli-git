@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `gz-git branch name <task>` builds the branch name a task should have here, from a
+  template and the resolved identity: `--kind work` (`feat/{task}`), `--kind device`
+  (`feat/{task}/{device}`) or `--kind agent` (`agent/{task}/{agent}`). It prints the
+  name and creates nothing, so it composes with `gz-git switch --create` for bulk work
+  and with plain git for one repository — `branch create` stays unexposed.
+  - Templates are configurable per kind under `branch.naming`, merged one key at a time
+    so overriding one leaves the other two at their defaults.
+  - Every substituted value is slugified. The default device name is the hostname, and
+    `Daves-MacBook.local` is not a legal branch name, so without this a template would
+    work on one machine and fail on the next.
+  - A `device` or `agent` branch whose segment is unnamed is refused rather than
+    collapsed: the result would be the shared branch again under a longer name, which is
+    the collision splitting the branch exists to avoid. A misspelled placeholder is
+    reported instead of being baked into a name.
 - `push.policy.foreignWork` refuses a force push that would discard remote commits whose
   identity trailers name a different device or agent, listing the commits at stake.
   `--force-with-lease` does not cover this: a lease compares the remote against the ref

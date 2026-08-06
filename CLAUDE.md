@@ -53,6 +53,7 @@ docs/.claude-context/ # Context docs
 | `handoff check`        | Can I walk away? Reports work that exists only here    |
 | `handoff end`          | Commit + push all movable work (screens for secrets)   |
 | `handoff start`        | Pull --rebase + prune all repos on arrival             |
+| `branch name`          | Build a task's branch name for this device/agent       |
 | `cleanup branch`       | Clean merged/stale/gone branches                       |
 | `forge from`           | Sync from GitHub/GitLab/Gitea org                      |
 | `forge config generate`| Generate config from Forge API                         |
@@ -191,6 +192,33 @@ identity:
 `GZ_GIT_DEVICE` / `GZ_GIT_AGENT` override the config. `--no-trailers` omits
 them for one run. A machine that names nothing skips the foreign-work check
 entirely: it cannot tell its own commits from anyone else's.
+
+## Branch Naming
+
+`branch name` builds the branch name a task should have here, from a template
+and the resolved identity. It prints the name and creates nothing — creation
+stays with `switch --create` and plain git.
+
+```bash
+gz-git branch name task-001-product-unit                 # feat/task-001-product-unit
+gz-git branch name task-001-product-unit --kind device   # feat/task-001-product-unit/dave-office
+gz-git branch name task-001-product-unit --kind agent    # agent/task-001-product-unit/hermes-01
+
+gz-git switch "$(gz-git branch name task-001 --kind device)" --create
+```
+
+```yaml
+branch:
+  naming:                          # defaults shown; override one, keep the rest
+    work: feat/{task}
+    device: feat/{task}/{device}
+    agent: agent/{task}/{agent}
+```
+
+Every substituted value is slugified, since the default device name is the
+hostname and `Daves-MacBook.local` is not a legal branch name. A `device` or
+`agent` branch whose segment is unnamed is refused: it would be the shared
+branch again under a longer name.
 
 ## Security (CRITICAL)
 

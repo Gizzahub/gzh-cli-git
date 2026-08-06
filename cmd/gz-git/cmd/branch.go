@@ -19,11 +19,19 @@ var branchCmd = &cobra.Command{
   # BULK: List branches across multiple repos
   gz-git branch list .
 
+  # Build a conventional branch name for a task
+  gz-git branch name task-001 --kind device
+
   # Clean up branches
   gz-git cleanup branch --merged`) + `
 
 Policy: branch create/delete are not exposed — use plain git for single-repo
-create; for bulk deletion of merged/stale branches use: gz-git cleanup branch
+create, gz-git switch --create for bulk create, and gz-git cleanup branch for
+bulk deletion of merged/stale branches.
+
+'branch name' does not create anything either. It prints the name a task's
+branch should have on this machine or under this agent, which plain git cannot
+work out, and leaves creating it to the commands above.
 `,
 	Example: ``,
 	Args:    cobra.NoArgs,

@@ -96,6 +96,8 @@ sync:
 branch:
   defaultBranch: main
   protectedBranches: [main, develop]  # protected from deletion
+  naming:
+    device: wip/{device}/{task}       # override one template, keep the rest
 
 push:
   policy:
@@ -401,6 +403,67 @@ profiles are machine-local, which is what the value describes.
 The trailers are what the [`foreignWork` push rule](#push-policy) and `handoff
 start`'s shared-branch note read back, so a workspace that never sets an
 identity gets a working checkpoint but no cross-machine safety from either.
+
+[`branch naming`](#branch-naming) reads the same two values, but off the
+configuration rather than off a commit — it puts them into the branch name in
+the first place.
+
+______________________________________________________________________
+
+## Branch Naming
+
+`branch.naming` holds the templates `gz-git branch name <task>` builds from, one
+per role a branch plays when a task has more than one writer.
+
+```yaml
+branch:
+  naming:
+    work: feat/{task}              # a task with one writer
+    device: feat/{task}/{device}   # one machine's slice of a shared task
+    agent: agent/{task}/{agent}    # one agent's, kept out of a person's
+```
+
+Those are the defaults; every key is optional and layers merge one key at a
+time, so overriding `device` in a project leaves `work` and `agent` alone. (The
+push policy is replaced whole instead — a narrower policy must not be widened by
+a broader layer. Templates carry no such risk.)
+
+```bash
+gz-git branch name task-001-product-unit                 # feat/task-001-product-unit
+gz-git branch name task-001-product-unit --kind device   # feat/task-001-product-unit/dave-office
+gz-git branch name task-001-product-unit --kind agent    # agent/task-001-product-unit/hermes-01
+
+# Compose: create it across every repository the task spans
+gz-git switch "$(gz-git branch name task-001 --kind device)" --create
+```
+
+The command prints a name and creates nothing — creation stays with
+`gz-git switch --create` for bulk work and plain git for one repository. What it
+adds is the part plain git cannot work out: the writer segment, taken from the
+resolved [identity](#identity).
+
+| Placeholder | Source |
+| ----------- | ------ |
+| `{task}` | The command's argument |
+| `{device}` | `identity.device` or `GZ_GIT_DEVICE` |
+| `{agent}` | `identity.agent` or `GZ_GIT_AGENT` |
+
+Two rules follow from that:
+
+- Every substituted value is slugified — lowercased, with runs of anything
+  outside `[a-z0-9]` collapsed to a dash. The default device name is the
+  hostname, and `Daves-MacBook.local` is not a legal branch name, so without
+  this a template would work on one machine and fail on the next.
+- A `device` or `agent` branch is refused when its segment is unnamed. The
+  result would be the shared branch again under a longer name, which is the
+  collision that splitting the branch exists to avoid.
+
+A misspelled placeholder survives substitution intact and is reported rather
+than baked into a branch name.
+
+This is what `handoff start`'s shared-branch note points at: when the remote
+advanced under another writer, `--kind device` or `--kind agent` gives each of
+them a branch of their own.
 
 ______________________________________________________________________
 

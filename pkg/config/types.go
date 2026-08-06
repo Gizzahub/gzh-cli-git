@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
@@ -205,6 +206,10 @@ type FilterDefaults struct {
 type BranchConfig struct {
 	DefaultBranch     BranchList `yaml:"defaultBranch,omitempty"`     // main, develop, master (string or list)
 	ProtectedBranches []string   `yaml:"protectedBranches,omitempty"` // Branches to protect
+
+	// Naming templates the branch names that `gz-git branch name` builds, so a
+	// task branch is spelled the same way on every machine and by every agent.
+	Naming *branch.Naming `yaml:"naming,omitempty"`
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler to support string shorthand.

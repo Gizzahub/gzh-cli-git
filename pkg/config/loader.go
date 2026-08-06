@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
@@ -357,6 +358,30 @@ func (l *ConfigLoader) applyBranchConfig(dst, src *BranchConfig) {
 	}
 	if len(src.ProtectedBranches) > 0 {
 		dst.ProtectedBranches = src.ProtectedBranches
+	}
+	l.applyBranchNaming(dst, src.Naming)
+}
+
+// applyBranchNaming merges naming templates one kind at a time. Unlike the push
+// policy, which is replaced whole so a narrower one cannot be widened by a
+// broader layer, the three templates are independent: overriding the device
+// branch should not silently reset the other two to their defaults.
+func (l *ConfigLoader) applyBranchNaming(dst *BranchConfig, src *branch.Naming) {
+	if src == nil {
+		return
+	}
+	if dst.Naming == nil {
+		dst.Naming = &branch.Naming{}
+	}
+
+	if src.Work != "" {
+		dst.Naming.Work = src.Work
+	}
+	if src.Device != "" {
+		dst.Naming.Device = src.Device
+	}
+	if src.Agent != "" {
+		dst.Naming.Agent = src.Agent
 	}
 }
 

@@ -2141,7 +2141,8 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 
 	// Calculate commits to be pushed if using refspec
 	var actualCommitsToPush int
-	if opts.Refspec != "" {
+	switch {
+	case opts.Refspec != "":
 		// Parse refspec - already validated and checked earlier, so this should not fail
 		parsed, _ := ValidateRefspec(opts.Refspec) //nolint:errcheck // refspec already validated upstream; error here is impossible in practice
 
@@ -2178,14 +2179,15 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 				}
 			}
 		}
-	} else if setUpstreamMissing {
+	case setUpstreamMissing:
 		// A branch with no upstream reports AheadBy 0 because there is nothing
 		// to compare against. The push creates the remote branch, so every
 		// commit on it is new there — the same count the refspec path above
 		// uses when the destination does not exist yet. Without this a new
 		// branch pushes successfully and then reports "Already up to date".
 		actualCommitsToPush = c.countBranchCommits(ctx, repoPath, info.Branch)
-	} else {
+
+	default:
 		actualCommitsToPush = info.AheadBy
 	}
 

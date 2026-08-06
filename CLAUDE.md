@@ -147,8 +147,25 @@ gz-git forge status -c sync.yaml --verbose
 
 ```bash
 gz-git push --refspec develop:master         # local:remote
-gz-git push --refspec +develop:master        # force push
+gz-git push --refspec +develop:master        # raw force — refused unless forceMode: allow
 ```
+
+## Push Policy
+
+`push.policy` gates `push` and `handoff end`. Separate from
+`branch.protectedBranches`, which only guards deletion.
+
+```yaml
+push:
+  policy:
+    protected: [main, master]   # never push here; the destination decides
+    forceMode: lease-only       # lease-only (default) | allow | deny
+```
+
+`lease-only` allows `--force` (which uses `--force-with-lease`) and refuses a
+`+` refspec, which has none — it applies even with no config file, so the two
+force paths behave the same. `--force-mode` overrides it per invocation.
+Refused repositories are reported as `blocked`; the rest of the batch runs.
 
 ## Security (CRITICAL)
 

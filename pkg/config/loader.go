@@ -386,6 +386,11 @@ func (l *ConfigLoader) applyPushConfig(dst, src *PushConfig) {
 	if src.SetUpstream {
 		dst.SetUpstream = src.SetUpstream
 	}
+	// A policy replaces rather than merges: a project that narrows the protected
+	// list should not silently inherit the wider one from a profile.
+	if src.Policy != nil {
+		dst.Policy = src.Policy
+	}
 }
 
 // GetString retrieves a string value by key from effective config.

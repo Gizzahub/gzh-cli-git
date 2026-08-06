@@ -139,6 +139,20 @@ push:
   # Type: boolean
   setUpstream: true
 
+  # Restrict what push (and handoff end) may write
+  policy:
+    # Branches that may not be pushed to at all. Trailing * matches a prefix.
+    # Type: list of strings (default: none)
+    protected: [main, master]
+
+    # How force pushes are treated
+    #   lease-only  --force is allowed (it uses --force-with-lease);
+    #               a "+" refspec, which has no lease, is refused
+    #   allow       every force push is permitted
+    #   deny        no force push is permitted
+    # Type: string (default: lease-only)
+    forceMode: lease-only
+
 # -----------------------------------------------------------------------------
 # Workspace Structure (Recursive)
 # -----------------------------------------------------------------------------

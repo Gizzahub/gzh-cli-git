@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `push.policy` config restricts what `push` and `handoff end` may write to a remote.
+  `protected` lists branch names and trailing-`*` patterns that may not be pushed to at
+  all — the **destination** decides, so `--refspec develop:main` is refused just as a
+  direct push to `main` is. It is separate from `branch.protectedBranches`, which guards
+  deletion, and is empty unless configured. `forceMode` picks how force pushes are
+  treated: `lease-only`, `allow`, or `deny`. `--force-mode` overrides it for one
+  invocation. A refused repository is reported as `blocked` with the rule named, the
+  rest of the batch still runs, and the command exits non-zero.
+  - `handoff end` applies the policy *before* committing, not only at the push, so an
+    unattended checkpoint cannot land on a branch this workspace may not push to.
 - `gz-git handoff` moves work between machines and agents. Where `status` reports how
   healthy a repository is and `sync` aligns the *set* of repositories against a config,
   `handoff` reports and moves the *work state*: whatever exists only on this machine.
@@ -43,6 +53,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `2` the audit could not run — so it works as a CI workstation gate.
 - `gz-git doctor` reports the same audit as one aggregate `System` check, naming the
   keys that need changes; `--verbose` expands it to one check per setting.
+
+### Changed (behavior change)
+
+`gz-git push --refspec +local:remote` is now refused by default. `--force` has always
+mapped to `--force-with-lease`, but a `+` refspec went straight to git as an unleased
+force, so the two spellings of "force push" behaved differently and the safer one was
+the longer one to type. The new `lease-only` default closes that, and applies with no
+config file present. Set `push.policy.forceMode: allow`, or pass `--force-mode allow`,
+to get the old behavior.
 
 ### Fixed (behavior change)
 

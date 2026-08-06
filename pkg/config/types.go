@@ -15,6 +15,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 // ================================================================================
@@ -389,8 +391,20 @@ type PullConfig struct {
 }
 
 // PushConfig holds push command defaults.
+//
+// Example:
+//
+//	push:
+//	  setUpstream: true
+//	  policy:
+//	    protected: [main, master]
+//	    forceMode: lease-only
 type PushConfig struct {
 	SetUpstream bool `yaml:"setUpstream,omitempty"` // Auto set upstream
+
+	// Policy restricts which branches push may write and how. Unset means no
+	// branch is protected and only the built-in lease-only force rule applies.
+	Policy *repository.PushPolicy `yaml:"policy,omitempty"`
 }
 
 // GlobalConfig represents ~/.config/gz-git/config.yaml

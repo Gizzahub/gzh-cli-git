@@ -20,6 +20,7 @@ var (
 	pushRemotes     []string
 	pushAllRemotes  bool
 	pushIgnoreDirty bool
+	pushForceMode   string
 )
 
 // pushCmd represents the push command for multi-repository operations
@@ -64,6 +65,7 @@ func init() {
 	pushCmd.Flags().StringSliceVar(&pushRemotes, "remote", []string{}, "remote(s) to push to (can be specified multiple times)")
 	pushCmd.Flags().BoolVar(&pushAllRemotes, "all-remotes", false, "push to all configured remotes")
 	pushCmd.Flags().BoolVar(&pushIgnoreDirty, "ignore-dirty", false, "skip dirty status check and warning (useful for CI/CD)")
+	addForceModeFlag(pushCmd, &pushForceMode)
 }
 
 func runPush(cmd *cobra.Command, args []string) error {
@@ -107,6 +109,11 @@ func runPush(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	policy, err := resolvePushPolicy(effective, pushForceMode)
+	if err != nil {
+		return err
+	}
+
 	// Create client
 	client := repository.NewClient()
 
@@ -127,6 +134,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 		Remotes:           pushRemotes,
 		AllRemotes:        pushAllRemotes,
 		IgnoreDirty:       pushIgnoreDirty,
+		Policy:            policy,
 		IncludeSubmodules: pushFlags.IncludeSubmodules,
 		IncludePattern:    pushFlags.Include,
 		ExcludePattern:    pushFlags.Exclude,
@@ -159,7 +167,11 @@ func runPush(cmd *cobra.Command, args []string) error {
 		displayPushResults(result)
 	}
 
-	return errPartialFailure(result.Summary[repository.StatusError], result.TotalProcessed)
+	// A policy refusal is a failure, not a skip: the caller asked for a push
+	// that did not happen, and a zero exit would hide that from a script.
+	failed := result.Summary[repository.StatusError] + result.Summary[repository.StatusBlocked]
+
+	return errPartialFailure(failed, result.TotalProcessed)
 }
 
 func runPushWatch(ctx context.Context, client repository.Client, opts repository.BulkPushOptions) error {
@@ -211,7 +223,7 @@ func displayPushResults(result *repository.BulkPushResult) {
 	}
 
 	issueStatuses := issueStatusSet(
-		"error", "no-remote", "no-upstream", "conflict",
+		"error", "blocked", "no-remote", "no-upstream", "conflict",
 		"rebase-in-progress", "merge-in-progress",
 	)
 	if pushFlags.Format != "compact" {
@@ -219,16 +231,20 @@ func displayPushResults(result *repository.BulkPushResult) {
 	}
 
 	RenderBulkResults(os.Stdout, BulkRenderConfig{
-		Title:           "=== Push Results ===",
-		Verb:            "Pushed",
-		Format:          pushFlags.Format,
-		Verbose:         verbose,
-		IssueStatuses:   issueStatuses,
-		FormatStatus:    formatPushStatus,
-		ChangesCount:    func(row BulkRenderRow) int { return row.PushedCommits },
-		AlwaysShowError: func(row BulkRenderRow) bool { return isRefspecError(row.Err) },
-		SuccessMessage:  "✓ All repositories pushed successfully",
-		ShowFooters:     true,
+		Title:         "=== Push Results ===",
+		Verb:          "Pushed",
+		Format:        pushFlags.Format,
+		Verbose:       verbose,
+		IssueStatuses: issueStatuses,
+		FormatStatus:  formatPushStatus,
+		ChangesCount:  func(row BulkRenderRow) int { return row.PushedCommits },
+		// A policy refusal is only actionable if the rule is named, so show it
+		// without needing --verbose.
+		AlwaysShowError: func(row BulkRenderRow) bool {
+			return isRefspecError(row.Err) || row.Status == repository.StatusBlocked
+		},
+		SuccessMessage: "✓ All repositories pushed successfully",
+		ShowFooters:    true,
 	}, BulkRenderInput{
 		TotalScanned:   result.TotalScanned,
 		TotalProcessed: result.TotalProcessed,
@@ -254,6 +270,8 @@ func formatPushStatus(row BulkRenderRow) string {
 		return "would push"
 	case "error":
 		return "failed"
+	case "blocked":
+		return "BLOCKED"
 	case "no-remote":
 		return "no remote"
 	case "no-upstream":

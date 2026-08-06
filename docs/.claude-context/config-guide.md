@@ -95,7 +95,12 @@ sync:
   parallel: 3     # Lower parallelism
 branch:
   defaultBranch: main
-  protectedBranches: [main, develop]
+  protectedBranches: [main, develop]  # protected from deletion
+
+push:
+  policy:
+    protected: [main]      # refuse to push to these at all
+    forceMode: lease-only  # lease-only | allow | deny
 
 metadata:
   team: backend
@@ -297,6 +302,32 @@ childConfigMode: repositories  # Default - flat array format
 1. **Explicit `kind:` field** (highest priority)
 2. **Content inspection**: `workspaces`/`profiles` → hierarchical; `repositories` → simple
 3. **Default**: Falls back to `repositories` format
+
+______________________________________________________________________
+
+## Push Policy
+
+`push.policy` restricts what `push` and `handoff end` may write. It is distinct
+from `branch.protectedBranches`, which guards deletion.
+
+```yaml
+push:
+  policy:
+    protected: [main, master, "release/*"]
+    forceMode: lease-only
+```
+
+| Key | Meaning |
+| --- | ------- |
+| `protected` | Branch names and trailing-`*` patterns that may not be pushed to. Empty by default. The **destination** decides, so `--refspec develop:main` is refused. |
+| `forceMode` | `lease-only` (default) allows `--force`, which pushes with `--force-with-lease`, and refuses a `+` refspec, which has no lease. `allow` permits both. `deny` permits neither. |
+
+`--force-mode` overrides `forceMode` for one invocation. A refused repository is
+reported as `blocked`, the rest of the batch still runs, and the command exits
+non-zero.
+
+`lease-only` applies even with no config file: without it a `+` refspec would be
+a silent way around `--force-with-lease`.
 
 ______________________________________________________________________
 

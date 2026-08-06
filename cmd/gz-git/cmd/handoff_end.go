@@ -23,10 +23,6 @@ import (
 // only has to be honest, not descriptive.
 const defaultCheckpointMessage = "chore(wip): handoff checkpoint"
 
-// commitStatusClean is what BulkCommit reports for a repository with nothing
-// staged. It is not one of the shared repository status constants.
-const commitStatusClean = "clean"
-
 var (
 	handoffEndFlags   BulkCommandFlags
 	handoffEndMessage string
@@ -87,9 +83,16 @@ type heldRepo struct {
 	Findings   []handoff.Finding      `json:"findings"`
 }
 
+// blockedRepo is a repository the push policy will not accept work for.
+type blockedRepo struct {
+	Repository handoff.RepoAssessment `json:"repository"`
+	Reason     string                 `json:"reason"`
+}
+
 // handoffEndReport is the machine-readable account of one run.
 type handoffEndReport struct {
 	Plan      handoff.Plan        `json:"plan"`
+	Blocked   []blockedRepo       `json:"blocked,omitempty"`
 	Held      []heldRepo          `json:"held,omitempty"`
 	Committed []string            `json:"committed,omitempty"`
 	Pushed    []string            `json:"pushed,omitempty"`
@@ -117,8 +120,20 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 		return cliutil.NewExitError(2, err)
 	}
 
+	effective, _ := LoadEffectiveConfig(cmd, nil)
+	policy, err := resolvePushPolicy(effective, "")
+	if err != nil {
+		return err
+	}
+
 	plan := handoff.PlanCheckpoint(assessment)
 	report := &handoffEndReport{Plan: plan, DryRun: handoffEndFlags.DryRun}
+
+	// Apply the push policy before the commit, not just at the push. A branch
+	// this workspace may not push to is one an unattended checkpoint has no
+	// business writing to either.
+	plan.Checkpoint, report.Blocked = applyPushPolicy(plan.Checkpoint, policy)
+	report.Plan = plan
 
 	// Screen before committing. This is the whole reason an explicit checkpoint
 	// command is safe where a background auto-commit loop is not.
@@ -132,7 +147,7 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(plan.Checkpoint) > 0 {
-		if err := checkpointRepositories(ctx, directory, plan.Checkpoint, report); err != nil {
+		if err := checkpointRepositories(ctx, directory, plan.Checkpoint, policy, report); err != nil {
 			return cliutil.NewExitError(2, err)
 		}
 	}
@@ -163,6 +178,20 @@ func finishHandoffEnd(report *handoffEndReport, verdictSource *handoff.Assessmen
 		return nil
 	}
 	return cliutil.NewExitError(1, fmt.Errorf("handoff verdict: %s", verdictSource.Verdict))
+}
+
+// applyPushPolicy splits off the repositories whose branch the policy will not
+// accept a push to.
+func applyPushPolicy(repos []handoff.RepoAssessment, policy *repository.PushPolicy) (allowed []handoff.RepoAssessment, blocked []blockedRepo) {
+	for _, repo := range repos {
+		denial := policy.Check(repository.PushIntent{Branch: repo.Branch})
+		if denial == nil {
+			allowed = append(allowed, repo)
+			continue
+		}
+		blocked = append(blocked, blockedRepo{Repository: repo, Reason: denial.Detail})
+	}
+	return allowed, blocked
 }
 
 // screenCheckpoint runs the guard over every repository due to be committed and
@@ -216,7 +245,7 @@ func screenCheckpoint(ctx context.Context, repos []handoff.RepoAssessment, paral
 }
 
 // checkpointRepositories commits and pushes exactly the planned repositories.
-func checkpointRepositories(ctx context.Context, directory string, repos []handoff.RepoAssessment, report *handoffEndReport) error {
+func checkpointRepositories(ctx context.Context, directory string, repos []handoff.RepoAssessment, policy *repository.PushPolicy, report *handoffEndReport) error {
 	client := repository.NewClient()
 	// The plan was built from a scan of this same directory, so restricting the
 	// bulk operations to those exact paths reproduces the selection.
@@ -241,7 +270,7 @@ func checkpointRepositories(ctx context.Context, directory string, repos []hando
 		switch r.Status {
 		case repository.StatusSuccess:
 			report.Committed = append(report.Committed, r.RelativePath)
-		case commitStatusClean:
+		case repository.StatusClean:
 			// Nothing was staged; the push below still has commits to send.
 		default:
 			report.Failed = append(report.Failed, r.RelativePath)
@@ -261,8 +290,11 @@ func checkpointRepositories(ctx context.Context, directory string, repos []hando
 		// A checkpoint on a brand new branch is the common case, and without
 		// this the push has no target to fail against.
 		SetUpstream: true,
-		Verbose:     verbose,
-		Logger:      createBulkLogger(verbose),
+		// Redundant with the pre-commit gate, but a policy belongs on every
+		// path that writes to a remote, not only the one that remembered.
+		Policy:  policy,
+		Verbose: verbose,
+		Logger:  createBulkLogger(verbose),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to push: %w", err)
@@ -303,6 +335,12 @@ func printHandoffEnd(report *handoffEndReport, verdictSource *handoff.Assessment
 		printHandoffEndOutcome(report)
 	}
 
+	for _, blocked := range report.Blocked {
+		fmt.Printf("  %s✗%s %s%s\n", cliutil.ColorRed, cliutil.ColorReset,
+			blocked.Repository.RelativePath, handoffBranchSuffix(blocked.Repository))
+		fmt.Printf("      %sblocked by push policy — %s%s\n", cliutil.ColorGray, blocked.Reason, cliutil.ColorReset)
+	}
+
 	for _, held := range report.Held {
 		fmt.Printf("  %s%s%s %s\n", cliutil.ColorYellow, "⚠", cliutil.ColorReset, held.Repository.RelativePath)
 		fmt.Printf("      %sheld back — nothing was committed%s\n", cliutil.ColorGray, cliutil.ColorReset)
@@ -320,6 +358,13 @@ func printHandoffEnd(report *handoffEndReport, verdictSource *handoff.Assessment
 
 	if len(report.Held) > 0 {
 		fmt.Printf("\n%sReview the held files, then rerun. Use --force to commit them as they are.%s\n",
+			cliutil.ColorGray, cliutil.ColorReset)
+	}
+
+	// Without this the verdict below reads "fixable", which is true of the work
+	// but not of this command: no rerun clears a policy refusal.
+	if len(report.Blocked) > 0 {
+		fmt.Printf("\n%sMove this work onto a branch you may push to; a checkpoint cannot land on a protected one.%s\n",
 			cliutil.ColorGray, cliutil.ColorReset)
 	}
 

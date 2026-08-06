@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `identity` config names the machine and the agent behind an automated commit, and
+  `handoff end` writes them as `Device:` and `Agent:` git trailers on the checkpoint.
+  A checkpoint is made with nobody watching, and git records only the author — the same
+  person on every machine they own — so without a trailer the commit cannot say where
+  the work is. `device` defaults to the hostname, so checkpoints are signed with no
+  configuration at all; `agent` is empty unless something sets it. `GZ_GIT_DEVICE` and
+  `GZ_GIT_AGENT` override the config, since an agent knows its own name at launch.
+  `--no-trailers` omits them for one run.
+  - Configure it globally rather than in a project's `.gz-git.yaml`: that file is
+    committed, and every machine that cloned it would report the same device.
 - `push.policy` config restricts what `push` and `handoff end` may write to a remote.
   `protected` lists branch names and trailing-`*` patterns that may not be pushed to at
   all — the **destination** decides, so `--refspec develop:main` is refused just as a

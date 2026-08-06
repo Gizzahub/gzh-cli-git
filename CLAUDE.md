@@ -167,6 +167,21 @@ push:
 force paths behave the same. `--force-mode` overrides it per invocation.
 Refused repositories are reported as `blocked`; the rest of the batch runs.
 
+## Identity
+
+`handoff end` signs its checkpoint commit with git trailers, since the author
+line is the same on every machine one person owns.
+
+```yaml
+# global config only — a project's .gz-git.yaml is committed and shared
+identity:
+  device: dave-office   # default: hostname
+  agent: hermes-01      # default: none (a person is driving)
+```
+
+`GZ_GIT_DEVICE` / `GZ_GIT_AGENT` override the config. `--no-trailers` omits
+them for one run.
+
 ## Security (CRITICAL)
 
 ```go

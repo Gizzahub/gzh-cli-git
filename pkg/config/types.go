@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -109,6 +110,9 @@ type Profile struct {
 	Parallel         int    `yaml:"parallel,omitempty"`         // Parallel job count
 	IncludeSubgroups bool   `yaml:"includeSubgroups,omitempty"` // GitLab subgroups
 	SubgroupMode     string `yaml:"subgroupMode,omitempty"`     // flat, nested
+
+	// Identity names the machine and agent recorded on automated commits.
+	Identity *identity.Identity `yaml:"identity,omitempty"`
 
 	// Command-specific overrides
 	Sync   *SyncConfig   `yaml:"sync,omitempty"`
@@ -427,6 +431,11 @@ type GlobalConfig struct {
 
 	// Defaults apply to all profiles unless overridden
 	Defaults map[string]any `yaml:"defaults,omitempty"`
+
+	// Identity names this machine and, if one is driving, the agent on it.
+	// It lives here rather than in a project's .gz-git.yaml because that file
+	// is committed, and a shared device name names nothing.
+	Identity *identity.Identity `yaml:"identity,omitempty"`
 
 	// Environments define named token sets
 	Environments map[string]Environment `yaml:"environments,omitempty"`
@@ -838,6 +847,10 @@ type EffectiveConfig struct {
 	Parallel         int
 	IncludeSubgroups bool
 	SubgroupMode     string
+
+	// Identity, already resolved against the environment and hostname, so a
+	// caller can use it without knowing where it came from.
+	Identity identity.Identity
 
 	// Command-specific settings
 	Sync   SyncConfig

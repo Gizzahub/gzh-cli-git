@@ -153,6 +153,20 @@ push:
     # Type: string (default: lease-only)
     forceMode: lease-only
 
+# Identity recorded on automated commits (handoff end)
+#
+# Belongs in the global config, not a project's .gz-git.yaml: that file is
+# committed, and every machine that clones it would report the same device.
+# GZ_GIT_DEVICE and GZ_GIT_AGENT override these.
+identity:
+  # This machine
+  # Type: string (default: hostname)
+  device: dave-office
+
+  # The automation driving this machine, if any
+  # Type: string (default: none, meaning a person is driving)
+  agent: hermes-01
+
 # -----------------------------------------------------------------------------
 # Workspace Structure (Recursive)
 # -----------------------------------------------------------------------------

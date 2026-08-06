@@ -331,6 +331,42 @@ a silent way around `--force-with-lease`.
 
 ______________________________________________________________________
 
+## Identity
+
+`identity` names the machine and the agent behind an automated commit. `handoff
+end` writes them as git trailers on the checkpoint commit:
+
+```
+chore(wip): handoff checkpoint
+
+Device: dave-office
+Agent: hermes-01
+```
+
+```yaml
+# ~/.config/gz-git/config.yaml — global, not a project's .gz-git.yaml
+identity:
+  device: dave-office
+  agent: hermes-01
+```
+
+| Key | Meaning |
+| --- | ------- |
+| `device` | This machine. Defaults to the hostname, so a checkpoint is signed even with no config. |
+| `agent` | The automation driving this machine. Empty means a person is, so nothing is recorded. |
+
+`GZ_GIT_DEVICE` and `GZ_GIT_AGENT` override the config — an agent process knows
+its own name at launch, while a config file is written once and shared by every
+run on the machine.
+
+Keep this out of a project's `.gz-git.yaml`: that file is committed, and every
+machine that clones it would then report the same device name. Global config and
+profiles are machine-local, which is what the value describes.
+
+`gz-git handoff end --no-trailers` omits them for one run.
+
+______________________________________________________________________
+
 ## Security Notes
 
 - Profile files: 0600 permissions (user read/write only)

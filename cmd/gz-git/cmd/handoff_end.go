@@ -14,6 +14,7 @@ import (
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/handoff"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
@@ -24,10 +25,11 @@ import (
 const defaultCheckpointMessage = "chore(wip): handoff checkpoint"
 
 var (
-	handoffEndFlags   BulkCommandFlags
-	handoffEndMessage string
-	handoffEndForce   bool
-	handoffEndNoPush  bool
+	handoffEndFlags      BulkCommandFlags
+	handoffEndMessage    string
+	handoffEndForce      bool
+	handoffEndNoPush     bool
+	handoffEndNoTrailers bool
 )
 
 var handoffEndCmd = &cobra.Command{
@@ -54,6 +56,11 @@ Before committing, each repository is screened for credentials, oversized
 files, and build output that .gitignore does not cover. Anything flagged is
 held back rather than swept into history; --force commits it anyway.
 
+The checkpoint commit carries Device: and Agent: trailers naming where it came
+from, since the author line is the same on every machine you own. Set them in
+the global config under identity:, or with GZ_GIT_DEVICE and GZ_GIT_AGENT; the
+device defaults to the hostname.
+
 Exit Codes:
   0  every repository is now safe to leave
   1  work still exists only on this machine
@@ -75,6 +82,8 @@ func init() {
 		"commit files the guard flagged as secrets, oversized, or build output")
 	handoffEndCmd.Flags().BoolVar(&handoffEndNoPush, "no-push", false,
 		"commit without pushing (work still exists only on this machine)")
+	handoffEndCmd.Flags().BoolVar(&handoffEndNoTrailers, "no-trailers", false,
+		"omit the Device: and Agent: trailers from the checkpoint commit")
 }
 
 // heldRepo is a repository the guard stopped short of committing.
@@ -91,6 +100,7 @@ type blockedRepo struct {
 
 // handoffEndReport is the machine-readable account of one run.
 type handoffEndReport struct {
+	Message   string              `json:"message"`
 	Plan      handoff.Plan        `json:"plan"`
 	Blocked   []blockedRepo       `json:"blocked,omitempty"`
 	Held      []heldRepo          `json:"held,omitempty"`
@@ -127,7 +137,11 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 	}
 
 	plan := handoff.PlanCheckpoint(assessment)
-	report := &handoffEndReport{Plan: plan, DryRun: handoffEndFlags.DryRun}
+	report := &handoffEndReport{
+		Message: checkpointMessage(effective),
+		Plan:    plan,
+		DryRun:  handoffEndFlags.DryRun,
+	}
 
 	// Apply the push policy before the commit, not just at the push. A branch
 	// this workspace may not push to is one an unattended checkpoint has no
@@ -178,6 +192,20 @@ func finishHandoffEnd(report *handoffEndReport, verdictSource *handoff.Assessmen
 		return nil
 	}
 	return cliutil.NewExitError(1, fmt.Errorf("handoff verdict: %s", verdictSource.Verdict))
+}
+
+// checkpointMessage builds the commit message, signing it with the machine and
+// agent that produced it.
+//
+// A checkpoint is written with nobody watching, and the author line is the same
+// person on every machine they own, so without a trailer the commit cannot say
+// where the work is. Checkpoints are squashed when the branch merges, so this
+// costs nothing in the history that survives.
+func checkpointMessage(effective *config.EffectiveConfig) string {
+	if handoffEndNoTrailers || effective == nil {
+		return handoffEndMessage
+	}
+	return effective.Identity.AppendTrailers(handoffEndMessage)
 }
 
 // applyPushPolicy splits off the repositories whose branch the policy will not
@@ -257,7 +285,7 @@ func checkpointRepositories(ctx context.Context, directory string, repos []hando
 		MaxDepth:          handoffEndFlags.Depth,
 		IncludeSubmodules: handoffEndFlags.IncludeSubmodules,
 		IncludePattern:    pattern,
-		Message:           handoffEndMessage,
+		Message:           report.Message,
 		Yes:               true,
 		Verbose:           verbose,
 		Logger:            createBulkLogger(verbose),
@@ -378,6 +406,15 @@ func printHandoffEndPlan(report *handoffEndReport) {
 		fmt.Printf("%sNothing to commit.%s\n", cliutil.ColorGray, cliutil.ColorReset)
 		return
 	}
+
+	// A dry run is where someone decides whether to let the checkpoint happen,
+	// so show the message it would carry, trailers included.
+	for line := range strings.SplitSeq(report.Message, "\n") {
+		if line != "" {
+			fmt.Printf("  %s%s%s\n", cliutil.ColorGray, line, cliutil.ColorReset)
+		}
+	}
+	fmt.Println()
 
 	for _, repo := range report.Plan.Checkpoint {
 		fmt.Printf("  %s→%s %s%s\n", cliutil.ColorCyan, cliutil.ColorReset,

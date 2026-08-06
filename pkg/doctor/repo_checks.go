@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 // Thresholds for repository health checks.
@@ -150,6 +151,9 @@ func checkSingleRepo(ctx context.Context, executor *gitcmd.Executor, repoPath, n
 		results = append(results, checkFeatureBranchDivergence(ctx, executor, repoPath, name)...)
 	}
 
+	// 9. Stash entries stranded on this machine
+	results = append(results, checkStrandedStash(ctx, executor, repoPath, name)...)
+
 	return results
 }
 
@@ -247,6 +251,37 @@ func checkConflicts(ctx context.Context, executor *gitcmd.Executor, repoPath, na
 		}}
 	}
 	return nil
+}
+
+// checkStrandedStash reports stash entries that have outlived the task that
+// created them. A fresh stash is not a problem — it is what the command is for —
+// so only entries older than repository.StrandedStashAge are reported. Nothing
+// here is auto-fixable: a stash is invisible to every other machine, and turning
+// one into a commit is a decision rather than a cleanup.
+func checkStrandedStash(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {
+	output, err := executor.RunOutput(ctx, repoPath, "stash", "list", "--format=%ct")
+	if err != nil {
+		return nil
+	}
+
+	count, oldest := repository.ParseStashDates(output)
+	if count == 0 || !repository.StashIsStranded(oldest) {
+		return nil
+	}
+
+	subject := fmt.Sprintf("%d stash entries", count)
+	if count == 1 {
+		subject = "1 stash entry"
+	}
+
+	days := int(time.Since(oldest).Hours() / 24)
+	return []CheckResult{{
+		Name:     fmt.Sprintf("repo:%s:stash", name),
+		Category: CategoryRepo,
+		Status:   StatusWarning,
+		Message:  fmt.Sprintf("%s: %s, oldest %d days old", name, subject, days),
+		Detail:   "a stash never leaves this machine. Restore it with 'git stash pop', or commit it to a branch that can be pushed",
+	}}
 }
 
 func checkDirtyBehind(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {

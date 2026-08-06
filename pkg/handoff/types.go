@@ -13,6 +13,10 @@ const (
 	ReasonUnpushed Reason = "unpushed"
 	// ReasonStashed marks stash entries, which are never transferred by git.
 	ReasonStashed Reason = "stashed"
+	// ReasonStranded marks a stash old enough to have outlived the task that
+	// created it. It is the same blocker as ReasonStashed with a worse prognosis:
+	// nobody is coming back for it on their own.
+	ReasonStranded Reason = "stranded"
 	// ReasonConflict marks unresolved merge conflicts.
 	ReasonConflict Reason = "conflict"
 	// ReasonInProgress marks an interrupted rebase or merge.

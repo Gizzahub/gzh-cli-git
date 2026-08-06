@@ -497,6 +497,11 @@ type RepositoryStatusResult struct {
 	LocalBranches    []string
 	StashCount       int
 
+	// OldestStash is when the oldest stash entry was created, zero when there
+	// is none. A stash never leaves this machine, so its age separates work in
+	// progress from work that was forgotten here.
+	OldestStash time.Time
+
 	// CommitsBehind is how many commits behind remote
 	CommitsBehind int
 
@@ -2496,6 +2501,7 @@ func (c *client) processStatusRepository(ctx context.Context, rootDir, repoPath 
 	result.LastCommitAuthor = info.LastCommitAuthor
 	result.LocalBranches = info.LocalBranches
 	result.StashCount = info.StashCount
+	result.OldestStash = info.OldestStash
 	result.CommitsBehind = info.BehindBy
 	result.CommitsAhead = info.AheadBy
 

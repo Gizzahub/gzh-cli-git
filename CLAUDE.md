@@ -129,6 +129,11 @@ contents, files over 5 MiB, untracked build output missing from `.gitignore`. Fl
 repositories are held back, not committed — `--force` overrides. Stash entries are never
 moved automatically; they are invisible to every other machine by design.
 
+Because of that, `handoff check` reports their age. A stash older than a week is
+`stranded` rather than `stashed`: it has outlived several handoff cycles without anyone
+reaching for it. `gz-git doctor` warns about the same entries, and neither command
+touches them — restoring a stash is a decision, not a cleanup.
+
 ## Forge Usage
 
 ```bash

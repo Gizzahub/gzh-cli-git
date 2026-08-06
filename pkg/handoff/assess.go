@@ -5,6 +5,7 @@ package handoff
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
@@ -117,13 +118,26 @@ func assessRepository(r repository.RepositoryStatusResult) RepoAssessment {
 	// A stash is deliberately not auto-fixable. It is invisible to every other
 	// machine, and turning one into a commit is a decision, not a cleanup step.
 	if r.StashCount > 0 {
-		assessment.Blockers = append(assessment.Blockers, Blocker{
-			Reason: ReasonStashed,
-			Detail: stashDetail(r.StashCount),
-		})
+		assessment.Blockers = append(assessment.Blockers, stashBlocker(r.StashCount, r.OldestStash))
 	}
 
 	return assessment
+}
+
+// stashBlocker reports the stashes in one repository as a single blocker. The
+// oldest entry decides which reason it gets: splitting a repository's stashes
+// across two blockers would double-count one repository in the tally without
+// telling anyone anything the age does not already say.
+func stashBlocker(count int, oldest time.Time) Blocker {
+	reason := ReasonStashed
+	if repository.StashIsStranded(oldest) {
+		reason = ReasonStranded
+	}
+
+	return Blocker{
+		Reason: reason,
+		Detail: stashDetail(count, oldest),
+	}
 }
 
 func progressDetail(r repository.RepositoryStatusResult) string {
@@ -168,9 +182,33 @@ func uncommittedDetail(r repository.RepositoryStatusResult) string {
 	}
 }
 
-func stashDetail(count int) string {
+func stashDetail(count int, oldest time.Time) string {
+	lead := fmt.Sprintf("%d stash entries never leave this machine", count)
 	if count == 1 {
-		return "1 stash entry never leaves this machine"
+		lead = "1 stash entry never leaves this machine"
 	}
-	return fmt.Sprintf("%d stash entries never leave this machine", count)
+
+	if oldest.IsZero() {
+		return lead
+	}
+
+	return fmt.Sprintf("%s, oldest %s", lead, humanAge(time.Since(oldest)))
+}
+
+// humanAge renders a duration at the coarsest unit that still says something.
+// A stash is measured against handoffs, not against clock time, so anything
+// under a day is "today" and the difference between 31 and 44 days is noise.
+func humanAge(age time.Duration) string {
+	days := int(age.Hours() / 24)
+
+	switch {
+	case days < 1:
+		return "from today"
+	case days == 1:
+		return "1 day old"
+	case days < 60:
+		return fmt.Sprintf("%d days old", days)
+	default:
+		return fmt.Sprintf("%d months old", days/30)
+	}
 }

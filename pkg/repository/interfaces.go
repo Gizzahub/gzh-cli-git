@@ -231,6 +231,11 @@ type Info struct {
 
 	// StashCount is the number of stash entries.
 	StashCount int
+
+	// OldestStash is when the oldest stash entry was created, zero when there
+	// is none. A stash is invisible to every other machine, so its age is the
+	// difference between work in progress and work that was forgotten.
+	OldestStash time.Time
 }
 
 // Status represents the working tree and staging area status.

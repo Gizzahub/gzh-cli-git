@@ -409,14 +409,12 @@ func (c *client) GetInfo(ctx context.Context, repo *Repository) (*Info, error) {
 		}
 	}
 
-	// Get Stash Count
-	output, err = c.executor.RunOutput(ctx, repo.Path, "stash", "list")
+	// Get stash count and the age of the oldest entry. The age is what separates
+	// "I am mid-task" from work that has been invisible to every other machine
+	// for weeks, and git offers no cheaper way to ask than reading the dates.
+	output, err = c.executor.RunOutput(ctx, repo.Path, "stash", "list", "--format=%ct")
 	if err == nil {
-		if strings.TrimSpace(output) == "" {
-			info.StashCount = 0
-		} else {
-			info.StashCount = len(strings.Split(strings.TrimSpace(output), "\n"))
-		}
+		info.StashCount, info.OldestStash = ParseStashDates(output)
 	}
 
 	c.logger.Info("Retrieved repository info for %s", repo.Path)

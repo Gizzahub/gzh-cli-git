@@ -6,7 +6,9 @@ package handoff
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
@@ -89,6 +91,74 @@ func TestAssessStashIsNeverAutoFixable(t *testing.T) {
 	}
 	if len(a.Blocked()) != 1 {
 		t.Errorf("Blocked() = %+v, want the stashed repo", a.Blocked())
+	}
+}
+
+func TestAssessOldStashIsReportedAsStranded(t *testing.T) {
+	r := cleanRepo()
+	r.StashCount = 1
+	r.OldestStash = time.Now().Add(-30 * 24 * time.Hour)
+
+	a := Assess([]repository.RepositoryStatusResult{r})
+
+	got := reasons(t, a)
+	if len(got) != 1 || got[0] != ReasonStranded {
+		t.Fatalf("reasons = %v, want exactly [stranded]", got)
+	}
+	if a.Verdict != VerdictBlocked {
+		t.Errorf("verdict = %s, want %s", a.Verdict, VerdictBlocked)
+	}
+
+	detail := a.Repositories[0].Blockers[0].Detail
+	if !strings.Contains(detail, "30 days old") {
+		t.Errorf("detail = %q, want the age of the oldest entry", detail)
+	}
+}
+
+func TestAssessRecentStashIsNotStranded(t *testing.T) {
+	r := cleanRepo()
+	r.StashCount = 1
+	r.OldestStash = time.Now().Add(-2 * time.Hour)
+
+	got := reasons(t, Assess([]repository.RepositoryStatusResult{r}))
+	if len(got) != 1 || got[0] != ReasonStashed {
+		t.Fatalf("reasons = %v, want exactly [stashed] — a stash made today is work in progress", got)
+	}
+}
+
+// A repository with several stashes is one repository. Reporting the fresh ones
+// separately from the old ones would make one machine look like two problems.
+func TestAssessStashesOfMixedAgeAreOneBlocker(t *testing.T) {
+	r := cleanRepo()
+	r.StashCount = 3
+	r.OldestStash = time.Now().Add(-20 * 24 * time.Hour)
+
+	a := Assess([]repository.RepositoryStatusResult{r})
+
+	if n := len(a.Repositories[0].Blockers); n != 1 {
+		t.Fatalf("blockers = %d, want 1: %+v", n, a.Repositories[0].Blockers)
+	}
+	if got := a.Repositories[0].Blockers[0]; got.Reason != ReasonStranded ||
+		!strings.HasPrefix(got.Detail, "3 stash entries") {
+		t.Errorf("blocker = %+v, want all three counted under the oldest one's reason", got)
+	}
+}
+
+func TestHumanAge(t *testing.T) {
+	tests := []struct {
+		age  time.Duration
+		want string
+	}{
+		{3 * time.Hour, "from today"},
+		{25 * time.Hour, "1 day old"},
+		{9 * 24 * time.Hour, "9 days old"},
+		{200 * 24 * time.Hour, "6 months old"},
+	}
+
+	for _, tt := range tests {
+		if got := humanAge(tt.age); got != tt.want {
+			t.Errorf("humanAge(%s) = %q, want %q", tt.age, got, tt.want)
+		}
 	}
 }
 

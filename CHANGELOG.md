@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `handoff check` and `doctor` now report the age of stash entries, not just their
+  count. A stash never leaves the machine that made it, so an entry that outlived a
+  week of handoff cycles is work nobody is coming back for on their own: `handoff
+  check` gives it the new `stranded` reason instead of `stashed`, and `doctor` warns
+  about it under `repo:{name}:stash`. Both commands stay quiet about a stash made
+  today, which is what the command is for, and neither one touches any of them —
+  restoring a stash is a decision, not a cleanup.
+  - The oldest entry is found by comparing dates, not by taking the last line of
+    `git stash list`: that order comes from the reflog, and pushing a stash on an older
+    base leaves an entry whose date is not where its position suggests.
 - `gz-git branch name <task>` builds the branch name a task should have here, from a
   template and the resolved identity: `--kind work` (`feat/{task}`), `--kind device`
   (`feat/{task}/{device}`) or `--kind agent` (`agent/{task}/{agent}`). It prints the

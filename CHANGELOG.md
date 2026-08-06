@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `gz-git config recommended` audits the git configuration that a multi-device,
+  multi-agent workflow depends on: `pull.rebase`, `rebase.autoStash`, `fetch.prune`,
+  `push.autoSetupRemote`, `push.default`, `rerere.enabled`, `merge.conflictStyle`.
+  It reports unset, mismatched, and (for settings needing a newer git than the one
+  installed) unsupported values, and writes the missing ones with `--apply`.
+  `--local` targets the current repository instead of `~/.gitconfig`. Boolean
+  spellings git accepts (`yes`, `on`, `1`) are not reported as mismatches.
+  Exit codes follow the diagnostic convention: `0` conforming, `1` drift found,
+  `2` the audit could not run — so it works as a CI workstation gate.
+- `gz-git doctor` reports the same audit as one aggregate `System` check, naming the
+  keys that need changes; `--verbose` expands it to one check per setting.
+
 ### Fixed (behavior change)
 
 `diff` and `commit` parsed `git status --porcelain` independently and disagreed on what

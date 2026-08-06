@@ -56,6 +56,7 @@ docs/.claude-context/ # Context docs
 | `workspace init`       | Scan directory → generate config                       |
 | `workspace sync`       | Clone/update from config (detailed preview)            |
 | `config profile`       | Profile management (create/use/list)                   |
+| `config recommended`   | Audit/apply git settings for multi-device work (`--apply`) |
 | `doctor`               | Diagnose system, config, auth, forge health            |
 
 ## Configuration System

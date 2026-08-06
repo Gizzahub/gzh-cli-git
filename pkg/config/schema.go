@@ -153,6 +153,15 @@ push:
     # Type: string (default: lease-only)
     forceMode: lease-only
 
+    # What happens to a force push that would discard commits whose trailers
+    # name a different device or agent than this one
+    #   block   the push is refused and the commits are listed
+    #   allow   the push runs, with --force-with-lease as the only guard
+    # Only commits signed by handoff end can be attributed; a commit made by
+    # hand elsewhere carries no trailer and is never counted as foreign.
+    # Type: string (default: block)
+    foreignWork: block
+
 # Identity recorded on automated commits (handoff end)
 #
 # Belongs in the global config, not a project's .gz-git.yaml: that file is

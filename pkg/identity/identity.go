@@ -84,6 +84,59 @@ func (i Identity) Trailers() []string {
 	return trailers
 }
 
+// FromMessage reads back the identity a commit message was signed with.
+//
+// A message with no trailers yields a zero Identity, which is not the same as
+// "made by nobody": most commits are written by hand and carry no trailer at
+// all, so an empty result means unknown rather than absent.
+func FromMessage(message string) Identity {
+	var found Identity
+	for line := range strings.SplitSeq(message, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "Device:"):
+			found.Device = strings.TrimSpace(strings.TrimPrefix(line, "Device:"))
+		case strings.HasPrefix(line, "Agent:"):
+			found.Agent = strings.TrimSpace(strings.TrimPrefix(line, "Agent:"))
+		}
+	}
+	return found
+}
+
+// Known reports whether the identity names anything at all.
+func (i Identity) Known() bool {
+	return i.Device != "" || i.Agent != ""
+}
+
+// Name renders the identity for a person to read: "device/agent" when both are
+// named, otherwise whichever one is. An unknown identity renders as "unknown"
+// rather than as an empty string, so it cannot be mistaken for a missing field.
+func (i Identity) Name() string {
+	switch {
+	case i.Device != "" && i.Agent != "":
+		return i.Device + "/" + i.Agent
+	case i.Device != "":
+		return i.Device
+	case i.Agent != "":
+		return i.Agent
+	default:
+		return "unknown"
+	}
+}
+
+// DiffersFrom reports whether other is positive evidence of a different writer.
+//
+// It compares only the fields both sides name. An unsigned commit differs from
+// nothing: it is unattributed, not attributed elsewhere, and treating the
+// absence of a trailer as a foreign writer would fire on every commit made by
+// hand.
+func (i Identity) DiffersFrom(other Identity) bool {
+	if other.Device != "" && i.Device != "" && other.Device != i.Device {
+		return true
+	}
+	return other.Agent != "" && i.Agent != "" && other.Agent != i.Agent
+}
+
 // AppendTrailers returns message with the identity's trailers added, skipping
 // any the message already carries so the result is stable under a rerun.
 func (i Identity) AppendTrailers(message string) string {

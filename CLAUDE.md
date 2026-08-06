@@ -160,6 +160,7 @@ push:
   policy:
     protected: [main, master]   # never push here; the destination decides
     forceMode: lease-only       # lease-only (default) | allow | deny
+    foreignWork: block          # block (default) | allow
 ```
 
 `lease-only` allows `--force` (which uses `--force-with-lease`) and refuses a
@@ -167,10 +168,18 @@ push:
 force paths behave the same. `--force-mode` overrides it per invocation.
 Refused repositories are reported as `blocked`; the rest of the batch runs.
 
+`foreignWork: block` refuses a force push that would discard remote commits
+whose trailers name a different device or agent, listing the commits at stake.
+It catches what `--force-with-lease` cannot: a lease is satisfied by any fetch,
+and a multi-device workflow fetches on arrival. `--foreign-work allow` overrides
+it. Only commits signed by `handoff end` can be attributed — a commit made by
+hand elsewhere has no trailer and is never counted as foreign.
+
 ## Identity
 
 `handoff end` signs its checkpoint commit with git trailers, since the author
-line is the same on every machine one person owns.
+line is the same on every machine one person owns. The `foreignWork` rule and
+`handoff start`'s shared-branch note both read them back.
 
 ```yaml
 # global config only — a project's .gz-git.yaml is committed and shared
@@ -180,7 +189,8 @@ identity:
 ```
 
 `GZ_GIT_DEVICE` / `GZ_GIT_AGENT` override the config. `--no-trailers` omits
-them for one run.
+them for one run. A machine that names nothing skips the foreign-work check
+entirely: it cannot tell its own commits from anyone else's.
 
 ## Security (CRITICAL)
 

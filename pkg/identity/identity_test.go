@@ -124,3 +124,68 @@ func TestAppendWithoutIdentityLeavesMessageAlone(t *testing.T) {
 		t.Errorf("got %q, want it unchanged", got)
 	}
 }
+
+func TestFromMessageReadsTrailers(t *testing.T) {
+	message := "chore(wip): checkpoint\n\nDevice: dave-office\nAgent: hermes-01\n"
+
+	got := FromMessage(message)
+
+	if got.Device != "dave-office" || got.Agent != "hermes-01" {
+		t.Errorf("identity = %+v, want dave-office/hermes-01", got)
+	}
+}
+
+func TestFromMessageOnAnUnsignedCommit(t *testing.T) {
+	if got := FromMessage("fix: a thing\n\nsome body\n"); got.Known() {
+		t.Errorf("identity = %+v, want nothing known", got)
+	}
+}
+
+func TestDiffersFromNeedsEvidenceOnBothSides(t *testing.T) {
+	mine := Identity{Device: "dave-office", Agent: "hermes-01"}
+
+	cases := []struct {
+		name  string
+		other Identity
+		want  bool
+	}{
+		{"another device", Identity{Device: "dave-laptop"}, true},
+		{"another agent on my device", Identity{Device: "dave-office", Agent: "hermes-02"}, true},
+		{"myself", mine, false},
+		{"unsigned", Identity{}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mine.DiffersFrom(tc.other); got != tc.want {
+				t.Errorf("DiffersFrom(%+v) = %v, want %v", tc.other, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestName(t *testing.T) {
+	cases := []struct {
+		id   Identity
+		want string
+	}{
+		{Identity{Device: "dave-office", Agent: "hermes-01"}, "dave-office/hermes-01"},
+		{Identity{Device: "dave-office"}, "dave-office"},
+		{Identity{Agent: "hermes-01"}, "hermes-01"},
+		{Identity{}, "unknown"},
+	}
+
+	for _, tc := range cases {
+		if got := tc.id.Name(); got != tc.want {
+			t.Errorf("Identity%+v.Name() = %q, want %q", tc.id, got, tc.want)
+		}
+	}
+}
+
+func TestAnUnknownSelfCannotAccuseAnyone(t *testing.T) {
+	// A machine that named nothing has no standing to call a signed commit
+	// foreign — it cannot tell whether the commit is its own.
+	if (Identity{}).DiffersFrom(Identity{Device: "dave-laptop"}) {
+		t.Error("an unnamed machine should not find anything foreign")
+	}
+}

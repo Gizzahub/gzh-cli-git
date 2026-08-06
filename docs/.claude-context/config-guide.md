@@ -101,6 +101,7 @@ push:
   policy:
     protected: [main]      # refuse to push to these at all
     forceMode: lease-only  # lease-only | allow | deny
+    foreignWork: block     # block | allow
 
 metadata:
   team: backend
@@ -315,19 +316,51 @@ push:
   policy:
     protected: [main, master, "release/*"]
     forceMode: lease-only
+    foreignWork: block
 ```
 
 | Key | Meaning |
 | --- | ------- |
 | `protected` | Branch names and trailing-`*` patterns that may not be pushed to. Empty by default. The **destination** decides, so `--refspec develop:main` is refused. |
 | `forceMode` | `lease-only` (default) allows `--force`, which pushes with `--force-with-lease`, and refuses a `+` refspec, which has no lease. `allow` permits both. `deny` permits neither. |
+| `foreignWork` | `block` (default) refuses a force push that would discard remote commits signed by a different device or agent. `allow` permits it. |
 
-`--force-mode` overrides `forceMode` for one invocation. A refused repository is
-reported as `blocked`, the rest of the batch still runs, and the command exits
-non-zero.
+`--force-mode` and `--foreign-work` override their keys for one invocation. A
+refused repository is reported as `blocked`, the rest of the batch still runs,
+and the command exits non-zero.
 
 `lease-only` applies even with no config file: without it a `+` refspec would be
 a silent way around `--force-with-lease`.
+
+### Why `foreignWork` is not redundant with `--force-with-lease`
+
+A lease compares the remote against the ref this machine last fetched, so it
+protects only until the next fetch — and a multi-device workflow fetches on
+arrival. After that the lease is satisfied and a force push silently drops
+whatever the other machine wrote.
+
+The rule reads the [identity trailers](#identity) on the commits that would be
+discarded, and refuses only on positive evidence of another writer:
+
+```
+push blocked by policy (foreign-work): force push would discard 2 commit(s)
+from another machine or agent: a1b2c3d4 chore(wip): handoff checkpoint
+(dave-laptop/hermes-02), and 1 more
+```
+
+Two limits follow from that:
+
+- Only commits signed by `handoff end` can be attributed. A commit made by hand
+  elsewhere carries no trailer and is never counted as foreign — the rule finds
+  real conflicts in a workflow that checkpoints through this tool, and finds
+  nothing in one that does not.
+- A machine that names no identity skips the check entirely; it cannot tell its
+  own commits from anyone else's.
+
+`gz-git handoff start` reads the same trailers in the other direction and names
+the branches whose remote advanced under someone else. That one only reports:
+rebasing onto another writer's commits loses nothing. It is the signal that a
+branch has two writers and should be split.
 
 ______________________________________________________________________
 
@@ -364,6 +397,10 @@ machine that clones it would then report the same device name. Global config and
 profiles are machine-local, which is what the value describes.
 
 `gz-git handoff end --no-trailers` omits them for one run.
+
+The trailers are what the [`foreignWork` push rule](#push-policy) and `handoff
+start`'s shared-branch note read back, so a workspace that never sets an
+identity gets a working checkpoint but no cross-machine safety from either.
 
 ______________________________________________________________________
 

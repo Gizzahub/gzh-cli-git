@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 )
 
 // nonInteractiveEnv contains environment variables to disable git credential prompts.
@@ -319,6 +321,11 @@ type BulkPushOptions struct {
 	// permits every push. Repositories it refuses are reported as StatusBlocked
 	// and the rest of the batch still runs.
 	Policy *PushPolicy
+
+	// Identity names this machine and agent, so a force push can tell its own
+	// commits from another writer's. An unnamed identity disables that check:
+	// a machine that cannot say who it is cannot say who anyone else is.
+	Identity identity.Identity
 
 	// IncludeSubmodules includes git submodules in the scan (default: false)
 	// When false, only scans for independent nested repositories
@@ -2025,6 +2032,21 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 		result.Status = StatusNoRemote
 		result.Message = "No remote configured"
 		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	// A force push is the one operation that destroys work already on the
+	// remote, so check whose it is before running it — including under
+	// --dry-run, where finding this out first is the whole point.
+	if foreign, ferr := c.checkForeignWork(ctx, repoPath, info, opts); ferr != nil {
+		logger.Warn("could not check for foreign work", "path", result.RelativePath, "error", ferr)
+	} else if len(foreign) > 0 {
+		result.Status = StatusBlocked
+		result.Message = describeForeignWork(foreign)
+		result.Error = fmt.Errorf("push blocked by policy (%s): %s", PushRuleForeignWork, result.Message)
+		result.Duration = time.Since(startTime)
+		logger.Warn("push would discard another writer's commits",
+			"path", result.RelativePath, "commits", len(foreign))
 		return result
 	}
 

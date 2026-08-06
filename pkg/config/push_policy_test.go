@@ -45,6 +45,26 @@ push:
 	}
 }
 
+func TestForeignWorkUnmarshalsFromProjectConfig(t *testing.T) {
+	const doc = `
+push:
+  policy:
+    foreignWork: allow
+`
+
+	var project ProjectConfig
+	if err := yaml.Unmarshal([]byte(doc), &project); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if project.Push == nil || project.Push.Policy == nil {
+		t.Fatal("push policy was not parsed")
+	}
+	if got := project.Push.Policy.ForeignWork; got != repository.ForeignWorkAllow {
+		t.Errorf("foreignWork = %q, want %q", got, repository.ForeignWorkAllow)
+	}
+}
+
 func TestPushConfigWithoutPolicyLeavesItNil(t *testing.T) {
 	var project ProjectConfig
 	if err := yaml.Unmarshal([]byte("push:\n  setUpstream: true\n"), &project); err != nil {

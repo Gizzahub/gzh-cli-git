@@ -131,7 +131,7 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 	}
 
 	effective, _ := LoadEffectiveConfig(cmd, nil)
-	policy, err := resolvePushPolicy(effective, "")
+	guards, err := resolvePushGuards(effective, pushOverrides{})
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 	// Apply the push policy before the commit, not just at the push. A branch
 	// this workspace may not push to is one an unattended checkpoint has no
 	// business writing to either.
-	plan.Checkpoint, report.Blocked = applyPushPolicy(plan.Checkpoint, policy)
+	plan.Checkpoint, report.Blocked = applyPushPolicy(plan.Checkpoint, guards.policy)
 	report.Plan = plan
 
 	// Screen before committing. This is the whole reason an explicit checkpoint
@@ -161,7 +161,7 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(plan.Checkpoint) > 0 {
-		if err := checkpointRepositories(ctx, directory, plan.Checkpoint, policy, report); err != nil {
+		if err := checkpointRepositories(ctx, directory, plan.Checkpoint, guards, report); err != nil {
 			return cliutil.NewExitError(2, err)
 		}
 	}
@@ -273,7 +273,7 @@ func screenCheckpoint(ctx context.Context, repos []handoff.RepoAssessment, paral
 }
 
 // checkpointRepositories commits and pushes exactly the planned repositories.
-func checkpointRepositories(ctx context.Context, directory string, repos []handoff.RepoAssessment, policy *repository.PushPolicy, report *handoffEndReport) error {
+func checkpointRepositories(ctx context.Context, directory string, repos []handoff.RepoAssessment, guards pushGuards, report *handoffEndReport) error {
 	client := repository.NewClient()
 	// The plan was built from a scan of this same directory, so restricting the
 	// bulk operations to those exact paths reproduces the selection.
@@ -320,9 +320,10 @@ func checkpointRepositories(ctx context.Context, directory string, repos []hando
 		SetUpstream: true,
 		// Redundant with the pre-commit gate, but a policy belongs on every
 		// path that writes to a remote, not only the one that remembered.
-		Policy:  policy,
-		Verbose: verbose,
-		Logger:  createBulkLogger(verbose),
+		Policy:   guards.policy,
+		Identity: guards.identity,
+		Verbose:  verbose,
+		Logger:   createBulkLogger(verbose),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to push: %w", err)

@@ -403,6 +403,7 @@ type PullConfig struct {
 //	  policy:
 //	    protected: [main, master]
 //	    forceMode: lease-only
+//	    foreignWork: block
 type PushConfig struct {
 	SetUpstream bool `yaml:"setUpstream,omitempty"` // Auto set upstream
 

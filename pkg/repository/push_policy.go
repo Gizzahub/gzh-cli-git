@@ -46,6 +46,22 @@ type PushPolicy struct {
 
 	// ForceMode decides which force pushes are allowed to every other branch.
 	ForceMode ForceMode `yaml:"forceMode,omitempty"`
+
+	// ForeignWork decides what happens to a force push that would discard
+	// commits signed by another machine or agent. Unset means block.
+	//
+	// Unlike the rules above it cannot be decided from intent alone: it needs
+	// to read the commits the remote has and this machine does not.
+	ForeignWork ForeignWorkMode `yaml:"foreignWork,omitempty"`
+}
+
+// foreignWorkMode returns the configured mode, treating an unset value — and a
+// nil policy — as the default rather than as "allow".
+func (p *PushPolicy) foreignWorkMode() ForeignWorkMode {
+	if p == nil || p.ForeignWork == "" {
+		return ForeignWorkBlock
+	}
+	return p.ForeignWork
 }
 
 // PushRule names the rule a push ran into.
@@ -58,6 +74,9 @@ const (
 	PushRuleRawForce PushRule = "raw-force"
 	// PushRuleForceDenied marks any force push under deny mode.
 	PushRuleForceDenied PushRule = "force-denied"
+	// PushRuleForeignWork marks a force push that would discard commits
+	// signed by another machine or agent.
+	PushRuleForeignWork PushRule = "foreign-work"
 )
 
 // PushDenial is a policy's refusal of one repository's push.

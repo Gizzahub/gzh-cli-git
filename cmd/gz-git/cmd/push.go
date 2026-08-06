@@ -21,6 +21,7 @@ var (
 	pushAllRemotes  bool
 	pushIgnoreDirty bool
 	pushForceMode   string
+	pushForeignWork string
 )
 
 // pushCmd represents the push command for multi-repository operations
@@ -66,6 +67,7 @@ func init() {
 	pushCmd.Flags().BoolVar(&pushAllRemotes, "all-remotes", false, "push to all configured remotes")
 	pushCmd.Flags().BoolVar(&pushIgnoreDirty, "ignore-dirty", false, "skip dirty status check and warning (useful for CI/CD)")
 	addForceModeFlag(pushCmd, &pushForceMode)
+	addForeignWorkFlag(pushCmd, &pushForeignWork)
 }
 
 func runPush(cmd *cobra.Command, args []string) error {
@@ -109,7 +111,10 @@ func runPush(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	policy, err := resolvePushPolicy(effective, pushForceMode)
+	guards, err := resolvePushGuards(effective, pushOverrides{
+		forceMode:   pushForceMode,
+		foreignWork: pushForeignWork,
+	})
 	if err != nil {
 		return err
 	}
@@ -134,7 +139,8 @@ func runPush(cmd *cobra.Command, args []string) error {
 		Remotes:           pushRemotes,
 		AllRemotes:        pushAllRemotes,
 		IgnoreDirty:       pushIgnoreDirty,
-		Policy:            policy,
+		Policy:            guards.policy,
+		Identity:          guards.identity,
 		IncludeSubmodules: pushFlags.IncludeSubmodules,
 		IncludePattern:    pushFlags.Include,
 		ExcludePattern:    pushFlags.Exclude,

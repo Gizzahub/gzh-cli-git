@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `push.policy.foreignWork` refuses a force push that would discard remote commits whose
+  identity trailers name a different device or agent, listing the commits at stake.
+  `--force-with-lease` does not cover this: a lease compares the remote against the ref
+  this machine last fetched, so it protects only until the next fetch — and a
+  multi-device workflow fetches on arrival, after which the lease is satisfied and the
+  other machine's work disappears silently. The check runs under `--dry-run` too, where
+  finding out first is the point. `--foreign-work allow` overrides it.
+  - It refuses only on positive evidence of another writer. An unsigned commit is
+    unattributed, not attributed elsewhere, so rewriting your own hand-made commits and
+    force pushing still works. The cost is that only commits made by `handoff end` can
+    be attributed at all, and a machine that names no identity skips the check entirely.
+- `gz-git handoff start` names the branches whose remote advanced under another device or
+  agent while this machine was away. It reports rather than blocks — a rebase replays
+  over those commits and loses nothing. It is the signal that a branch has two writers
+  and should be split, which is the moment to do it rather than after a collision.
 - `identity` config names the machine and the agent behind an automated commit, and
   `handoff end` writes them as `Device:` and `Agent:` git trailers on the checkpoint.
   A checkpoint is made with nobody watching, and git records only the author — the same

@@ -330,8 +330,8 @@ func TestCleanupService_Execute_EmptyReport(t *testing.T) {
 		t.Errorf("Execute() with empty report error = %v, want nil", err)
 	}
 
-	if len(result.Deleted) != 0 || len(result.Failed) != 0 {
-		t.Errorf("Execute() on empty report = %+v, want nothing deleted and nothing failed", result)
+	if len(result.Deleted) != 0 || len(result.Failed) != 0 || len(result.Skipped) != 0 {
+		t.Errorf("Execute() on empty report = %+v, want nothing deleted/failed/skipped", result)
 	}
 }
 
@@ -352,10 +352,10 @@ func TestCleanupService_Execute_SkipsProtected(t *testing.T) {
 
 	// DryRun deletes nothing, so this asserts the shape of a preview run rather
 	// than the outcome of a deletion: no branch is reported as removed and none
-	// as failed, even though /tmp/test is not a repository.
+	// as failed, even though /tmp/test is not a repository. Protected names are
+	// still screened and surface in Skipped (including with empty Exclude).
 	result, err := svc.Execute(ctx, repo, report, ExecuteOptions{
-		DryRun:  true,
-		Exclude: []string{"main", "master"},
+		DryRun: true,
 	})
 	if err != nil {
 		t.Fatalf("Execute() dry run error = %v, want nil", err)
@@ -363,6 +363,10 @@ func TestCleanupService_Execute_SkipsProtected(t *testing.T) {
 
 	if len(result.Deleted) != 0 || len(result.Failed) != 0 {
 		t.Errorf("Execute() dry run = %+v, want nothing deleted and nothing failed", result)
+	}
+
+	if len(result.Skipped) != 2 || result.Skipped[0] != "main" || result.Skipped[1] != "master" {
+		t.Errorf("Skipped = %v, want [main master]", result.Skipped)
 	}
 }
 

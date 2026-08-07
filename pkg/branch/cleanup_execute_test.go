@@ -13,6 +13,76 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
+// TestCleanupService_ExecuteSkipsProtectedEvenWhenExcludeEmpty pins the safety
+// net that must not depend on Analyze: a hand-built report that lists main under
+// Merged, with empty Exclude and Force+Confirm, must not delete main. Built-in
+// IsProtected is applied even when Exclude is empty; Skipped surfaces the name.
+//
+// Manager.Delete only refuses protected branches when Force is false, so Force
+// would otherwise delete main — Execute must screen first.
+func TestCleanupService_ExecuteSkipsProtectedEvenWhenExcludeEmpty(t *testing.T) {
+	repoPath := testutil.TempGitRepoWithCommit(t)
+	repo := &repository.Repository{Path: repoPath}
+	ctx := context.Background()
+
+	// Non-protected candidate that Force+Confirm is allowed to remove.
+	gitCommit(t, repoPath, "branch", "feature/safe-to-delete")
+	// Ensure main exists even when init.defaultBranch is master, then leave it
+	// so neither candidate is HEAD (git refuses to delete the current branch).
+	gitCommit(t, repoPath, "branch", "-f", "main")
+	gitCommit(t, repoPath, "checkout", "-b", "work")
+
+	report := &CleanupReport{
+		Merged: []*Branch{
+			{Name: "main"},
+			{Name: "feature/safe-to-delete"},
+		},
+	}
+
+	svc := NewCleanupService()
+
+	result, err := svc.Execute(ctx, repo, report, ExecuteOptions{
+		Force:   true,
+		Confirm: true,
+		// Exclude deliberately empty — built-in IsProtected must still apply.
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil", err)
+	}
+
+	if len(result.Deleted) != 1 || result.Deleted[0] != "feature/safe-to-delete" {
+		t.Errorf("Deleted = %v, want [feature/safe-to-delete]", result.Deleted)
+	}
+
+	if len(result.Skipped) != 1 || result.Skipped[0] != "main" {
+		t.Errorf("Skipped = %v, want [main]", result.Skipped)
+	}
+
+	if len(result.Failed) != 0 {
+		t.Errorf("Failed = %+v, want none", result.Failed)
+	}
+
+	mgr := NewManager()
+
+	exists, err := mgr.Exists(ctx, repo, "main")
+	if err != nil {
+		t.Fatalf("Exists(main) error = %v", err)
+	}
+
+	if !exists {
+		t.Error("main was deleted despite built-in protection with empty Exclude")
+	}
+
+	gone, err := mgr.Exists(ctx, repo, "feature/safe-to-delete")
+	if err != nil {
+		t.Fatalf("Exists(feature/safe-to-delete) error = %v", err)
+	}
+
+	if gone {
+		t.Error("feature/safe-to-delete should have been deleted")
+	}
+}
+
 // TestCleanupService_ExecuteSeparatesDeletedFromFailed builds the one case that
 // tells the two counts apart: a report of two branches where git deletes one and
 // refuses the other.

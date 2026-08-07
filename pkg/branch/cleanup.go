@@ -147,6 +147,11 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 // and unchanged. What it returns is the account of which ones succeeded, because
 // without it the caller has no way to tell a run that deleted everything from one
 // that deleted nothing.
+//
+// Analyze already routes protected branches into report.Protected, but Execute
+// must not rely on that: CleanupReport is a public type and callers may assemble
+// one by hand. Built-in IsProtected (main/master/…) and opts.Exclude are always
+// applied here, including when Exclude is empty and when DryRun is true.
 func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repository, report *CleanupReport, opts ExecuteOptions) (*ExecuteResult, error) {
 	if repo == nil {
 		return nil, fmt.Errorf("repository cannot be nil")
@@ -162,20 +167,23 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 	toDelete = append(toDelete, report.Stale...)
 	toDelete = append(toDelete, report.Orphaned...)
 
-	// Filter out excluded branches
-	if len(opts.Exclude) > 0 {
-		filtered := make([]*Branch, 0)
-		for _, branch := range toDelete {
-			if !c.isProtectedBranch(branch.Name, opts.Exclude) {
-				filtered = append(filtered, branch)
-			}
-		}
-		toDelete = filtered
-	}
-
 	result := &ExecuteResult{}
 
-	// Dry run - just return
+	// Always screen protected branches (built-in + Exclude patterns). Do not gate
+	// this on len(opts.Exclude): isProtectedBranch still enforces IsProtected when
+	// Exclude is empty.
+	filtered := make([]*Branch, 0, len(toDelete))
+	for _, branch := range toDelete {
+		if c.isProtectedBranch(branch.Name, opts.Exclude) {
+			result.Skipped = append(result.Skipped, branch.Name)
+			continue
+		}
+		filtered = append(filtered, branch)
+	}
+	toDelete = filtered
+
+	// Dry run: do not delete. Skipped already lists protected branches; non-protected
+	// candidates remain only in the input report (nothing was removed).
 	if opts.DryRun {
 		return result, nil
 	}

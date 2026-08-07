@@ -187,10 +187,11 @@ type ExecuteOptions struct {
 //
 // Execute deletes each branch independently and does not stop at the first
 // failure, so neither "it returned an error" nor "it returned nil" describes the
-// outcome. Deleted and Failed together do.
+// outcome. Deleted, Failed, and Skipped together do.
 type ExecuteResult struct {
 	Deleted []string        // Branches removed
 	Failed  []DeleteFailure // Branches that could not be removed, and why
+	Skipped []string        // Branches not attempted (protected / excluded)
 }
 
 // DeleteFailure records a branch that Execute could not delete.

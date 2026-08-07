@@ -1,6 +1,6 @@
 # ISSUE: `cleanup.Execute`가 `Exclude`가 비면 보호 브랜치 검사를 건너뛴다
 
-- status: todo
+- status: done
 - priority: P3
 - category: branch
 - created_at: 2026-08-06T14:45:00+09:00
@@ -73,10 +73,10 @@ func (c *cleanupService) isProtectedBranch(branch string, additionalPatterns []s
 
 ## Acceptance Criteria
 
-- [ ] `Execute(ctx, repo, &CleanupReport{Merged: []*Branch{{Name:"main"}}}, ExecuteOptions{Force:true, Confirm:true})`가 `main`을 지우지 않는다
-- [ ] 걸러진 브랜치가 반환값에 드러난다
-- [ ] 기존 3개 호출 경로의 동작 불변 (`Analyze` 보고서를 넘기면 결과가 같다)
-- [ ] `make quality` 통과
+- [x] `Execute(ctx, repo, &CleanupReport{Merged: []*Branch{{Name:"main"}}}, ExecuteOptions{Force:true, Confirm:true})`가 `main`을 지우지 않는다
+- [x] 걸러진 브랜치가 반환값에 드러난다
+- [x] 기존 3개 호출 경로의 동작 불변 (`Analyze` 보고서를 넘기면 결과가 같다)
+- [x] `make quality` 통과
 
 ## Decisions
 

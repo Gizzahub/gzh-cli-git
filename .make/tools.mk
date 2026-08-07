@@ -30,10 +30,22 @@ install-analysis-tools: ## install code analysis tools
 	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
 	@echo -e "$(GREEN)✅ All analysis tools installed!$(RESET)"
 
-install-golangci-lint: ## install golangci-lint v2
-	@echo -e "$(CYAN)Installing golangci-lint v2...$(RESET)"
-	@which golangci-lint > /dev/null || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v2.0.0
-	@echo -e "$(GREEN)✅ golangci-lint v2 installed!$(RESET)"
+# Pin to a v2 release. A v1 binary on PATH rejects this repo's version: "2"
+# config with "you are using a configuration file for golangci-lint v2 with
+# golangci-lint v1". Prefer mise-managed golangci-lint when present; only
+# install into GOPATH/bin when the active binary is missing or not v2.
+GOLANGCI_LINT_VERSION ?= v2.12.2
+
+install-golangci-lint: ## install golangci-lint v2 (skip when PATH already has v2)
+	@echo -e "$(CYAN)Ensuring golangci-lint $(GOLANGCI_LINT_VERSION)...$(RESET)"
+	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -qE 'version (v)?2\.'; then \
+		echo -e "$(GREEN)✅ golangci-lint v2 already on PATH: $$(command -v golangci-lint)$(RESET)"; \
+	else \
+		echo -e "$(YELLOW)Installing golangci-lint $(GOLANGCI_LINT_VERSION) into $$(go env GOPATH)/bin$(RESET)"; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); \
+		echo -e "$(GREEN)✅ golangci-lint $(GOLANGCI_LINT_VERSION) installed$(RESET)"; \
+		echo -e "$(YELLOW)If 'make lint' still fails with v1 config errors, remove leftover v1 binaries ahead of GOPATH/bin (e.g. ~/go/bin/golangci-lint) or put mise shims first in PATH.$(RESET)"; \
+	fi
 
 install-goreleaser: ## install goreleaser
 	@echo -e "$(CYAN)Installing goreleaser...$(RESET)"

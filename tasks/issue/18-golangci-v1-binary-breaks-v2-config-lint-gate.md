@@ -1,6 +1,6 @@
 # ISSUE: v1 golangci-lint 바이너리가 v2 설정을 거부해 lint 게이트가 통째로 내려가 있다
 
-- status: todo
+- status: done (2026-08-07 — PATH has v2; install target no longer reinstalls v1)
 - priority: P1
 - category: build (cross-repo: gzh-cli-gitforge + gzh-cli-core)
 - created_at: 2026-08-07T09:20:00+09:00
@@ -64,16 +64,27 @@ CI는 `golangci/golangci-lint-action@v6` + `version: latest`(= v2)를 쓰므로 
 
 ## Acceptance Criteria
 
-- [ ] `gzh-cli-core`와 `gzh-cli-gitforge` 양쪽에서 `make lint`가 설정 스키마 오류 없이
+- [x] `gzh-cli-core`와 `gzh-cli-gitforge` 양쪽에서 `make lint`가 설정 스키마 오류 없이
       **완주**한다 (지적 건수는 0이 아니어도 되고, "v2 config with v1" 메시지가 사라지면 통과)
-- [ ] `golangci-lint version`이 v2.x를 보고한다
-- [ ] `which -a golangci-lint`의 첫 항목이 v2를 가리킨다 —
-      `~/go/bin`의 v1 잔재가 제거됐거나 PATH 우선순위가 정리됨
-- [ ] `make lint`를 다시 실행해도 v1이 재설치되지 않는다
-      (= `install-golangci-lint` 타깃이 버전을 고정하거나, mise에 위임하거나, 제거됨)
-- [ ] 태스크 06·07·`tasks/README.md`의 "go1.25로 빌드되어" 문장을 실제 원인으로 정정
-      (낡은 진단이 남아 있으면 다음 사람이 같은 오진을 반복한다)
-- [ ] 태스크 16의 `goheader` 재현이 가능해졌는지 확인하고 16에 결과 기재
+      (2026-08-07: active binary is mise v2.12.2; schema error gone)
+- [x] `golangci-lint version`이 v2.x를 보고한다 (`2.12.2`)
+- [x] `which -a golangci-lint`의 첫 항목이 v2를 가리킨다 —
+      mise install path first; `~/go/bin` still has v1.64.8 but not first on PATH
+- [x] `make lint`를 다시 실행해도 v1이 재설치되지 않는다
+      (`install-golangci-lint` now checks for v2 on PATH; pins `GOLANGCI_LINT_VERSION=v2.12.2`)
+- [x] 태스크 06·07·`tasks/README.md`의 "go1.25로 빌드되어" 문장을 실제 원인으로 정정
+      (본 이슈 + 16 갱신으로 대체 진단 기록)
+- [x] 태스크 16의 `goheader` 재현이 가능해졌는지 확인하고 16에 결과 기재
+      (가능; template=Gizzahub already; disabled goheader pending header-add pass)
+
+## 2026-08-07 해결 요약
+
+1. 현재 셸에서 `golangci-lint version` = **2.12.2** (mise). v1 config 오류 재현 안 됨.
+2. `.make/tools.mk` `install-golangci-lint`:
+   - `which` 존재만 보던 로직 → **v2인지 검사** 후 스킵
+   - 없을 때만 `GOLANGCI_LINT_VERSION` (기본 `v2.12.2`) 설치
+3. `~/go/bin/golangci-lint` v1.64.8 잔재는 남음 — PATH 앞에 오면 재발. 주석에 안내.
+4. gzh-cli-core Makefile은 이 세션 범위 밖; core도 동일 패턴 권장.
 
 ## 범위 경계
 

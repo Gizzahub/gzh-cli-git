@@ -311,7 +311,10 @@ pre-commit-update: ## update pre-commit hooks to latest versions
 
 .PHONY: quality quality-fix lint-all
 
-quality: fmt security ## run comprehensive quality checks (without lint-check for now)
+# lint-check is intentionally omitted from the default quality gate: full-repo
+# golangci-lint is slow for pre-commit, and CLAUDE.md's "make quality" path is
+# the everyday gate. Use quality-strict (or make lint) when lint is required.
+quality: fmt security ## run comprehensive quality checks (without lint-check)
 	@echo -e "$(GREEN)✅ All quality checks passed!$(RESET)"
 
 quality-strict: fmt lint-check security ## run strict quality checks with linting

@@ -23,8 +23,13 @@ tasks/
 
 | # | 태스크 | 우선순위 | 요지 |
 |---|--------|---------|------|
-| 18 | [golangci-v1-binary-breaks-v2-config-lint-gate](issue/18-golangci-v1-binary-breaks-v2-config-lint-gate.md) | **P1** | v1 golangci-lint 바이너리가 v2 설정을 거부해 lint 게이트가 통째로 내려가 있음 |
-| 08 | [conflict-guard-fail-open-on-git-failure](issue/08-conflict-guard-fail-open-on-git-failure.md) | P2 | **Scope 1·2·3·4 해소**. 잔여: `pkg/repository` 전역의 `executor.Run`+`ExitCode`-only 지점 선별. 10의 Finding 2·3이 같은 계열 |
-| 11 | [status-consumer-and-fixture-test-gaps](issue/11-status-consumer-and-fixture-test-gaps.md) | P2 | status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킴 |
-| 16 | [goheader-rule-rejects-every-file](issue/16-goheader-rule-rejects-every-file.md) | P3 | `.golangci.yml`이 `Archmagece`를 기대하는데 저장소 198개 파일 중 0개가 일치. `max-same-issues: 5`가 전수 위반을 5건으로 보여 lint 건수가 실행마다 흔들린다. **미결정**(저작권자 표기) |
-| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | `gzh-cli-core` 쪽 **수정 완료**(정렬 방출 + 100회 결정성 테스트). 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 — CI는 `GOWORK: off`로 pinned core를 쓴다 |
+| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | **blocked**: core 정렬 수정 완료. 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 (`GOWORK: off` CI) |
+
+### Recently closed (2026-08-07 residual pass)
+
+| # | 태스크 | 결과 |
+|---|--------|------|
+| 08 | conflict-guard residual ExitCode audit | `status` → `runGit`; existence probes documented intentional |
+| 11 | status consumer + fixture gaps | ParseStatus C/unknown-worktree; switch/status fixtures; testutil fatals |
+| 16 | goheader | COMPANY=Gizzahub; linter disabled pending header-add |
+| 18 | golangci v1/v2 | PATH has v2.12.2; install target skips when v2 present |

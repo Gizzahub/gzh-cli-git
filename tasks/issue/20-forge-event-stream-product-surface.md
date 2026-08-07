@@ -59,3 +59,11 @@ any remote event-stream product work continues here.
 - gzh-cli issue 26 resolution notes
 - gzh-cli `cmd/git/event` (memory storage — different layer)
 - This repo: workspace/forge commands under `cmd/gz-git`
+
+
+## Status note (2026-08-07 wrap-up)
+
+gzh-cli issue 26 is **done** for CLI mutation surface. This file is the sole
+home for future **remote event-stream product** work on **gz-git**.
+
+No implementation scheduled until product prioritizes command shape + persistence.

@@ -14,6 +14,31 @@ func TestNewProvider_RequiresBaseURL(t *testing.T) {
 	}
 }
 
+// TestNewProvider_NoNetworkOnConstruct proves NewProvider succeeds with a fake
+// base URL and no server. Regression for constructor version probing that used
+// to dial /api/v1/version and fail offline unit tests.
+func TestNewProvider_NoNetworkOnConstruct(t *testing.T) {
+	p, err := NewProvider("test-token", "https://gitea.example.invalid")
+	if err != nil {
+		t.Fatalf("NewProvider with unreachable host: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected non-nil provider")
+	}
+	if p.Name() != "gitea" {
+		t.Errorf("Name() = %q, want gitea", p.Name())
+	}
+	if p.baseURL != "https://gitea.example.invalid" {
+		t.Errorf("baseURL = %q, want fake URL", p.baseURL)
+	}
+	if p.client == nil {
+		t.Error("client should be constructed offline")
+	}
+	if p.token != "test-token" {
+		t.Errorf("token = %q, want test-token", p.token)
+	}
+}
+
 func TestProviderOptions(t *testing.T) {
 	opts := ProviderOptions{
 		Token:   "test-token",

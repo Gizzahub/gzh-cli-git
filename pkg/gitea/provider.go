@@ -35,6 +35,12 @@ func NewProvider(token, baseURL string) (*Provider, error) {
 }
 
 // NewProviderWithOptions creates a new Gitea provider with custom options.
+//
+// Construction is offline: the Gitea SDK's NewClient defaults to probing
+// /api/v1/version, which would make object creation require a live server.
+// github/gitlab NewProvider do not network; SetGiteaVersion("") matches that
+// contract by skipping the constructor version check. Feature gates that need
+// a real version can still be enforced later via a dedicated Ping/Validate.
 func NewProviderWithOptions(opts ProviderOptions) (*Provider, error) {
 	if opts.BaseURL == "" {
 		return nil, fmt.Errorf("baseURL is required for Gitea provider")
@@ -54,15 +60,15 @@ func NewProviderWithOptions(opts ProviderOptions) (*Provider, error) {
 }
 
 func (p *Provider) initClient() error {
-	var client *gitea.Client
-	var err error
-
+	// SetGiteaVersion("") sets ignoreVersion so NewClient does not call the
+	// network. Without it, NewClient always hits /api/v1/version and fails for
+	// unreachable hosts (dry-run, offline unit tests, bad DNS).
+	opts := []gitea.ClientOption{gitea.SetGiteaVersion("")}
 	if p.token != "" {
-		client, err = gitea.NewClient(p.baseURL, gitea.SetToken(p.token))
-	} else {
-		client, err = gitea.NewClient(p.baseURL)
+		opts = append(opts, gitea.SetToken(p.token))
 	}
 
+	client, err := gitea.NewClient(p.baseURL, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create Gitea client: %w", err)
 	}

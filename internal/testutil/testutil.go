@@ -17,30 +17,35 @@ func TempGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Initialize git repo.
-	cmd := exec.Command("git", "init") //nolint:noctx // test helper; no context.Context available in *testing.T API
+	// Initialize git repo with an explicit default branch so callers that
+	// hard-code branch names are not coupled to the developer's global
+	// init.defaultBranch.
+	cmd := exec.Command("git", "-c", "init.defaultBranch=main", "init") //nolint:noctx // test helper; no context.Context available in *testing.T API
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("failed to init git repo: %v", err)
 	}
 
-	// Configure git user for commits.
-	cmd = exec.Command("git", "config", "user.email", "test@test.com") //nolint:noctx // test helper; no context.Context available
-	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		t.Logf("git config user.email warning (non-fatal in test setup): %v", err)
-	}
-
-	cmd = exec.Command("git", "config", "user.name", "Test") //nolint:noctx // test helper; no context.Context available
-	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		t.Logf("git config user.name warning (non-fatal in test setup): %v", err)
+	// Local config only — never depend on the developer's global git settings.
+	// commit.gpgsign=false avoids silent commit failure when the user has signing on.
+	for _, args := range [][]string{
+		{"config", "user.email", "test@test.com"},
+		{"config", "user.name", "Test"},
+		{"config", "commit.gpgsign", "false"},
+	} {
+		cmd = exec.Command("git", args...) //nolint:noctx // test helper; no context.Context available
+		cmd.Dir = dir
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("failed to config git %v: %v", args, err)
+		}
 	}
 
 	return dir
 }
 
 // TempGitRepoWithCommit creates a temp git repo with an initial commit.
+// Any setup failure is fatal: a helper named ...WithCommit must not hand back
+// a HEAD-less repository and let the test exercise a different state.
 func TempGitRepoWithCommit(t *testing.T) string {
 	t.Helper()
 	dir := TempGitRepo(t)
@@ -54,13 +59,13 @@ func TempGitRepoWithCommit(t *testing.T) string {
 	cmd := exec.Command("git", "add", ".") //nolint:noctx // test helper; no context.Context available
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
-		t.Logf("git add warning (non-fatal in test setup): %v", err)
+		t.Fatalf("failed to git add: %v", err)
 	}
 
 	cmd = exec.Command("git", "commit", "-m", "Initial commit") //nolint:noctx // test helper; no context.Context available
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
-		t.Logf("git commit warning (non-fatal in test setup): %v", err)
+		t.Fatalf("failed to create initial commit: %v", err)
 	}
 
 	return dir

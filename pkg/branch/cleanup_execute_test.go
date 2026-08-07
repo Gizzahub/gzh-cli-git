@@ -27,10 +27,11 @@ func TestCleanupService_ExecuteSkipsProtectedEvenWhenExcludeEmpty(t *testing.T) 
 
 	// Non-protected candidate that Force+Confirm is allowed to remove.
 	gitCommit(t, repoPath, "branch", "feature/safe-to-delete")
-	// Ensure main exists even when init.defaultBranch is master, then leave it
-	// so neither candidate is HEAD (git refuses to delete the current branch).
-	gitCommit(t, repoPath, "branch", "-f", "main")
+	// Leave the default branch so neither candidate is HEAD (git refuses to
+	// delete the current branch). Fixtures now default to main; older master
+	// defaults still need an explicit main ref for the protection name.
 	gitCommit(t, repoPath, "checkout", "-b", "work")
+	ensureBranch(t, repoPath, "main")
 
 	report := &CleanupReport{
 		Merged: []*Branch{

@@ -84,12 +84,15 @@ func applyStatusCode(status *Status, rec porcelain.Record) error {
 	index, worktree := rune(rec.Code[0]), rune(rec.Code[1])
 
 	switch index {
-	case 'M', 'A', 'C', 'T':
+	case 'M', 'A', 'T':
 		status.StagedFiles = append(status.StagedFiles, rec.Path)
 	case 'D':
 		status.StagedFiles = append(status.StagedFiles, rec.Path)
 		status.DeletedFiles = append(status.DeletedFiles, rec.Path)
-	case 'R':
+	case 'R', 'C':
+		// Index-side rename or copy: both ship a source path in the next -z
+		// record (already paired into rec.OldPath). Copies used to land only in
+		// StagedFiles and drop OldPath, so RenamedFiles could not recover them.
 		status.StagedFiles = append(status.StagedFiles, rec.Path)
 		status.RenamedFiles = append(status.RenamedFiles, RenamedFile{
 			OldPath: rec.OldPath,

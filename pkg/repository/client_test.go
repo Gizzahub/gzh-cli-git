@@ -567,9 +567,61 @@ func TestParseStatus(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "unknown status code",
+			name:    "unknown index status code",
 			output:  porcelainZ("X  weird.txt"),
 			wantErr: true,
+		},
+		{
+			// Worktree default branch (applyStatusCode second switch). Index-side
+			// "X " already covers the first switch; without this case a broken
+			// worktree letter would pass silently if the default only lived on X.
+			name:    "unknown worktree status code",
+			output:  porcelainZ(" X weird.txt"),
+			wantErr: true,
+		},
+		{
+			// Index-side copy: -z pairs the source into OldPath. Must land in
+			// RenamedFiles, not only StagedFiles — otherwise callers lose the
+			// origin path that distinguishes a copy from a plain add.
+			name:   "copied file",
+			output: porcelainZ("C  new-copy.txt", "original.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{},
+				StagedFiles:    []string{"new-copy.txt"},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles: []RenamedFile{
+					{OldPath: "original.txt", NewPath: "new-copy.txt"},
+				},
+
+				StagedCount:         1,
+				UnstagedCount:       0,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
+		},
+		{
+			// Worktree-side copy (rare but legal): same pairing contract as " R".
+			name:   "worktree-side copy pairs its source",
+			output: porcelainZ(" C new-copy.txt", "original.txt"),
+			want: &Status{
+				IsClean:        false,
+				ModifiedFiles:  []string{"new-copy.txt"},
+				StagedFiles:    []string{},
+				UntrackedFiles: []string{},
+				ConflictFiles:  []string{},
+				DeletedFiles:   []string{},
+				RenamedFiles: []RenamedFile{
+					{OldPath: "original.txt", NewPath: "new-copy.txt"},
+				},
+
+				StagedCount:         0,
+				UnstagedCount:       1,
+				TrackedChangedCount: 1,
+			},
+			wantErr: false,
 		},
 		{
 			// The trailing NUL every payload ends with produces one empty split

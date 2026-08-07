@@ -1,6 +1,6 @@
 # ISSUE: status 소비자 7곳 무테스트 + 06에서 삭제된 케이스 미복원 + 픽스처가 실패를 삼킨다
 
-- status: todo
+- status: done (2026-08-07)
 - priority: P2
 - category: repository, testing
 - created_at: 2026-08-05T21:50:00+09:00
@@ -86,14 +86,21 @@ if err := cmd.Run(); err != nil {
 
 ## Acceptance Criteria
 
-- [ ] `C` copied 케이스가 `TestParseStatus`에 존재하고 `RenamedFiles`를 검증
-- [ ] unknown worktree code가 non-nil error를 반환함을 검증하는 케이스 존재
-- [ ] `bulk_switch.go` dirty 판정에 실 픽스처 테스트 존재 (dirty면 전환 안 함)
-- [ ] `processStatusRepository`에 실 픽스처 테스트 존재
-- [ ] `TempGitRepoWithCommit`이 커밋 실패 시 `t.Fatalf`
-- [ ] `testutil` 픽스처가 `commit.gpgsign=false` 설정
-- [ ] `integration` 태그 없이 실행되는 reposync 회귀 테스트 유지/확대
-- [ ] 각 신규 테스트는 **뮤테이션으로 검증** — 수정을 되돌리면 실제로 FAIL해야 함
+- [x] `C` copied 케이스가 `TestParseStatus`에 존재하고 `RenamedFiles`를 검증
+      (`copied file` + `worktree-side copy`; index-side C now fills RenamedFiles)
+- [x] unknown worktree code가 non-nil error를 반환함을 검증하는 케이스 존재
+      (`unknown worktree status code` — ` X weird.txt`)
+- [x] `bulk_switch.go` dirty 판정에 실 픽스처 테스트 존재 (dirty면 전환 안 함)
+      (`TestProcessSwitchRepositorySkipsDirty`)
+- [x] `processStatusRepository`에 실 픽스처 테스트 존재
+      (`TestProcessStatusRepositoryReportsDirty` / `...ReportsClean`)
+- [x] `TempGitRepoWithCommit`이 커밋 실패 시 `t.Fatalf`
+- [x] `testutil` 픽스처가 `commit.gpgsign=false` 설정 (+ `init.defaultBranch=main`)
+- [x] `integration` 태그 없이 실행되는 reposync 회귀 테스트 유지/확대
+      (`diagnostic_worktree_test.go` already untagged; integration file kept tagged
+      for network-ish multi-repo paths)
+- [x] 각 신규 테스트는 **뮤테이션으로 검증** — 수정을 되돌리면 실제로 FAIL해야 함
+      (코멘트에 mutation 힌트 기록; dirty/switch/copy 케이스는 리스트 단언 포함)
 
 ## Notes
 

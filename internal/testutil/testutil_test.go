@@ -43,7 +43,7 @@ func TestTempGitRepoWithCommit(t *testing.T) {
 		t.Error(".git directory should exist")
 	}
 
-	// Check commit exists.
+	// Check commit exists — helper must not swallow commit failures.
 	cmd := exec.Command("git", "log", "--oneline", "-1") //nolint:noctx // test verification helper; no context.Context available
 	cmd.Dir = dir
 	output, err := cmd.Output()
@@ -52,6 +52,18 @@ func TestTempGitRepoWithCommit(t *testing.T) {
 	}
 	if len(output) == 0 {
 		t.Error("should have at least one commit")
+	}
+
+	// Local commit.gpgsign must be off so developer global signing cannot
+	// turn TempGitRepoWithCommit into a silent HEAD-less fixture.
+	cmd = exec.Command("git", "config", "--get", "commit.gpgsign") //nolint:noctx // test verification helper
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("commit.gpgsign should be set locally: %v", err)
+	}
+	if string(out) != "false\n" {
+		t.Errorf("commit.gpgsign = %q, want false", string(out))
 	}
 }
 

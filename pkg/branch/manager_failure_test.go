@@ -37,6 +37,19 @@ func gitCommit(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// ensureBranch creates refs/heads/<name> at HEAD when missing. No-op when the
+// branch already exists (including when it was the former default branch).
+func ensureBranch(t *testing.T, dir, name string) {
+	t.Helper()
+
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/"+name) //nolint:noctx // test helper
+	cmd.Dir = dir
+	if cmd.Run() == nil {
+		return
+	}
+	gitCommit(t, dir, "branch", name)
+}
+
 // headOf returns the branch name HEAD points at.
 func headOf(t *testing.T, dir string) string {
 	t.Helper()

@@ -261,8 +261,9 @@ func (c *client) processTagRepository(ctx context.Context, rootDir, repoPath str
 		result.Branch = info.Branch
 	}
 
-	// Get tag count and latest tag in a single sorted call; executor error treated as no tags
-	tagResult, _ := c.executor.Run(ctx, repoPath, "tag", "-l", "--sort=-v:refname") //nolint:errcheck // ExitCode check below handles both error and non-zero exit
+	// Display metadata only: exit≠0 → report zero tags. Not a guard path.
+	//nolint:errcheck // intentional: empty/absent is a valid display answer
+	tagResult, _ := c.executor.Run(ctx, repoPath, "tag", "-l", "--sort=-v:refname")
 	if tagResult.ExitCode == 0 {
 		tagOutput := strings.TrimSpace(tagResult.Stdout)
 		if tagOutput != "" {
@@ -296,8 +297,10 @@ func (c *client) processTagCreate(ctx context.Context, repoPath string, opts Bul
 		return result
 	}
 
-	// Check if tag already exists; executor error treated as not existing (ExitCode != 0)
-	checkResult, _ := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", "refs/tags/"+opts.TagName) //nolint:errcheck // ExitCode check below handles both error and non-zero exit
+	// Existence probe: rev-parse --verify exits ≠0 when the ref is absent.
+	// That is a normal answer ("does not exist"), not "unreadable".
+	//nolint:errcheck // intentional: exit≠0 means tag missing
+	checkResult, _ := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", "refs/tags/"+opts.TagName)
 	if checkResult.ExitCode == 0 && !opts.Force {
 		result.Status = StatusTagExists
 		result.Message = fmt.Sprintf("Tag %s already exists", opts.TagName)

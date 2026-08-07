@@ -242,8 +242,9 @@ func (c *client) processStashRepository(ctx context.Context, rootDir, repoPath s
 		result.Branch = info.Branch
 	}
 
-	// Get current stash count; executor error is treated as empty list (ExitCode != 0)
-	stashCountResult, _ := c.executor.Run(ctx, repoPath, "stash", "list") //nolint:errcheck // ExitCode check below handles both error and non-zero exit
+	// Display metadata only: exit≠0 → report zero stashes. Not a mutation guard.
+	//nolint:errcheck // intentional: empty list is a valid display answer
+	stashCountResult, _ := c.executor.Run(ctx, repoPath, "stash", "list")
 	if stashCountResult.ExitCode == 0 {
 		lines := strings.Split(strings.TrimSpace(stashCountResult.Stdout), "\n")
 		if lines[0] != "" {
@@ -271,9 +272,17 @@ func (c *client) processStashRepository(ctx context.Context, rootDir, repoPath s
 
 // processStashSave handles stash save operation.
 func (c *client) processStashSave(ctx context.Context, repoPath string, opts BulkStashOptions, result RepositoryStashResult, logger Logger) RepositoryStashResult {
-	// Check if repository has changes; executor error treated as dirty (ExitCode != 0)
-	statusResult, _ := c.executor.Run(ctx, repoPath, "status", "--porcelain") //nolint:errcheck // ExitCode check below handles both error and non-zero exit
-	if statusResult.ExitCode == 0 && strings.TrimSpace(statusResult.Stdout) == "" {
+	// status exit≠0 means unreadable, not "has changes". The previous ExitCode-only
+	// check fell through to stash on a broken index — stash then also failed, with
+	// a worse message. Fail closed so the caller sees the status error.
+	statusOut, err := c.runGit(ctx, repoPath, "status", "--porcelain")
+	if err != nil {
+		result.Status = StatusError
+		result.Message = "Failed to get repository status"
+		result.Error = err
+		return result
+	}
+	if strings.TrimSpace(statusOut) == "" {
 		result.Status = StatusNoChanges
 		result.Message = "No changes to stash"
 		return result

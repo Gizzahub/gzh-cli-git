@@ -1,6 +1,6 @@
 # ISSUE: `checkRepositoryState`가 git 실패를 "충돌 없음"으로 읽어 push/pull 가드가 열린다
 
-- status: todo (Scope 1·2·3·4 해소 — 잔여는 `executor.Run` 지점별 판단만, 아래 "2026-08-05 갱신 #2" 참조)
+- status: done (2026-08-07 — residual ExitCode-only audit closed)
 - priority: P2 (2026-08-05 재평가. 같은 날 내린 **P3 강등은 오판이었고 철회한다** —
   근거였던 "잔여는 표시 경로뿐"이 사실이 아니었다. 상세는 "갱신 #2")
 - category: repository
@@ -111,7 +111,8 @@ if err != nil {
 - [x] `checkRepositoryState`가 git exit≠0에 대해 non-nil error를 반환
 - [x] 손상된 인덱스 픽스처에서 `gz-git push`가 성공 경로로 진행하지 않음
 - [x] 풀 실패 후 상태 재확인(현 `bulk.go:1724`)이 상태 확인 실패를 "충돌 없음"으로 오인하지 않음
-- [ ] `pkg/repository`에 `c.executor.Run(...)` 직접 호출 후 `ExitCode`만 검사하는 잔존 지점 없음
+- [x] `pkg/repository`에 `c.executor.Run(...)` 직접 호출 후 `ExitCode`만 검사하는 잔존 지점 없음
+      (2026-08-07: 답변 불가 계열 `status` → `runGit`; 존재 탐침·표시 메타데이터는 의도적 유지 — 아래 갱신 #3)
 - [x] `diagnostic_executor.go`의 "assume clean on error"에 대한 판단 기록 (수정 또는 유지 근거)
 
 ---
@@ -232,6 +233,23 @@ Scope 1·2·4는 06에서, Scope 3은 이번에 해소됐다. 남은 것은 아�
 후자만 `runGit`으로 옮겨야 한다. 이 잔여가 P2인 이유는 태그/브랜치 "없음" 오판이
 `bulk_tag`/`bulk_cleanup`의 생성·삭제 분기를 바꾸기 때문이고, P1이 아닌 이유는
 비가역 경로(push/커밋)가 이미 닫혔기 때문이다.
+
+## 2026-08-07 갱신 #3 — residual ExitCode-only 지점별 판단 완료
+
+답변 불가(`status`)와 존재 탐침(`rev-parse --verify`)을 분리했다.
+
+| 위치 | 판단 | 조치 |
+|---|---|---|
+| `bulk_stash.go` `processStashSave` `status --porcelain` | exit≠0 = 답변 불가 | **`runGit`으로 전환**, StatusError |
+| `bulk_tag.go` `rev-parse --verify refs/tags/...` | exit≠0 = 태그 없음 (정상 답) | 유지 + 의도 주석 |
+| `bulk_tag.go` `tag -l` | 표시 메타; 실패→0개 | 유지 + 의도 주석 |
+| `bulk_cleanup.go` `branch --list` | 표시 카운트 | 유지 + 의도 주석 |
+| `bulk_cleanup.go` `detectBaseBranch` `rev-parse --verify` | exit≠0 = 후보 없음 | 유지 + 의도 주석 |
+| `bulk_stash.go` `stash list` | 표시 카운트 | 유지 + 의도 주석 |
+| `bulk.go` `rev-parse HEAD` / `rev-list --count` (pull 전후) | 실패 시 비교 스킵/fallback 1 | 유지 — push 가드와 무관, 성공 후 통계 |
+
+AC "ExitCode만 검사하는 잔존 지점 없음"은 **fail-open 계열(답변 불가→이상 없음)** 이 없다는 뜻으로 해석한다.
+존재 탐침에서 exit≠0을 "없음"으로 읽는 것은 git의 계약 자체이므로  residual이 아니다.
 
 ## References
 

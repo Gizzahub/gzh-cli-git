@@ -329,8 +329,9 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		}
 	}
 
-	// Count total analyzed branches
-	allBranchesResult, _ := c.executor.Run(ctx, repoPath, "branch", "--list") //nolint:errcheck // ExitCode check below handles both error and non-zero exit
+	// Display count only: exit≠0 → leave TotalAnalyzed zero. Not a delete guard.
+	//nolint:errcheck // intentional: empty list is a valid display answer
+	allBranchesResult, _ := c.executor.Run(ctx, repoPath, "branch", "--list")
 	if allBranchesResult.ExitCode == 0 {
 		lines := strings.Split(strings.TrimSpace(allBranchesResult.Stdout), "\n")
 		result.TotalAnalyzed = len(lines)
@@ -406,7 +407,9 @@ func containsBranch(list []branchInfo, name string) bool {
 func (c *client) detectBaseBranch(ctx context.Context, repoPath string) string {
 	candidates := []string{"main", "master", "develop", "development"}
 	for _, branch := range candidates {
-		result, _ := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", branch) //nolint:errcheck // ExitCode check below handles both error and non-zero exit
+		// Existence probe: exit≠0 means this candidate name is not a branch.
+		//nolint:errcheck // intentional: exit≠0 means branch missing
+		result, _ := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", branch)
 		if result.ExitCode == 0 {
 			return branch
 		}

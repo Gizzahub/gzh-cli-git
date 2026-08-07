@@ -34,3 +34,10 @@ tasks/
 | 11 | status consumer + fixture gaps | ParseStatus C/unknown-worktree; switch/status fixtures; testutil fatals |
 | 16 | goheader | COMPANY=Gizzahub; linter disabled pending header-add |
 | 18 | golangci v1/v2 | PATH has v2.12.2; install target skips when v2 present |
+
+### Follow-up (2026-08-07)
+
+| # | Task | Priority | Notes |
+|---|------|----------|-------|
+| 20 | [forge-event-stream-product-surface](issue/20-forge-event-stream-product-surface.md) | P3 | Transferred residual from gzh-cli issue 26 (remote ListEvents) — product surface on gz-git when prioritized |
+

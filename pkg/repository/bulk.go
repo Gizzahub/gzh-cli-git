@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 )
 
 // nonInteractiveEnv contains environment variables to disable git credential prompts.
@@ -353,6 +355,16 @@ type BulkPushOptions struct {
 	// IgnoreDirty skips dirty status check after push (useful for CI/CD)
 	IgnoreDirty bool
 
+	// Policy restricts which branches may be pushed to and how. A nil policy
+	// permits every push. Repositories it refuses are reported as StatusBlocked
+	// and the rest of the batch still runs.
+	Policy *PushPolicy
+
+	// Identity names this machine and agent, so a force push can tell its own
+	// commits from another writer's. An unnamed identity disables that check:
+	// a machine that cannot say who it is cannot say who anyone else is.
+	Identity identity.Identity
+
 	// IncludeSubmodules includes git submodules in the scan (default: false)
 	// When false, only scans for independent nested repositories
 	IncludeSubmodules bool
@@ -534,6 +546,11 @@ type RepositoryStatusResult struct {
 	LastCommitAuthor string
 	LocalBranches    []string
 	StashCount       int
+
+	// OldestStash is when the oldest stash entry was created, zero when there
+	// is none. A stash never leaves this machine, so its age separates work in
+	// progress from work that was forgotten here.
+	OldestStash time.Time
 
 	// CommitsBehind is how many commits behind remote
 	CommitsBehind int
@@ -2084,11 +2101,41 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 		}
 	}
 
+	// Apply the push policy before anything touches the network. A refusal is
+	// about intent, so it does not depend on the remote being reachable.
+	if denial := opts.Policy.Check(PushIntent{
+		Branch:  info.Branch,
+		Refspec: opts.Refspec,
+		Force:   opts.Force,
+	}); denial != nil {
+		result.Status = StatusBlocked
+		result.Message = denial.Detail
+		result.Error = fmt.Errorf("push blocked by policy (%s): %s", denial.Rule, denial.Detail)
+		result.Duration = time.Since(startTime)
+		logger.Warn("push blocked by policy", "path", result.RelativePath, "branch", denial.Branch, "rule", string(denial.Rule))
+		return result
+	}
+
 	// Check if repository has remote
 	if info.RemoteURL == "" {
 		result.Status = StatusNoRemote
 		result.Message = "No remote configured"
 		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	// A force push is the one operation that destroys work already on the
+	// remote, so check whose it is before running it — including under
+	// --dry-run, where finding this out first is the whole point.
+	if foreign, ferr := c.checkForeignWork(ctx, repoPath, info, opts); ferr != nil {
+		logger.Warn("could not check for foreign work", "path", result.RelativePath, "error", ferr)
+	} else if len(foreign) > 0 {
+		result.Status = StatusBlocked
+		result.Message = describeForeignWork(foreign)
+		result.Error = fmt.Errorf("push blocked by policy (%s): %s", PushRuleForeignWork, result.Message)
+		result.Duration = time.Since(startTime)
+		logger.Warn("push would discard another writer's commits",
+			"path", result.RelativePath, "commits", len(foreign))
 		return result
 	}
 
@@ -2205,7 +2252,8 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 
 	// Calculate commits to be pushed if using refspec
 	var actualCommitsToPush int
-	if opts.Refspec != "" {
+	switch {
+	case opts.Refspec != "":
 		// Parse refspec - already validated and checked earlier, so this should not fail
 		parsed, _ := ValidateRefspec(opts.Refspec) //nolint:errcheck // refspec already validated upstream; error here is impossible in practice
 
@@ -2242,7 +2290,15 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 				}
 			}
 		}
-	} else {
+	case setUpstreamMissing:
+		// A branch with no upstream reports AheadBy 0 because there is nothing
+		// to compare against. The push creates the remote branch, so every
+		// commit on it is new there — the same count the refspec path above
+		// uses when the destination does not exist yet. Without this a new
+		// branch pushes successfully and then reports "Already up to date".
+		actualCommitsToPush = c.countBranchCommits(ctx, repoPath, info.Branch)
+
+	default:
 		actualCommitsToPush = info.AheadBy
 	}
 
@@ -2359,6 +2415,26 @@ func (c *client) pushToRemote(ctx context.Context, repoPath, remote, branch stri
 	}
 
 	return nil
+}
+
+// countBranchCommits returns how many commits are reachable from branch, or 0
+// if the count cannot be taken. It is only used to describe a push, so an
+// unreadable count degrades the message rather than failing the operation.
+func (c *client) countBranchCommits(ctx context.Context, repoPath, branch string) int {
+	if branch == "" {
+		return 0
+	}
+
+	result, err := c.executor.Run(ctx, repoPath, "rev-list", "--count", branch)
+	if err != nil || result.ExitCode != 0 {
+		return 0
+	}
+
+	var count int
+	if n, parseErr := fmt.Sscanf(strings.TrimSpace(result.Stdout), "%d", &count); parseErr != nil || n != 1 {
+		return 0
+	}
+	return count
 }
 
 // calculatePushSummary creates a summary of push results by status.
@@ -2511,6 +2587,7 @@ func (c *client) processStatusRepository(ctx context.Context, rootDir, repoPath 
 	result.LastCommitAuthor = info.LastCommitAuthor
 	result.LocalBranches = info.LocalBranches
 	result.StashCount = info.StashCount
+	result.OldestStash = info.OldestStash
 	result.CommitsBehind = info.BehindBy
 	result.CommitsAhead = info.AheadBy
 

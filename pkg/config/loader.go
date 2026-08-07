@@ -5,8 +5,11 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -110,6 +113,7 @@ func (l *ConfigLoader) ResolveConfig(flags map[string]any) (*EffectiveConfig, er
 
 	// Layer 6: Environment variables (CI overrides; below flags)
 	l.applyEnvToken(effective)
+	l.resolveIdentity(effective)
 
 	// Layer 7: Command flags (highest priority)
 	l.applyFlags(effective, flags)
@@ -139,7 +143,13 @@ func (l *ConfigLoader) applyDefaults(cfg *EffectiveConfig) {
 
 // applyGlobalConfig applies global configuration defaults.
 func (l *ConfigLoader) applyGlobalConfig(cfg *EffectiveConfig) {
-	if l.globalConfig == nil || l.globalConfig.Defaults == nil {
+	if l.globalConfig == nil {
+		return
+	}
+
+	l.applyIdentity(cfg, l.globalConfig.Identity, string(SourceGlobal))
+
+	if l.globalConfig.Defaults == nil {
 		return
 	}
 
@@ -202,6 +212,8 @@ func (l *ConfigLoader) applyProfile(cfg *EffectiveConfig) {
 		cfg.SubgroupMode = prof.SubgroupMode
 		cfg.Sources["subgroupMode"] = source
 	}
+
+	l.applyIdentity(cfg, prof.Identity, source)
 
 	// Command-specific configs
 	if prof.Sync != nil {
@@ -347,6 +359,30 @@ func (l *ConfigLoader) applyBranchConfig(dst, src *BranchConfig) {
 	if len(src.ProtectedBranches) > 0 {
 		dst.ProtectedBranches = src.ProtectedBranches
 	}
+	l.applyBranchNaming(dst, src.Naming)
+}
+
+// applyBranchNaming merges naming templates one kind at a time. Unlike the push
+// policy, which is replaced whole so a narrower one cannot be widened by a
+// broader layer, the three templates are independent: overriding the device
+// branch should not silently reset the other two to their defaults.
+func (l *ConfigLoader) applyBranchNaming(dst *BranchConfig, src *branch.Naming) {
+	if src == nil {
+		return
+	}
+	if dst.Naming == nil {
+		dst.Naming = &branch.Naming{}
+	}
+
+	if src.Work != "" {
+		dst.Naming.Work = src.Work
+	}
+	if src.Device != "" {
+		dst.Naming.Device = src.Device
+	}
+	if src.Agent != "" {
+		dst.Naming.Agent = src.Agent
+	}
 }
 
 // applyFetchConfig merges fetch configuration.
@@ -386,6 +422,52 @@ func (l *ConfigLoader) applyPushConfig(dst, src *PushConfig) {
 	if src.SetUpstream {
 		dst.SetUpstream = src.SetUpstream
 	}
+	// A policy replaces rather than merges: a project that narrows the protected
+	// list should not silently inherit the wider one from a profile.
+	if src.Policy != nil {
+		dst.Policy = src.Policy
+	}
+}
+
+// applyIdentity merges an identity layer, field by field. A profile that names
+// only an agent keeps the device name the global config supplied.
+func (l *ConfigLoader) applyIdentity(cfg *EffectiveConfig, src *identity.Identity, source string) {
+	if src == nil {
+		return
+	}
+
+	if src.Device != "" {
+		cfg.Identity.Device = src.Device
+		cfg.Sources["identity.device"] = source
+	}
+	if src.Agent != "" {
+		cfg.Identity.Agent = src.Agent
+		cfg.Sources["identity.agent"] = source
+	}
+}
+
+// resolveIdentity applies the environment and the hostname fallback, which sit
+// above the config files: an agent knows its own name at launch, and a machine
+// that configured nothing should still be named.
+func (l *ConfigLoader) resolveIdentity(cfg *EffectiveConfig) {
+	before := cfg.Identity
+	cfg.Identity = identity.Resolve(&before)
+
+	if cfg.Identity.Device != before.Device {
+		cfg.Sources["identity.device"] = identitySource(identity.EnvDevice)
+	}
+	if cfg.Identity.Agent != before.Agent {
+		cfg.Sources["identity.agent"] = identitySource(identity.EnvAgent)
+	}
+}
+
+// identitySource distinguishes an environment override from the hostname
+// fallback, both of which land above the config files.
+func identitySource(envVar string) string {
+	if os.Getenv(envVar) != "" {
+		return string(SourceEnv)
+	}
+	return string(SourceDefault)
 }
 
 // GetString retrieves a string value by key from effective config.

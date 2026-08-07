@@ -15,6 +15,10 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 // ================================================================================
@@ -108,6 +112,9 @@ type Profile struct {
 	IncludeSubgroups bool   `yaml:"includeSubgroups,omitempty"` // GitLab subgroups
 	SubgroupMode     string `yaml:"subgroupMode,omitempty"`     // flat, nested
 
+	// Identity names the machine and agent recorded on automated commits.
+	Identity *identity.Identity `yaml:"identity,omitempty"`
+
 	// Command-specific overrides
 	Sync   *SyncConfig   `yaml:"sync,omitempty"`
 	Branch *BranchConfig `yaml:"branch,omitempty"`
@@ -199,6 +206,10 @@ type FilterDefaults struct {
 type BranchConfig struct {
 	DefaultBranch     BranchList `yaml:"defaultBranch,omitempty"`     // main, develop, master (string or list)
 	ProtectedBranches []string   `yaml:"protectedBranches,omitempty"` // Branches to protect
+
+	// Naming templates the branch names that `gz-git branch name` builds, so a
+	// task branch is spelled the same way on every machine and by every agent.
+	Naming *branch.Naming `yaml:"naming,omitempty"`
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler to support string shorthand.
@@ -389,8 +400,21 @@ type PullConfig struct {
 }
 
 // PushConfig holds push command defaults.
+//
+// Example:
+//
+//	push:
+//	  setUpstream: true
+//	  policy:
+//	    protected: [main, master]
+//	    forceMode: lease-only
+//	    foreignWork: block
 type PushConfig struct {
 	SetUpstream bool `yaml:"setUpstream,omitempty"` // Auto set upstream
+
+	// Policy restricts which branches push may write and how. Unset means no
+	// branch is protected and only the built-in lease-only force rule applies.
+	Policy *repository.PushPolicy `yaml:"policy,omitempty"`
 }
 
 // GlobalConfig represents ~/.config/gz-git/config.yaml
@@ -413,6 +437,11 @@ type GlobalConfig struct {
 
 	// Defaults apply to all profiles unless overridden
 	Defaults map[string]any `yaml:"defaults,omitempty"`
+
+	// Identity names this machine and, if one is driving, the agent on it.
+	// It lives here rather than in a project's .gz-git.yaml because that file
+	// is committed, and a shared device name names nothing.
+	Identity *identity.Identity `yaml:"identity,omitempty"`
 
 	// Environments define named token sets
 	Environments map[string]Environment `yaml:"environments,omitempty"`
@@ -824,6 +853,10 @@ type EffectiveConfig struct {
 	Parallel         int
 	IncludeSubgroups bool
 	SubgroupMode     string
+
+	// Identity, already resolved against the environment and hostname, so a
+	// caller can use it without knowing where it came from.
+	Identity identity.Identity
 
 	// Command-specific settings
 	Sync   SyncConfig

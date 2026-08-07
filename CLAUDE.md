@@ -51,12 +51,17 @@ docs/.claude-context/ # Context docs
 | `fetch` / `pull`       | Fetch/pull all repos                                   |
 | `push`                 | Push all repos (refspec: `develop:master`)             |
 | `commit`               | Commit all dirty repos (**ALWAYS use `--json`**)       |
+| `handoff check`        | Can I walk away? Reports work that exists only here    |
+| `handoff end`          | Commit + push all movable work (screens for secrets)   |
+| `handoff start`        | Pull --rebase + prune all repos on arrival             |
+| `branch name`          | Build a task's branch name for this device/agent       |
 | `cleanup branch`       | Clean merged/stale/gone branches                       |
 | `forge from`           | Sync from GitHub/GitLab/Gitea org                      |
 | `forge config generate`| Generate config from Forge API                         |
 | `workspace init`       | Scan directory → generate config                       |
 | `workspace sync`       | Clone/update from config (detailed preview)            |
 | `config profile`       | Profile management (create/use/list)                   |
+| `config recommended`   | Audit/apply git settings for multi-device work (`--apply`) |
 | `doctor`               | Diagnose system, config, auth, forge health            |
 
 ## Configuration System
@@ -107,6 +112,29 @@ gz-git workspace sync --dry-run
 gz-git workspace add https://github.com/user/repo.git
 ```
 
+## Handoff Usage (multi-device / multi-agent)
+
+`sync` aligns the **set** of repositories against a config. `handoff` moves the **work
+state** of the repositories already present — do not confuse the two.
+
+```bash
+gz-git handoff check              # verdict: SAFE TO LEAVE / NOT YET / BLOCKED (no network)
+gz-git handoff end                # commit + push everything movable, before leaving
+gz-git handoff end --dry-run      # what would be committed, and what the guard flags
+gz-git handoff end --no-push      # checkpoint offline
+gz-git handoff start              # pull --rebase + prune, on arrival
+```
+
+`handoff end` screens every repository before committing: credential filenames and
+contents, files over 5 MiB, untracked build output missing from `.gitignore`. Flagged
+repositories are held back, not committed — `--force` overrides. Stash entries are never
+moved automatically; they are invisible to every other machine by design.
+
+Because of that, `handoff check` reports their age. A stash older than a week is
+`stranded` rather than `stashed`: it has outlived several handoff cycles without anyone
+reaching for it. `gz-git doctor` warns about the same entries, and neither command
+touches them — restoring a stash is a decision, not a cleanup.
+
 ## Forge Usage
 
 ```bash
@@ -126,8 +154,77 @@ gz-git forge status -c sync.yaml --verbose
 
 ```bash
 gz-git push --refspec develop:master         # local:remote
-gz-git push --refspec +develop:master        # force push
+gz-git push --refspec +develop:master        # raw force — refused unless forceMode: allow
 ```
+
+## Push Policy
+
+`push.policy` gates `push` and `handoff end`. Separate from
+`branch.protectedBranches`, which only guards deletion.
+
+```yaml
+push:
+  policy:
+    protected: [main, master]   # never push here; the destination decides
+    forceMode: lease-only       # lease-only (default) | allow | deny
+    foreignWork: block          # block (default) | allow
+```
+
+`lease-only` allows `--force` (which uses `--force-with-lease`) and refuses a
+`+` refspec, which has none — it applies even with no config file, so the two
+force paths behave the same. `--force-mode` overrides it per invocation.
+Refused repositories are reported as `blocked`; the rest of the batch runs.
+
+`foreignWork: block` refuses a force push that would discard remote commits
+whose trailers name a different device or agent, listing the commits at stake.
+It catches what `--force-with-lease` cannot: a lease is satisfied by any fetch,
+and a multi-device workflow fetches on arrival. `--foreign-work allow` overrides
+it. Only commits signed by `handoff end` can be attributed — a commit made by
+hand elsewhere has no trailer and is never counted as foreign.
+
+## Identity
+
+`handoff end` signs its checkpoint commit with git trailers, since the author
+line is the same on every machine one person owns. The `foreignWork` rule and
+`handoff start`'s shared-branch note both read them back.
+
+```yaml
+# global config only — a project's .gz-git.yaml is committed and shared
+identity:
+  device: dave-office   # default: hostname
+  agent: hermes-01      # default: none (a person is driving)
+```
+
+`GZ_GIT_DEVICE` / `GZ_GIT_AGENT` override the config. `--no-trailers` omits
+them for one run. A machine that names nothing skips the foreign-work check
+entirely: it cannot tell its own commits from anyone else's.
+
+## Branch Naming
+
+`branch name` builds the branch name a task should have here, from a template
+and the resolved identity. It prints the name and creates nothing — creation
+stays with `switch --create` and plain git.
+
+```bash
+gz-git branch name task-001-product-unit                 # feat/task-001-product-unit
+gz-git branch name task-001-product-unit --kind device   # feat/task-001-product-unit/dave-office
+gz-git branch name task-001-product-unit --kind agent    # agent/task-001-product-unit/hermes-01
+
+gz-git switch "$(gz-git branch name task-001 --kind device)" --create
+```
+
+```yaml
+branch:
+  naming:                          # defaults shown; override one, keep the rest
+    work: feat/{task}
+    device: feat/{task}/{device}
+    agent: agent/{task}/{agent}
+```
+
+Every substituted value is slugified, since the default device name is the
+hostname and `Daves-MacBook.local` is not a legal branch name. A `device` or
+`agent` branch whose segment is unnamed is refused: it would be the shared
+branch again under a longer name.
 
 ## Security (CRITICAL)
 

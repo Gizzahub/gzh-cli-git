@@ -9,6 +9,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/identity"
 )
 
 // Client defines core repository operations.
@@ -108,6 +110,12 @@ type Client interface {
 	// GetStatus retrieves the current working tree status.
 	// This shows modified, staged, untracked files, etc.
 	GetStatus(ctx context.Context, repo *Repository) (*Status, error)
+
+	// IncomingForeignWork lists the commits the upstream branch has that the
+	// local branch does not, signed by a device or agent other than mine.
+	// It names the other writers on a shared branch; an unnamed identity, or a
+	// branch with no upstream, yields nothing.
+	IncomingForeignWork(ctx context.Context, repoPath string, mine identity.Identity) ([]ForeignCommit, error)
 }
 
 // Logger provides a logging interface for library consumers.
@@ -223,6 +231,11 @@ type Info struct {
 
 	// StashCount is the number of stash entries.
 	StashCount int
+
+	// OldestStash is when the oldest stash entry was created, zero when there
+	// is none. A stash is invisible to every other machine, so its age is the
+	// difference between work in progress and work that was forgotten.
+	OldestStash time.Time
 }
 
 // Status represents the working tree and staging area status.

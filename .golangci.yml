@@ -110,7 +110,7 @@ linters:
     goheader:
       values:
         const:
-          COMPANY: Archmagece
+          COMPANY: Gizzahub
           LICENSE: MIT
         regexp:
           YEAR: 20\d\d(-20\d\d)?

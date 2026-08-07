@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -364,6 +365,57 @@ func TestCheckDirtyBehind_Clean(t *testing.T) {
 	}
 }
 
+// --- checkStrandedStash ---
+
+func TestCheckStrandedStash_NoStash(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepoWithCommit(t, dir)
+
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkStrandedStash(context.Background(), executor, dir, "test-repo")
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results with no stash, got %d: %+v", len(results), results)
+	}
+}
+
+// A stash made just now is what the command is for. Doctor should stay quiet
+// about it, or it would nag through every normal mid-task run.
+func TestCheckStrandedStash_FreshStashIsSilent(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepoWithCommit(t, dir)
+	stashChange(t, dir, "")
+
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkStrandedStash(context.Background(), executor, dir, "test-repo")
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results for a stash made today, got %d: %+v", len(results), results)
+	}
+}
+
+func TestCheckStrandedStash_OldStashWarns(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepoWithCommit(t, dir)
+	stashChange(t, dir, time.Now().Add(-40*24*time.Hour).Format(time.RFC3339))
+
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkStrandedStash(context.Background(), executor, dir, "test-repo")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for a 40-day-old stash, got %d: %+v", len(results), results)
+	}
+	if results[0].Status != StatusWarning {
+		t.Errorf("status = %s, want %s", results[0].Status, StatusWarning)
+	}
+	if !strings.Contains(results[0].Message, "1 stash entry") {
+		t.Errorf("message = %q, want the entry count", results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "days old") {
+		t.Errorf("message = %q, want the age of the oldest entry", results[0].Message)
+	}
+}
+
 // --- checkDevelopMainDistance ---
 
 func TestCheckDevelopMainDistance_NoDevelop(t *testing.T) {
@@ -491,6 +543,23 @@ func writeFile(t *testing.T, dir, name, content string) {
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write %s: %v", name, err)
+	}
+}
+
+// stashChange dirties the worktree and stashes it. An RFC3339 date back-dates
+// the stash commit, which is how `git stash list --format=%ct` reports its age;
+// an empty date leaves it at now.
+func stashChange(t *testing.T, dir, date string) {
+	t.Helper()
+	writeFile(t, dir, "README.md", "# Test, edited")
+
+	cmd := exec.CommandContext(context.Background(), "git", "stash", "push", "-m", "wip")
+	cmd.Dir = dir
+	if date != "" {
+		cmd.Env = append(os.Environ(), "GIT_COMMITTER_DATE="+date, "GIT_AUTHOR_DATE="+date)
+	}
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git stash push failed: %v\n%s", err, output)
 	}
 }
 

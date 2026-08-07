@@ -38,6 +38,7 @@ ______________________________________________________________________
 ### Configuration
 
 - **config/** - Configuration management (profiles, precedence, hierarchical config)
+- **identity/** - Device/agent naming for automated commits (git trailers)
 
 ### Git Operations
 

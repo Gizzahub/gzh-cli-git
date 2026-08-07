@@ -98,6 +98,10 @@ const (
 	// This typically occurs when HTTPS credentials are not configured or have expired.
 	StatusAuthRequired = "auth-required"
 
+	// StatusBlocked indicates the operation was refused by a configured policy
+	// rather than by git or the remote.
+	StatusBlocked = "blocked"
+
 	// StatusCleaned indicates untracked/ignored files were removed.
 	StatusCleaned = "cleaned"
 

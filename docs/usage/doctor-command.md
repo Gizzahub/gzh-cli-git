@@ -109,6 +109,7 @@ Checks: 16 total, 10 ok, 3 warning, 3 error (1.5s)
 | repo:{name}:ahead | 미push 커밋 (ahead만) | > 20 commits: warning |
 | repo:{name}:develop-main | develop ↔ main/master 거리 | warn: 50, error: 150 |
 | repo:{name}:branch:{branch} | feature 브랜치 분기 거리 (`-v` 시) | warn: 30, error: 100 |
+| repo:{name}:stash | 다른 장비에서 볼 수 없는 오래된 stash | 가장 오래된 항목이 7일 초과: warning |
 
 ## 플래그
 
@@ -164,6 +165,7 @@ gz-git doctor --format json
 | `✗ rebase in progress` | `git rebase --continue` 또는 `--abort` |
 | `✗ N file(s) with merge conflicts` | 충돌 파일 수정 후 `git add` |
 | `✗ dirty worktree + N behind` | 변경사항 commit/stash 후 pull |
+| `⚠ N stash entries, oldest N days old` | `git stash pop` 후 커밋 — stash는 다른 장비로 전달되지 않음 |
 | `⚠ diverged from upstream` | `git pull --rebase` 또는 `git merge` |
 | `⚠ develop is N commits from main` | develop → main 머지 고려 |
 | `⚠ branch 'feat/x' is N commits from base` | base 브랜치에 rebase |

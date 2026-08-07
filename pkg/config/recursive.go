@@ -339,6 +339,9 @@ func mergePushConfig(target, override *PushConfig) {
 	if override.SetUpstream {
 		target.SetUpstream = override.SetUpstream
 	}
+	if override.Policy != nil {
+		target.Policy = override.Policy
+	}
 }
 
 // mergeParentConfig merges parent config into child config.

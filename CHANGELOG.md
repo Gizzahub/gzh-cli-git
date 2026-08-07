@@ -7,6 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `handoff check` and `doctor` now report the age of stash entries, not just their
+  count. A stash never leaves the machine that made it, so an entry that outlived a
+  week of handoff cycles is work nobody is coming back for on their own: `handoff
+  check` gives it the new `stranded` reason instead of `stashed`, and `doctor` warns
+  about it under `repo:{name}:stash`. Both commands stay quiet about a stash made
+  today, which is what the command is for, and neither one touches any of them —
+  restoring a stash is a decision, not a cleanup.
+  - The oldest entry is found by comparing dates, not by taking the last line of
+    `git stash list`: that order comes from the reflog, and pushing a stash on an older
+    base leaves an entry whose date is not where its position suggests.
+- `gz-git branch name <task>` builds the branch name a task should have here, from a
+  template and the resolved identity: `--kind work` (`feat/{task}`), `--kind device`
+  (`feat/{task}/{device}`) or `--kind agent` (`agent/{task}/{agent}`). It prints the
+  name and creates nothing, so it composes with `gz-git switch --create` for bulk work
+  and with plain git for one repository — `branch create` stays unexposed.
+  - Templates are configurable per kind under `branch.naming`, merged one key at a time
+    so overriding one leaves the other two at their defaults.
+  - Every substituted value is slugified. The default device name is the hostname, and
+    `Daves-MacBook.local` is not a legal branch name, so without this a template would
+    work on one machine and fail on the next.
+  - A `device` or `agent` branch whose segment is unnamed is refused rather than
+    collapsed: the result would be the shared branch again under a longer name, which is
+    the collision splitting the branch exists to avoid. A misspelled placeholder is
+    reported instead of being baked into a name.
+- `push.policy.foreignWork` refuses a force push that would discard remote commits whose
+  identity trailers name a different device or agent, listing the commits at stake.
+  `--force-with-lease` does not cover this: a lease compares the remote against the ref
+  this machine last fetched, so it protects only until the next fetch — and a
+  multi-device workflow fetches on arrival, after which the lease is satisfied and the
+  other machine's work disappears silently. The check runs under `--dry-run` too, where
+  finding out first is the point. `--foreign-work allow` overrides it.
+  - It refuses only on positive evidence of another writer. An unsigned commit is
+    unattributed, not attributed elsewhere, so rewriting your own hand-made commits and
+    force pushing still works. The cost is that only commits made by `handoff end` can
+    be attributed at all, and a machine that names no identity skips the check entirely.
+- `gz-git handoff start` names the branches whose remote advanced under another device or
+  agent while this machine was away. It reports rather than blocks — a rebase replays
+  over those commits and loses nothing. It is the signal that a branch has two writers
+  and should be split, which is the moment to do it rather than after a collision.
+- `identity` config names the machine and the agent behind an automated commit, and
+  `handoff end` writes them as `Device:` and `Agent:` git trailers on the checkpoint.
+  A checkpoint is made with nobody watching, and git records only the author — the same
+  person on every machine they own — so without a trailer the commit cannot say where
+  the work is. `device` defaults to the hostname, so checkpoints are signed with no
+  configuration at all; `agent` is empty unless something sets it. `GZ_GIT_DEVICE` and
+  `GZ_GIT_AGENT` override the config, since an agent knows its own name at launch.
+  `--no-trailers` omits them for one run.
+  - Configure it globally rather than in a project's `.gz-git.yaml`: that file is
+    committed, and every machine that cloned it would report the same device.
+- `push.policy` config restricts what `push` and `handoff end` may write to a remote.
+  `protected` lists branch names and trailing-`*` patterns that may not be pushed to at
+  all — the **destination** decides, so `--refspec develop:main` is refused just as a
+  direct push to `main` is. It is separate from `branch.protectedBranches`, which guards
+  deletion, and is empty unless configured. `forceMode` picks how force pushes are
+  treated: `lease-only`, `allow`, or `deny`. `--force-mode` overrides it for one
+  invocation. A refused repository is reported as `blocked` with the rule named, the
+  rest of the batch still runs, and the command exits non-zero.
+  - `handoff end` applies the policy *before* committing, not only at the push, so an
+    unattended checkpoint cannot land on a branch this workspace may not push to.
+- `gz-git handoff` moves work between machines and agents. Where `status` reports how
+  healthy a repository is and `sync` aligns the *set* of repositories against a config,
+  `handoff` reports and moves the *work state*: whatever exists only on this machine.
+  - `handoff check` gives one verdict — `SAFE TO LEAVE`, `NOT YET`, or `BLOCKED` —
+    across every scanned repository, distinguishing what `handoff end` clears on its own
+    (uncommitted files, unpushed commits, a missing upstream) from what needs a decision
+    here (conflicts, an interrupted rebase, a detached HEAD, no remote, a stash). No
+    network is used: unpushed commits are counted against the remote tracking ref, which
+    only advances when this machine pushes.
+  - `handoff end` commits and pushes everything movable, and leaves the rest untouched.
+    Before committing, every repository is screened for credentials (by filename and by
+    content — private key blocks, AWS/GitHub/GitLab/Slack/Google tokens), files over
+    5 MiB, and untracked build output that `.gitignore` does not cover. Anything flagged
+    is held back with the file named rather than swept into history; `--force` commits it
+    anyway. `--no-push` checkpoints without a network.
+  - `handoff start` pulls every repository with a rebase and prunes deleted remote
+    branches, so commits that are still only here are replayed on top of what the remote
+    gained instead of producing a merge commit. Repositories with uncommitted work are
+    fetched but never rebased.
+  - Stash entries are never treated as movable: they are invisible to every other machine,
+    and turning one into a commit is a decision, not a cleanup step.
+  - Exit codes follow the diagnostic convention: `0` nothing outstanding, `1` work remains,
+    `2` the command could not run.
+- `gz-git config recommended` audits the git configuration that a multi-device,
+  multi-agent workflow depends on: `pull.rebase`, `rebase.autoStash`, `fetch.prune`,
+  `push.autoSetupRemote`, `push.default`, `rerere.enabled`, `merge.conflictStyle`.
+  It reports unset, mismatched, and (for settings needing a newer git than the one
+  installed) unsupported values, and writes the missing ones with `--apply`.
+  `--local` targets the current repository instead of `~/.gitconfig`. Boolean
+  spellings git accepts (`yes`, `on`, `1`) are not reported as mismatches.
+  Exit codes follow the diagnostic convention: `0` conforming, `1` drift found,
+  `2` the audit could not run — so it works as a CI workstation gate.
+- `gz-git doctor` reports the same audit as one aggregate `System` check, naming the
+  keys that need changes; `--verbose` expands it to one check per setting.
+
+### Changed (behavior change)
+
+`gz-git push --refspec +local:remote` is now refused by default. `--force` has always
+mapped to `--force-with-lease`, but a `+` refspec went straight to git as an unleased
+force, so the two spellings of "force push" behaved differently and the safer one was
+the longer one to type. The new `lease-only` default closes that, and applies with no
+config file present. Set `push.policy.forceMode: allow`, or pass `--force-mode allow`,
+to get the old behavior.
+
 ### Fixed (behavior change)
 
 `diff` and `commit` parsed `git status --porcelain` independently and disagreed on what

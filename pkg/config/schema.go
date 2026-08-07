@@ -113,6 +113,15 @@ branch:
     - develop
     - release/*
 
+  # Branch-name templates used by 'gz-git branch name <task>', one per role.
+  # Placeholders: {task}, {device}, {agent}. Each is slugified before it is
+  # substituted, so a hostname like Daves-MacBook.local becomes a legal segment.
+  # Every key is optional; an unset one keeps the default shown here.
+  naming:
+    work: feat/{task}              # a task with one writer
+    device: feat/{task}/{device}   # one machine's slice of a shared task
+    agent: agent/{task}/{agent}    # one agent's, kept out of a person's
+
 # Fetch Command Settings
 fetch:
   # Fetch all remotes, not just origin
@@ -138,6 +147,43 @@ push:
   # Automatically set upstream on push
   # Type: boolean
   setUpstream: true
+
+  # Restrict what push (and handoff end) may write
+  policy:
+    # Branches that may not be pushed to at all. Trailing * matches a prefix.
+    # Type: list of strings (default: none)
+    protected: [main, master]
+
+    # How force pushes are treated
+    #   lease-only  --force is allowed (it uses --force-with-lease);
+    #               a "+" refspec, which has no lease, is refused
+    #   allow       every force push is permitted
+    #   deny        no force push is permitted
+    # Type: string (default: lease-only)
+    forceMode: lease-only
+
+    # What happens to a force push that would discard commits whose trailers
+    # name a different device or agent than this one
+    #   block   the push is refused and the commits are listed
+    #   allow   the push runs, with --force-with-lease as the only guard
+    # Only commits signed by handoff end can be attributed; a commit made by
+    # hand elsewhere carries no trailer and is never counted as foreign.
+    # Type: string (default: block)
+    foreignWork: block
+
+# Identity recorded on automated commits (handoff end)
+#
+# Belongs in the global config, not a project's .gz-git.yaml: that file is
+# committed, and every machine that clones it would report the same device.
+# GZ_GIT_DEVICE and GZ_GIT_AGENT override these.
+identity:
+  # This machine
+  # Type: string (default: hostname)
+  device: dave-office
+
+  # The automation driving this machine, if any
+  # Type: string (default: none, meaning a person is driving)
+  agent: hermes-01
 
 # -----------------------------------------------------------------------------
 # Workspace Structure (Recursive)

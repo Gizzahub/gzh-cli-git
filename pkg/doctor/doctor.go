@@ -25,6 +25,7 @@ func Run(ctx context.Context, opts Options) *Report {
 
 	// System checks
 	checks = append(checks, checkGitInstalled(ctx)...)
+	checks = append(checks, checkGitWorkflowSettings(ctx, opts.Verbose)...)
 	checks = append(checks, checkSSH()...)
 	checks = append(checks, checkTempDir()...)
 	checks = append(checks, checkConfigDir()...)

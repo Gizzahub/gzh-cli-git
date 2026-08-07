@@ -35,9 +35,11 @@ tasks/
 | 16 | goheader | COMPANY=Gizzahub; linter disabled pending header-add |
 | 18 | golangci v1/v2 | PATH has v2.12.2; install target skips when v2 present |
 
-### Follow-up (2026-08-07)
+### Task ownership
 
-| # | Task | Priority | Notes |
-|---|------|----------|-------|
-| 20 | [forge-event-stream-product-surface](issue/20-forge-event-stream-product-surface.md) | P3 | Transferred residual from gzh-cli issue 26 (remote ListEvents) — product surface on gz-git when prioritized |
+Work items for this library are tracked at the **devbox root**:
+
+→ `gzh-cli-devbox/tasks/` (e.g. todo/40-gz-git-forge-event-stream-product.md)
+
+Local `tasks/issue/20-…` is a **pointer only**.
 

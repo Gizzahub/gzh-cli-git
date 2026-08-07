@@ -114,7 +114,8 @@ func TestWorkspaceAddFromCurrent_ReadsRemoteOrErrors(t *testing.T) {
 
 	t.Run("origin remote is resolved and written", func(t *testing.T) {
 		repo := testutil.TempGitRepoWithCommit(t)
-		const url = "https://github.com/example/current.git"
+		// Use a host outside common url.*.insteadOf rewrites (e.g. github.com→ssh).
+		const url = "https://git.example.test/example/current.git"
 		if out, err := exec.CommandContext(context.Background(), "git", "-C", repo, "remote", "add", "origin", url).CombinedOutput(); err != nil {
 			t.Fatalf("git remote add: %v (%s)", err, out)
 		}

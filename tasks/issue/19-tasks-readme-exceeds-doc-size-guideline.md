@@ -1,6 +1,6 @@
 # ISSUE: `tasks/README.md`가 문서 크기 가이드라인을 2배 초과했다
 
-- status: todo
+- status: done
 - priority: P3
 - category: docs
 - created_at: 2026-08-07T09:20:00+09:00
@@ -33,19 +33,25 @@
 
 ## Acceptance Criteria
 
-- [ ] `wc -c tasks/README.md` < 10240
-- [ ] README에 `구조`와 `Open Issues`(미해결 태스크 표)가 남아 있고, 각 태스크 파일로 가는
+- [x] `wc -c tasks/README.md` < 10240
+- [x] README에 `구조`와 `Open Issues`(미해결 태스크 표)가 남아 있고, 각 태스크 파일로 가는
       링크가 끊기지 않는다
-- [ ] 옮겨낸 완료·감사 기록이 **삭제되지 않고** 별도 파일에서 조회 가능하다
+- [x] 옮겨낸 완료·감사 기록이 **삭제되지 않고** 별도 파일에서 조회 가능하다
       (예: `tasks/HISTORY.md` 또는 `tasks/_archive/`)
-- [ ] README에서 옮겨간 곳으로 가는 링크가 1줄 있다
-- [ ] 프로젝트 규칙상 인덱스 파일명은 `README.md` / `INDEX.md`만 허용되므로 새 파일이
+- [x] README에서 옮겨간 곳으로 가는 링크가 1줄 있다
+- [x] 프로젝트 규칙상 인덱스 파일명은 `README.md` / `INDEX.md`만 허용되므로 새 파일이
       인덱스 역할을 하지 않도록 한다 (기록 보관용)
 
 ## 범위 경계
 
 - 기록 **내용**을 요약·삭제하지 않는다. 위치만 옮긴다.
-- 개별 태스크 파일(`issue/NN-*.md`)은 건드리지 않는다.
+- 개별 태스크 파일(`issue/NN-*.md`)은 건드리지 않는다. (본 태스크 자신 제외: AC·status 갱신)
+
+## Resolution (2026-08-07)
+
+- 완료·감사·v0.7.0 우회법 → `tasks/HISTORY.md`로 이동 (내용 보존)
+- README: 구조 + Open Issues 표 + HISTORY 1줄 링크만 유지
+- Open Issues 표: 실제 residual 기준으로 갱신 (09·17 done 반영, 18 추가, 19 닫음)
 
 ## References
 

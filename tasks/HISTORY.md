@@ -4,6 +4,14 @@
 
 ---
 
+## 완료 (2026-08-07)
+
+| # | 태스크 | 우선순위 | 요지 |
+|---|--------|---------|------|
+| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | core `WriteLLM` 맵 정렬 후 `sortLLMSummaryBlock` 제거; 로컬 go.work 기준. 단독 모듈 CI는 core pseudo-version publish 후 `go.mod` bump 필요 ✅ |
+
+---
+
 ## 완료 (2026-08-05)
 
 | # | 태스크 | 우선순위 | 요지 |

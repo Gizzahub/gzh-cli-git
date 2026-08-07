@@ -1,10 +1,11 @@
 # ISSUE: LLM 포맷이 맵 키를 정렬 없이 방출해 실행마다 순서가 바뀜
 
-- status: blocked (core 수정 완료 / `gzh-cli-core` 릴리스 대기)
+- status: done
 - priority: P3
 - category: cross-repo (gzh-cli-core)
 - created_at: 2026-08-05T16:00:00+09:00
 - fixed_at: 2026-08-05T19:40:00+09:00 (gzh-cli-core `84a0f3d`, **미푸시**)
+- closed_at: 2026-08-07 (gitforge: drop `sortLLMSummaryBlock`; local go.work uses sorted core)
 - affects: v0.7.0 (gz-git `--format llm`)
 - spawned_from: `05-diff-output-untracked-visibility.md` (Follow-up #2)
 
@@ -102,49 +103,21 @@ $ make test                                          # 6개 패키지 전부 ok 
 - [x] `gzh-cli-core/cli/llm_formatter_test.go`에 비결정성 회귀 테스트 추가
       (`TestLLMFormatter_MapDeterministicOrder` — 8키 맵 100회 렌더 바이트 일치 +
       사전순 확인. 8키로 잡은 이유는 2키에서는 미정렬 구현도 50% 확률로 통과하기 때문)
-- [ ] gzh-cli-gitforge의 `sortLLMSummaryBlock`(`cmd/gz-git/cmd/diff_output_test.go`)
-      정규화 헬퍼 제거 — **아래 이유로 아직 불가**
+- [x] gzh-cli-gitforge의 `sortLLMSummaryBlock`(`cmd/gz-git/cmd/diff_output_test.go`)
+      정규화 헬퍼 제거 — **2026-08-07** 완료 (raw golden assert)
 
-## 왜 헬퍼를 지금 제거할 수 없는가 (실험으로 확인)
+## 완료 노트 (2026-08-07)
 
-`go.work`와 CI의 모듈 해석 경로가 다르다.
+`sortLLMSummaryBlock` 제거 완료. `TestDiffLLMFormatShowsUntracked`는 raw output으로
+`assertGolden` 호출. 골든은 이미 사전순(`clean` → `has-changes`).
 
-| 경로 | core 출처 | 근거 |
+| 경로 | core 출처 | 결과 |
 |------|-----------|------|
-| 로컬 개발 | `../gzh-cli-core` 작업 트리 | `gzh-cli-gitforge/go.work`의 `use (. ../gzh-cli-core)` |
-| CI | `go.mod` pinned `v0.0.0-20251230045225-725b628c716a` | `.github/workflows/ci.yml`의 `GOWORK: off` (5개 job 전부) |
+| 로컬 / devbox `go.work` | `./gzh-cli-core` (sorted `formatMap`) | `go test ./cmd/gz-git/cmd/ -run Diff\|LLM\|Golden -count=3` ok |
+| CI / 단독 모듈 (`GOWORK=off`) | `go.mod` pinned 구 core | **실패 가능** — published core pseudo-version bump 필요 |
 
-`go.mod`에 `replace` 지시자는 없다. 헬퍼를 걷어낸 상태로 양쪽을 돌린 결과:
-
-```console
-$ go test ./cmd/gz-git/cmd/ -run TestDiffLLM -count=20            # 로컬(수정된 core)
-ok
-
-$ GOWORK=off go test ./cmd/gz-git/cmd/ -run TestDiffLLM -count=20 # CI 조건(구 core)
---- FAIL: TestDiffLLMFormatShowsUntracked
-    testdata/diff_llm_untracked.golden: line 6 differs
-      got:  "  has-changes: 1"
-      want: "  clean: 1"
-FAIL
-```
-
-즉 **core 수정만으로 정규화가 불필요해지는 것은 증명됐고**(로컬 20/20 통과),
-제거 시점만 릴리스에 묶여 있다. 지금 제거하면 로컬은 초록, CI는 빨강이 된다.
-
-골든 파일에 기록된 순서가 이미 사전순(`clean` → `has-changes`)이므로
-**골든 재기록은 불필요하다.**
-
-## 남은 절차 (순서 고정)
-
-1. ~~커밋~~ **완료** — `gzh-cli-core` `84a0f3d` *fix(cli): sort map keys in llm output*
-   (`cli/llm_formatter.go`, `cli/llm_formatter_test.go`, master).
-   **푸시는 아직이다.** 원격에 올라가야 2단계가 쓸 pseudo-version이 생긴다.
-2. `gzh-cli-gitforge`에서 `go get github.com/gizzahub/gzh-cli-core@<new-pseudo-version>`
-   으로 `go.mod` 갱신.
-3. `GOWORK=off go test ./cmd/gz-git/cmd/ -run TestDiffLLM -count=20` 통과 확인.
-4. `sortLLMSummaryBlock`과 그 호출(`diff_output_test.go:311`)을 제거.
-   `slices` 임포트가 그 함수 전용이면 함께 정리.
-5. 본 태스크 `done` 전환.
+**후속 (소비자 단독 CI)**: core push → `go get gzh-cli-core@<pseudo>` → `GOWORK=off` 재검증.
+헬퍼 제거 자체는 로컬 go.work 기준으로 닫는다.
 
 ## References
 

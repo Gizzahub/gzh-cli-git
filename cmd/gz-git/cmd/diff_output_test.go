@@ -266,34 +266,11 @@ func TestDiffJSONFormatOmitsEmptyKeys(t *testing.T) {
 	assertGolden(t, "diff_json_tracked_only", out)
 }
 
-// sortLLMSummaryBlock reorders the SUMMARY entries in LLM output.
-//
-// The formatter in gzh-cli-core walks maps with reflect.Value.MapRange and
-// never sorts, so any result with more than one status renders its counts in
-// random order — verified here by a -count=20 run that failed three times. That
-// is a genuine defect in a format built for machine consumption, but it lives
-// in another repository, so this golden normalizes the ordering rather than
-// baking in one arbitrary permutation and calling it correct.
-func sortLLMSummaryBlock(out string) string {
-	lines := strings.Split(out, "\n")
-
-	start := slices.Index(lines, "SUMMARY:") + 1
-	if start == 0 {
-		return out
-	}
-
-	end := start
-	for end < len(lines) && strings.HasPrefix(lines[end], "  ") {
-		end++
-	}
-	slices.Sort(lines[start:end])
-
-	return strings.Join(lines, "\n")
-}
-
 // TestDiffLLMFormatShowsUntracked keeps the agent-facing format honest: the
 // workflow that started this whole issue feeds it straight into a commit
-// message.
+// message. SUMMARY map keys are sorted by gzh-cli-core WriteLLM (formatMap),
+// so golden comparison uses raw output — requires local go.work (or a
+// published core that includes sorted maps).
 func TestDiffLLMFormatShowsUntracked(t *testing.T) {
 	withDiffDisplay(t, "llm", false, false)
 
@@ -308,7 +285,7 @@ func TestDiffLLMFormatShowsUntracked(t *testing.T) {
 		t.Errorf("llm output does not carry the untracked count:\n%s", out)
 	}
 
-	assertGolden(t, "diff_llm_untracked", sortLLMSummaryBlock(out))
+	assertGolden(t, "diff_llm_untracked", out)
 }
 
 // TestDiffVerboseNoContentKeepsSummary covers the flag-interaction criterion:

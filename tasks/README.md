@@ -23,12 +23,13 @@ tasks/
 
 | # | 태스크 | 우선순위 | 요지 |
 |---|--------|---------|------|
-| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | **blocked**: core 정렬 수정 완료. 릴리스 → `go.mod` bump 전까지 `sortLLMSummaryBlock` 제거 불가 (`GOWORK: off` CI) |
+| — | (none tracked as open in this residual pass) | — | 추가 이슈는 `issue/` 디렉터리 참조 |
 
 ### Recently closed (2026-08-07 residual pass)
 
 | # | 태스크 | 결과 |
 |---|--------|------|
+| 07 | llm-output-nondeterministic-map-order | drop `sortLLMSummaryBlock`; local go.work uses sorted core; publish core + go.mod bump for `GOWORK=off` CI |
 | 08 | conflict-guard residual ExitCode audit | `status` → `runGit`; existence probes documented intentional |
 | 11 | status consumer + fixture gaps | ParseStatus C/unknown-worktree; switch/status fixtures; testutil fatals |
 | 16 | goheader | COMPANY=Gizzahub; linter disabled pending header-add |

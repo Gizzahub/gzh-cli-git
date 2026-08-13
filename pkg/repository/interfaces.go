@@ -116,6 +116,11 @@ type Client interface {
 	// It names the other writers on a shared branch; an unnamed identity, or a
 	// branch with no upstream, yields nothing.
 	IncomingForeignWork(ctx context.Context, repoPath string, mine identity.Identity) ([]ForeignCommit, error)
+
+	// ResolveBase picks the integration branch for a repository (config
+	// defaultBranch first, then a heuristic fallback) and reports how HEAD
+	// diverges from it. See BaseBranchInfo for the policy and the source label.
+	ResolveBase(ctx context.Context, repo *Repository, candidates []string) (BaseBranchInfo, error)
 }
 
 // Logger provides a logging interface for library consumers.

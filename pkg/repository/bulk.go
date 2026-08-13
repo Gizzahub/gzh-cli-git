@@ -535,6 +535,13 @@ type RepositoryStatusResult struct {
 	// Remote is the remote name (e.g., "origin")
 	Remote string
 
+	// Upstream is the tracking ref for the current branch (e.g.
+	// "origin/master"), empty when the branch tracks nothing. CommitsAhead and
+	// CommitsBehind are measured against it, so both are zero when it is empty
+	// — without this field a caller cannot tell "in sync" from "nothing to
+	// compare against", which are opposite situations.
+	Upstream string
+
 	// Remotes contains all configured remotes (name -> url).
 	Remotes map[string]string
 
@@ -2579,6 +2586,7 @@ func (c *client) processStatusRepository(ctx context.Context, rootDir, repoPath 
 	result.Branch = info.Branch
 	result.RemoteURL = info.RemoteURL
 	result.Remote = info.Remote
+	result.Upstream = info.Upstream
 	result.Remotes = info.Remotes
 	result.HeadSHA = info.HeadSHA
 	result.Describe = info.Describe

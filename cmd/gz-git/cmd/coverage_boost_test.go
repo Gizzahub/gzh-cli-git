@@ -148,7 +148,10 @@ func TestPrintBulkStashAndCommitAndInfo(t *testing.T) {
 		},
 	}
 	captureStdout(t, func() {
-		displayInfoResultsDetailed(infoRes)
+		// nil enrichment exercises the missing-entry path: every lookup yields
+		// the zero value, which is what a repository whose extra probes failed
+		// renders as.
+		displayInfoResultsDetailed(infoRes, nil)
 		displayInfoResultsStructured(infoRes, "json")
 		displayInfoResultsStructured(infoRes, "llm")
 	})

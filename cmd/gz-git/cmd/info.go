@@ -10,12 +10,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 var (
 	infoFlags BulkCommandFlags
 	itemLimit int
+	infoFull  bool
 )
 
 // infoCmd represents the info command
@@ -52,17 +54,23 @@ func init() {
 
 	// Add info-specific flags
 	infoCmd.Flags().IntVar(&itemLimit, "limit", 10, "max items to show in lists (branches, remotes)")
+	infoCmd.Flags().BoolVar(&infoFull, "full", false, "show the per-repository detail block instead of the one-line table")
 }
 
 func runInfo(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Load config with profile support
+	var baseCandidates []string
 	effective, _ := LoadEffectiveConfig(cmd, nil)
 	if effective != nil {
 		if !cmd.Flags().Changed("parallel") && effective.Parallel > 0 {
 			infoFlags.Parallel = effective.Parallel
 		}
+		// The configured integration branches decide what "behind the base"
+		// means. When config declares none, ResolveBase falls back to its own
+		// heuristic rather than this command inventing an order.
+		baseCandidates = effective.Branch.DefaultBranch
 		if verbose {
 			PrintConfigSources(cmd, effective)
 		}
@@ -113,12 +121,25 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	displayInfoResultsDetailed(result)
+	// Base-branch and worktree facts are info-specific and cost extra git
+	// invocations, so they are gathered here rather than in BulkStatus, which
+	// every other bulk command shares.
+	enrichment := enrichInfoResults(
+		ctx, client, branch.NewWorktreeManager(),
+		result.Repositories, baseCandidates, infoFlags.Parallel,
+	)
+
+	if infoFull {
+		displayInfoResultsDetailed(result, enrichment)
+		return nil
+	}
+
+	renderInfoCompact(cmd.OutOrStdout(), result, enrichment, verbose)
 
 	return nil
 }
 
-func displayInfoResultsDetailed(result *repository.BulkStatusResult) {
+func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment) {
 	if len(result.Repositories) == 0 {
 		fmt.Println("No repositories found.")
 		return
@@ -147,6 +168,43 @@ func displayInfoResultsDetailed(result *repository.BulkStatusResult) {
 			branchInfo += fmt.Sprintf(" (%s)", repo.HeadSHA)
 		}
 		fmt.Printf("  Current Branch: %s\n", branchInfo)
+
+		enr := enrichment[repo.Path]
+
+		// 1b. Upstream divergence. Reported as an explicit line rather than
+		// left to the reader, since "no upstream" and "in sync" are different
+		// situations that both produce zero ahead/behind counts.
+		switch {
+		case repo.Upstream == "":
+			fmt.Printf("  Upstream:       (none)\n")
+		case repo.CommitsAhead > 0 || repo.CommitsBehind > 0:
+			fmt.Printf("  Upstream:       %s (ahead %d, behind %d)\n", repo.Upstream, repo.CommitsAhead, repo.CommitsBehind)
+		default:
+			fmt.Printf("  Upstream:       %s (in sync)\n", repo.Upstream)
+		}
+
+		// 1c. Base branch. Source is printed so the divergence numbers can be
+		// judged: measuring against a heuristic guess is not the same claim as
+		// measuring against the branch the project declared.
+		if enr.Base.Name == "" {
+			fmt.Printf("  Base:           (none found)\n")
+		} else {
+			fmt.Printf("  Base:           %s (ahead %d, behind %d) [%s]\n",
+				enr.Base.Name, enr.Base.Ahead, enr.Base.Behind, enr.Base.Source)
+		}
+
+		// 1d. Worktrees
+		if enr.LinkedWorktrees > 0 {
+			detail := ""
+			if len(enr.WorktreeBranches) > 0 {
+				detail = ": " + strings.Join(enr.WorktreeBranches, ", ")
+			}
+			fmt.Printf("  Worktrees:      %d linked%s\n", enr.LinkedWorktrees, detail)
+		}
+
+		if enr.Err != nil {
+			fmt.Printf("  Note:           partial info (%v)\n", enr.Err)
+		}
 
 		// 2. Version
 		if repo.Describe != "" {

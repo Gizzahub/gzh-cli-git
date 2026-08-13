@@ -1,0 +1,332 @@
+// Copyright (c) 2026 Gizzahub
+// SPDX-License-Identifier: MIT
+
+package cmd
+
+import (
+	"bytes"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
+)
+
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
+
+// withColors forces the color gate into a known state for the duration of a
+// test, since the result otherwise depends on whether `go test` had a TTY.
+func withColors(t *testing.T, on bool) {
+	t.Helper()
+	was := cliutil.ColorsEnabled()
+	t.Cleanup(func() {
+		if was {
+			cliutil.EnableColors()
+		} else {
+			cliutil.DisableColors()
+		}
+	})
+	if on {
+		cliutil.EnableColors()
+	} else {
+		cliutil.DisableColors()
+	}
+}
+
+func bulkResult(repos ...repository.RepositoryStatusResult) *repository.BulkStatusResult {
+	return &repository.BulkStatusResult{
+		TotalScanned:   len(repos),
+		TotalProcessed: len(repos),
+		Duration:       120 * time.Millisecond,
+		Repositories:   repos,
+	}
+}
+
+// TestRenderInfoCompact_ColumnsAlignWithColorsOn is the regression guard for
+// the bug this layout is built to avoid: padding computed on a string that
+// already contains ANSI escapes is short by the length of those escapes, and
+// the damage is invisible in a non-TTY test run because the gate blanks them.
+// Alignment must therefore be asserted with colors explicitly ON.
+func TestRenderInfoCompact_ColumnsAlignWithColorsOn(t *testing.T) {
+	withColors(t, true)
+
+	result := bulkResult(
+		repository.RepositoryStatusResult{
+			Path: "/w/alpha", Branch: "feature/very-long-branch-name",
+			Upstream:     "origin/feature/very-long-branch-name",
+			CommitsAhead: 3, CommitsBehind: 1,
+			StagedFiles: 2, UnstagedFiles: 1, UntrackedFiles: 4,
+			RemoteURL: "git@github.com:Acme/alpha.git",
+		},
+		repository.RepositoryStatusResult{
+			Path: "/w/b", Branch: "main", Upstream: "origin/main",
+			RemoteURL: "git@github.com:Acme/b.git",
+		},
+	)
+	enr := map[string]infoEnrichment{
+		"/w/alpha": {Base: repository.BaseBranchInfo{Name: "main", Source: "config.defaultBranch[0]", Ahead: 3, Behind: 7}, LinkedWorktrees: 2},
+		"/w/b":     {Base: repository.BaseBranchInfo{Name: "main", Source: "config.defaultBranch[0]"}},
+	}
+
+	var buf bytes.Buffer
+	renderInfoCompact(&buf, result, enr, false)
+	out := buf.String()
+
+	if !strings.Contains(out, "\x1b[") {
+		t.Fatal("expected ANSI escapes with colors enabled; the test is not exercising the padding bug")
+	}
+
+	// Every table line must place the BRANCH column at the same visual offset.
+	var tableLines []string
+	for _, line := range strings.Split(stripANSI(out), "\n") {
+		if strings.Contains(line, "REPOSITORY") || strings.Contains(line, "alpha") || strings.Contains(line, "  b ") {
+			tableLines = append(tableLines, line)
+		}
+	}
+	if len(tableLines) < 2 {
+		t.Fatalf("expected header plus data lines, got %d:\n%s", len(tableLines), stripANSI(out))
+	}
+
+	want := strings.Index(tableLines[0], "BRANCH")
+	for _, line := range tableLines[1:] {
+		// The repository name column is fixed-width, so the character after it
+		// must land on the same offset the header's BRANCH title starts at.
+		if len(line) <= want || line[want-1] != ' ' {
+			t.Errorf("column misaligned at offset %d in %q", want, line)
+		}
+	}
+}
+
+// TestRenderInfoCompact_DropsAllEmptyColumns covers the compression rule: a
+// column no repository has anything to say in must not occupy its header width.
+func TestRenderInfoCompact_DropsAllEmptyColumns(t *testing.T) {
+	withColors(t, false)
+
+	result := bulkResult(repository.RepositoryStatusResult{
+		Path: "/w/clean", Branch: "main", Upstream: "origin/main",
+		RemoteURL: "git@github.com:Acme/clean.git",
+	})
+	enr := map[string]infoEnrichment{
+		"/w/clean": {Base: repository.BaseBranchInfo{Name: "main", Source: "heuristic"}},
+	}
+
+	var buf bytes.Buffer
+	renderInfoCompact(&buf, result, enr, false)
+	out := buf.String()
+
+	for _, dropped := range []string{"UPSTREAM", "DIRTY", "WT", "REMOTE"} {
+		if strings.Contains(out, dropped) {
+			t.Errorf("column %q should be dropped when every cell is empty:\n%s", dropped, out)
+		}
+	}
+	if !strings.Contains(out, "REPOSITORY") || !strings.Contains(out, "BRANCH") {
+		t.Errorf("REPOSITORY and BRANCH must always survive:\n%s", out)
+	}
+}
+
+// TestRenderInfoCompact_BaseNameHoistedWhenUniform verifies the base branch is
+// named once in the header instead of once per row.
+func TestRenderInfoCompact_BaseNameHoistedWhenUniform(t *testing.T) {
+	withColors(t, false)
+
+	result := bulkResult(
+		repository.RepositoryStatusResult{Path: "/w/a", Branch: "feat/x", Upstream: "origin/feat/x"},
+		repository.RepositoryStatusResult{Path: "/w/b", Branch: "feat/y", Upstream: "origin/feat/y"},
+	)
+	enr := map[string]infoEnrichment{
+		"/w/a": {Base: repository.BaseBranchInfo{Name: "master", Ahead: 1}},
+		"/w/b": {Base: repository.BaseBranchInfo{Name: "master", Behind: 2}},
+	}
+
+	var buf bytes.Buffer
+	renderInfoCompact(&buf, result, enr, false)
+	out := buf.String()
+
+	if !strings.Contains(out, "BASE(master)") {
+		t.Errorf("uniform base should be hoisted into the header:\n%s", out)
+	}
+	if n := strings.Count(out, "master"); n != 1 {
+		t.Errorf("base name should appear exactly once (in the header), got %d:\n%s", n, out)
+	}
+}
+
+// TestBaseCell_SilentOnBaseBranch covers the case that dominated the first
+// draft's output: sitting on the base branch printed its name on every row to
+// report a divergence that cannot be anything but zero.
+func TestBaseCell_SilentOnBaseBranch(t *testing.T) {
+	withColors(t, false)
+
+	enr := infoEnrichment{Base: repository.BaseBranchInfo{Name: "master", Source: "heuristic"}}
+	if got := baseCell("master", enr); got.text != "" {
+		t.Errorf("base cell on the base branch = %q, want empty", got.text)
+	}
+	if got := baseCell("feat/x", enr); got.text != "master" {
+		t.Errorf("base cell off the base branch = %q, want master", got.text)
+	}
+	if got := baseCell("feat/x", infoEnrichment{}); got.text != "no base" {
+		t.Errorf("missing base = %q, want \"no base\"", got.text)
+	}
+}
+
+// TestDivergenceCell_DistinguishesInSyncFromNoUpstream is why Upstream was
+// added to RepositoryStatusResult: both states produce zero ahead/behind, but
+// only one of them is fine.
+func TestDivergenceCell_DistinguishesInSyncFromNoUpstream(t *testing.T) {
+	withColors(t, false)
+
+	if got := divergenceCell(0, 0, false); got.text != "" {
+		t.Errorf("in sync = %q, want empty", got.text)
+	}
+	if got := divergenceCell(0, 0, true); got.text != "no remote" {
+		t.Errorf("no upstream = %q, want \"no remote\"", got.text)
+	}
+	if got := divergenceCell(2, 3, false); got.text != "↑2 ↓3" {
+		t.Errorf("diverged = %q, want \"↑2 ↓3\"", got.text)
+	}
+}
+
+func TestRemoteOwner(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"git@github.com:Gizzahub/gzh-cli.git", "github.com/Gizzahub"},
+		{"https://github.com/Gizzahub/gzh-cli.git", "github.com/Gizzahub"},
+		{"https://user@gitlab.com/team/proj", "gitlab.com/team"},
+		{"ssh://git@gitlab.polypia.net:2224/devbox/gzh-cli-devbox.git", "gitlab.polypia.net:2224/devbox"},
+		{"", ""},
+		{"not-a-url", ""},
+	}
+	for _, tc := range cases {
+		if got := remoteOwner(tc.in); got != tc.want {
+			t.Errorf("remoteOwner(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestMajorityRemoteOwner_CaseInsensitive covers the workspace that actually
+// motivated it: the same GitHub account spelled two ways must not read as two
+// different remotes.
+func TestMajorityRemoteOwner_CaseInsensitive(t *testing.T) {
+	owner, count := majorityRemoteOwner([]repository.RepositoryStatusResult{
+		{RemoteURL: "git@github.com:Gizzahub/a.git"},
+		{RemoteURL: "git@github.com:Gizzahub/b.git"},
+		{RemoteURL: "git@github.com:gizzahub/c.git"},
+		{RemoteURL: "git@gitlab.com:other/d.git"},
+	})
+	if count != 3 {
+		t.Errorf("count = %d, want 3 (case-insensitive grouping)", count)
+	}
+	if owner != "Gizzahub" && owner != "github.com/Gizzahub" {
+		t.Errorf("owner = %q, want the dominant spelling github.com/Gizzahub", owner)
+	}
+	if !sameOwner("github.com/gizzahub", "github.com/Gizzahub") {
+		t.Error("sameOwner must compare case-insensitively")
+	}
+}
+
+func TestElideMiddle(t *testing.T) {
+	if got := elideMiddle("short", 28); got != "short" {
+		t.Errorf("short name should pass through, got %q", got)
+	}
+	long := "feature/some-extremely-long-branch-name-here"
+	got := elideMiddle(long, 20)
+	if len([]rune(got)) != 20 {
+		t.Errorf("elided length = %d, want 20 (%q)", len([]rune(got)), got)
+	}
+	// Both ends carry meaning, so both must survive.
+	if !strings.HasPrefix(got, "feature/") || !strings.HasSuffix(got, "here") {
+		t.Errorf("elision dropped a distinguishing end: %q", got)
+	}
+}
+
+// TestInfoMarker_BlockedOutranksAttention verifies the classification order: a
+// repository mid-rebase cannot be acted on and must not read like one that
+// merely has edits.
+func TestInfoMarker_BlockedOutranksAttention(t *testing.T) {
+	dirty := &repository.RepositoryStatusResult{UnstagedFiles: 3}
+	if got := infoMarker(dirty, infoEnrichment{}); got != markerAttn {
+		t.Errorf("dirty marker = %q, want %q", got, markerAttn)
+	}
+
+	rebasing := &repository.RepositoryStatusResult{UnstagedFiles: 3, RebaseInProgress: true}
+	if got := infoMarker(rebasing, infoEnrichment{}); got != markerBlocked {
+		t.Errorf("rebasing marker = %q, want %q", got, markerBlocked)
+	}
+
+	clean := &repository.RepositoryStatusResult{Upstream: "origin/main"}
+	if got := infoMarker(clean, infoEnrichment{}); got != markerNone {
+		t.Errorf("clean marker = %q, want blank", got)
+	}
+}
+
+// TestInfoMarker_AgreesWithDirtyCell pins the invariant the first draft broke:
+// the marker read TrackedChangedFiles while the DIRTY column read the
+// staged/unstaged counts, so a repository could print "~3" with no marker
+// beside it. Each field is exercised on its own because that is exactly the
+// case a shared aggregate hides.
+func TestInfoMarker_AgreesWithDirtyCell(t *testing.T) {
+	withColors(t, false)
+
+	cases := []struct {
+		name string
+		repo repository.RepositoryStatusResult
+	}{
+		{"staged only", repository.RepositoryStatusResult{StagedFiles: 1}},
+		{"unstaged only", repository.RepositoryStatusResult{UnstagedFiles: 1}},
+		{"untracked only", repository.RepositoryStatusResult{UntrackedFiles: 1}},
+		{"stash only", repository.RepositoryStatusResult{StashCount: 1}},
+		{"aggregate only", repository.RepositoryStatusResult{TrackedChangedFiles: 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := tc.repo
+			repo.Upstream = "origin/main"
+			marker := infoMarker(&repo, infoEnrichment{})
+			if marker == markerNone {
+				t.Errorf("no attention marker for a dirty tree (%s)", tc.name)
+			}
+			// The aggregate field has no dedicated DIRTY token, so only the
+			// per-category cases must also render something.
+			if tc.name != "aggregate only" && dirtyCell(&repo).text == "" {
+				t.Errorf("marker set but DIRTY column empty (%s)", tc.name)
+			}
+		})
+	}
+}
+
+// TestOtherBranchesCell_WorktreeBackedFirst verifies that branches with a
+// checkout behind them are named before stale ones and flagged.
+func TestOtherBranchesCell_WorktreeBackedFirst(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Branch:        "master",
+		LocalBranches: []string{"master", "aaa-stale", "bbb-stale", "ccc-stale", "zzz-active"},
+	}
+	enr := infoEnrichment{
+		Base:             repository.BaseBranchInfo{Name: "master"},
+		WorktreeBranches: []string{"zzz-active"},
+	}
+
+	got := otherBranchesCell(repo, enr).text
+	if !strings.HasPrefix(got, "zzz-active*") {
+		t.Errorf("worktree-backed branch should lead and be flagged, got %q", got)
+	}
+	if !strings.Contains(got, "+1") {
+		t.Errorf("overflow beyond %d shown branches should collapse to +N, got %q", maxOtherShown, got)
+	}
+	if strings.Contains(got, "master") {
+		t.Errorf("current/base branch must not repeat in OTHER, got %q", got)
+	}
+}
+
+func TestRenderInfoCompact_NoRepositories(t *testing.T) {
+	withColors(t, false)
+	var buf bytes.Buffer
+	renderInfoCompact(&buf, bulkResult(), nil, false)
+	if !strings.Contains(buf.String(), "No repositories found.") {
+		t.Errorf("unexpected empty-scan output: %q", buf.String())
+	}
+}

@@ -46,6 +46,109 @@ func commitFile(t *testing.T, dir, name string) {
 	runGit(t, dir, "commit", "-m", "add "+name)
 }
 
+// mergedFixture builds a repo on master holding three branches: one merged
+// into master, one with unique commits, and one that is merged but happens to
+// be checked out.
+func mergedFixture(t *testing.T) string {
+	t.Helper()
+	dir := testutil.TempGitRepoWithCommit(t)
+	runGit(t, dir, "branch", "-M", "master")
+
+	runGit(t, dir, "checkout", "-b", "feat/landed")
+	commitFile(t, dir, "landed.txt")
+
+	runGit(t, dir, "checkout", "-b", "feat/also-landed", "master")
+	commitFile(t, dir, "also.txt")
+
+	runGit(t, dir, "checkout", "-b", "feat/open", "master")
+	commitFile(t, dir, "open.txt")
+
+	runGit(t, dir, "checkout", "master")
+	runGit(t, dir, "merge", "--no-ff", "--no-edit", "feat/landed")
+	runGit(t, dir, "merge", "--no-ff", "--no-edit", "feat/also-landed")
+
+	return dir
+}
+
+// TestMergedBranches_AncestryDecides verifies that only branches whose tips are
+// reachable from the base are reported — the merged ones — and that the base
+// itself is never included.
+func TestMergedBranches_AncestryDecides(t *testing.T) {
+	dir := mergedFixture(t)
+
+	client := NewClient()
+	repo, err := client.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	got, err := client.MergedBranches(context.Background(), repo, "master")
+	if err != nil {
+		t.Fatalf("MergedBranches: %v", err)
+	}
+
+	want := map[string]bool{"feat/landed": true, "feat/also-landed": true}
+	if len(got) != len(want) {
+		t.Fatalf("MergedBranches = %v, want %v", got, want)
+	}
+	for _, name := range got {
+		if !want[name] {
+			t.Errorf("MergedBranches returned %q, which still has unique commits", name)
+		}
+	}
+}
+
+// TestMergedBranches_ExcludesCurrentBranch pins the exclusion that keeps the
+// remediation runnable: git refuses to delete the branch you are standing on,
+// so reporting it would emit a command that cannot succeed.
+func TestMergedBranches_ExcludesCurrentBranch(t *testing.T) {
+	dir := mergedFixture(t)
+	runGit(t, dir, "checkout", "feat/landed")
+
+	client := NewClient()
+	repo, err := client.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	got, err := client.MergedBranches(context.Background(), repo, "master")
+	if err != nil {
+		t.Fatalf("MergedBranches: %v", err)
+	}
+	for _, name := range got {
+		if name == "feat/landed" {
+			t.Errorf("MergedBranches included the checked-out branch %q", name)
+		}
+	}
+	if len(got) != 1 || got[0] != "feat/also-landed" {
+		t.Errorf("MergedBranches = %v, want [feat/also-landed]", got)
+	}
+}
+
+// TestMergedBranches_NoBase verifies that an unresolved base yields nothing
+// rather than an error: "no base" is a reportable state, not a failure.
+func TestMergedBranches_NoBase(t *testing.T) {
+	dir := mergedFixture(t)
+
+	client := NewClient()
+	repo, err := client.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	got, err := client.MergedBranches(context.Background(), repo, "")
+	if err != nil {
+		t.Errorf("MergedBranches with empty base returned error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("MergedBranches = %v, want empty", got)
+	}
+
+	if _, err := client.MergedBranches(context.Background(), nil, "master"); err == nil {
+		t.Error("MergedBranches(nil) returned no error")
+	}
+}
+
 // TestResolveBase_ConfigCandidateWins verifies that the first existing
 // candidate in the configured order wins, and its index is reflected in Source.
 func TestResolveBase_ConfigCandidateWins(t *testing.T) {

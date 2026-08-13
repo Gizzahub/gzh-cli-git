@@ -110,6 +110,52 @@ func (c *client) ResolveBase(ctx context.Context, repo *Repository, candidates [
 	return info, nil
 }
 
+// MergedBranches returns the local branches whose tips are ancestors of base,
+// excluding base itself and the currently checked-out branch.
+//
+// Ancestry is the only evidence that settles this. A branch can look finished
+// by every other signal — no unique commits in the diff, a name matching a
+// closed ticket, zero ahead in some other comparison — and still hold a commit
+// the base never took. `merge-base --is-ancestor` answers the actual question:
+// is every commit on this branch already reachable from base. Nothing else is
+// safe to delete on.
+//
+// The current branch is excluded because deleting it is not a thing git will
+// do, so reporting it would produce a remediation that cannot run.
+func (c *client) MergedBranches(ctx context.Context, repo *Repository, base string) ([]string, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("repository cannot be nil")
+	}
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return nil, nil
+	}
+
+	current, err := c.executor.RunOutput(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read current branch: %w", err)
+	}
+	currentBranch := strings.TrimSpace(current)
+
+	output, err := c.executor.RunOutput(ctx, repo.Path, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list local branches: %w", err)
+	}
+
+	var merged []string
+	for _, line := range strings.Split(output, "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" || name == base || name == currentBranch {
+			continue
+		}
+		result, _ := c.executor.Run(ctx, repo.Path, "merge-base", "--is-ancestor", name, base) //nolint:errcheck // exit 1 means "not an ancestor", which is an answer
+		if result.ExitCode == 0 {
+			merged = append(merged, name)
+		}
+	}
+	return merged, nil
+}
+
 // firstExistingBranch returns the first candidate that resolves as a local ref
 // and its index within candidates. An empty name means nothing matched; the
 // caller decides whether to fall back and how to label the source.

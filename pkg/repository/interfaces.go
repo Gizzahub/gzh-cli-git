@@ -121,6 +121,11 @@ type Client interface {
 	// defaultBranch first, then a heuristic fallback) and reports how HEAD
 	// diverges from it. See BaseBranchInfo for the policy and the source label.
 	ResolveBase(ctx context.Context, repo *Repository, candidates []string) (BaseBranchInfo, error)
+
+	// MergedBranches lists local branches whose tips are already ancestors of
+	// base — work that has landed and whose branch is now reclaimable. Base
+	// itself and the current branch are excluded.
+	MergedBranches(ctx context.Context, repo *Repository, base string) ([]string, error)
 }
 
 // Logger provides a logging interface for library consumers.

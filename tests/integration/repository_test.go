@@ -54,10 +54,10 @@ func TestInfoCommand(t *testing.T) {
 	t.Run("basic repository info", func(t *testing.T) {
 		output := repo.RunGzhGitSuccess("info")
 
-		// Info command now uses bulk-first format with emoji headers
-		AssertContains(t, output, "📦")               // Repository indicator
-		AssertContains(t, output, "Current Branch:") // Branch info
-		AssertContains(t, output, "Status:")         // Status field
+		// The default view is one line per repository under a column header.
+		AssertContains(t, output, "REPOSITORY")
+		AssertContains(t, output, "BRANCH")
+		AssertContains(t, output, "master")
 	})
 
 	t.Run("with multiple branches", func(t *testing.T) {
@@ -66,17 +66,41 @@ func TestInfoCommand(t *testing.T) {
 
 		output := repo.RunGzhGitSuccess("info")
 
-		AssertContains(t, output, "📦")          // Repository indicator
-		AssertContains(t, output, "Branches (") // Shows branch count
+		// Branches other than the current one are summarized in a single column
+		// rather than listed per repository block.
+		AssertContains(t, output, "OTHER BRANCHES")
+		AssertContains(t, output, "feature-1")
+		AssertContains(t, output, "feature-2")
 	})
 
-	t.Run("verbose output", func(t *testing.T) {
-		output := repo.RunGzhGitSuccess("info", "--verbose")
+	t.Run("detail view", func(t *testing.T) {
+		output := repo.RunGzhGitSuccess("info", "--full")
+
+		AssertContains(t, output, "📦")               // Repository indicator
+		AssertContains(t, output, "Current Branch:") // Branch info
+		AssertContains(t, output, "Status:")         // Status field
+		AssertContains(t, output, "Base:")           // Integration branch
+	})
+
+	t.Run("verbose detail output", func(t *testing.T) {
+		output := repo.RunGzhGitSuccess("info", "--full", "--verbose")
 
 		AssertContains(t, output, "📦")               // Repository indicator
 		AssertContains(t, output, "Current Branch:") // Branch info
 		// Verbose mode should show more details like Author
 		AssertContains(t, output, "Author:")
+	})
+
+	t.Run("audit emits a machine-readable document", func(t *testing.T) {
+		// This fixture tracks no upstream, so the audit always has a finding and
+		// the command exits non-zero by the diagnostic convention. The document
+		// is still emitted in full — that is what distinguishes "findings" from
+		// "the tool failed", and the assertions below check exactly that.
+		output := repo.RunGzhGitExpectError("info", "--audit")
+
+		AssertContains(t, output, `"schema": "gz-git.info.audit/v1"`)
+		AssertContains(t, output, `"audit_complete": true`)
+		AssertContains(t, output, "NO_UPSTREAM")
 	})
 }
 

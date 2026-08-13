@@ -18,6 +18,7 @@ var (
 	infoFlags BulkCommandFlags
 	itemLimit int
 	infoFull  bool
+	infoAudit bool
 )
 
 // infoCmd represents the info command
@@ -41,7 +42,11 @@ By default:
   gz-git info /path/to/repo
 
   # Verbose output with more details
-  gz-git info --verbose`,
+  gz-git info --verbose
+
+  # Machine-readable branch audit for an agent to act on
+  gz-git info --audit
+  gz-git info --audit | jq '.repositories[] | select(.audit_complete | not)'`,
 	RunE: runInfo,
 }
 
@@ -55,15 +60,21 @@ func init() {
 	// Add info-specific flags
 	infoCmd.Flags().IntVar(&itemLimit, "limit", 10, "max items to show in lists (branches, remotes)")
 	infoCmd.Flags().BoolVar(&infoFull, "full", false, "show the per-repository detail block instead of the one-line table")
+	infoCmd.Flags().BoolVar(&infoAudit, "audit", false,
+		"emit a machine-readable branch audit (JSON) with typed findings and remediations")
 }
 
 func runInfo(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Load config with profile support
-	var baseCandidates []string
+	var (
+		baseCandidates   []string
+		autofixOverrides map[string]bool
+	)
 	effective, _ := LoadEffectiveConfig(cmd, nil)
 	if effective != nil {
+		autofixOverrides = effective.Audit.Autofix
 		if !cmd.Flags().Changed("parallel") && effective.Parallel > 0 {
 			infoFlags.Parallel = effective.Parallel
 		}
@@ -93,7 +104,9 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	// Create logger for verbose mode
 	logger := createBulkLogger(verbose)
 
-	if shouldShowProgress(infoFlags.Format, quiet) {
+	// The progress line goes to stdout, which in audit mode carries the JSON
+	// document; a caller piping it into a parser must not receive prose.
+	if !infoAudit && shouldShowProgress(infoFlags.Format, quiet) {
 		printScanningMessage(directory, infoFlags.Depth, infoFlags.Parallel, false)
 	}
 
@@ -115,8 +128,10 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scan failed: %w", err)
 	}
 
-	// Display results
-	if infoFlags.Format == "json" || infoFlags.Format == "llm" {
+	// Display results. --audit is checked before --format because it defines its
+	// own document (schema, findings, remediations); reusing the status JSON
+	// would emit the shape a caller did not ask for.
+	if !infoAudit && (infoFlags.Format == "json" || infoFlags.Format == "llm") {
 		displayInfoResultsStructured(result, infoFlags.Format)
 		return nil
 	}
@@ -126,8 +141,12 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	// every other bulk command shares.
 	enrichment := enrichInfoResults(
 		ctx, client, branch.NewWorktreeManager(),
-		result.Repositories, baseCandidates, infoFlags.Parallel,
+		result.Repositories, baseCandidates, infoFlags.Parallel, infoAudit,
 	)
+
+	if infoAudit {
+		return runInfoAudit(cmd.OutOrStdout(), result, enrichment, directory, autofixOverrides, time.Now())
+	}
 
 	if infoFull {
 		displayInfoResultsDetailed(result, enrichment)

@@ -128,6 +128,34 @@ func TestRenderInfoCompact_DropsAllEmptyColumns(t *testing.T) {
 	}
 }
 
+// TestRenderInfoCompact_NoRemoteStatedOnce is the table-level guard for the
+// duplication the cell tests describe: UPSTREAM and REMOTE both used to print
+// "no remote" on the same row, which spends two columns saying one thing and
+// invites the reader to look for a second problem that is not there.
+func TestRenderInfoCompact_NoRemoteStatedOnce(t *testing.T) {
+	withColors(t, false)
+
+	result := bulkResult(repository.RepositoryStatusResult{
+		Path: "/w/local-only", Branch: "master",
+		// No Upstream and no RemoteURL: the state a freshly `git init`ed
+		// repository is in.
+	})
+	enr := map[string]infoEnrichment{
+		"/w/local-only": {Base: repository.BaseBranchInfo{Name: "master", Source: "heuristic"}},
+	}
+
+	var buf bytes.Buffer
+	renderInfoCompact(&buf, result, enr, false)
+	out := buf.String()
+
+	if n := strings.Count(out, "no remote"); n != 1 {
+		t.Errorf("%q appears %d times, want exactly 1:\n%s", "no remote", n, out)
+	}
+	if strings.Contains(out, "UPSTREAM") {
+		t.Errorf("UPSTREAM column survived with nothing to say:\n%s", out)
+	}
+}
+
 // TestRenderInfoCompact_BaseNameHoistedWhenUniform verifies the base branch is
 // named once in the header instead of once per row.
 func TestRenderInfoCompact_BaseNameHoistedWhenUniform(t *testing.T) {
@@ -178,14 +206,26 @@ func TestBaseCell_SilentOnBaseBranch(t *testing.T) {
 func TestDivergenceCell_DistinguishesInSyncFromNoUpstream(t *testing.T) {
 	withColors(t, false)
 
-	if got := divergenceCell(0, 0, false); got.text != "" {
+	if got := divergenceCell(0, 0, false, true); got.text != "" {
 		t.Errorf("in sync = %q, want empty", got.text)
 	}
-	if got := divergenceCell(0, 0, true); got.text != "no remote" {
-		t.Errorf("no upstream = %q, want \"no remote\"", got.text)
+	if got := divergenceCell(0, 0, true, true); got.text != "no upstream" {
+		t.Errorf("untracked branch = %q, want \"no upstream\"", got.text)
 	}
-	if got := divergenceCell(2, 3, false); got.text != "↑2 ↓3" {
+	if got := divergenceCell(2, 3, false, true); got.text != "↑2 ↓3" {
 		t.Errorf("diverged = %q, want \"↑2 ↓3\"", got.text)
+	}
+}
+
+// TestDivergenceCell_SilentWithoutARemote keeps the two columns from printing
+// the same words for two different facts. A repository with no remote has
+// nothing to track and nothing to push to; REMOTE says "no remote" once, and
+// UPSTREAM saying it again would double the noise without adding a fact.
+func TestDivergenceCell_SilentWithoutARemote(t *testing.T) {
+	withColors(t, false)
+
+	if got := divergenceCell(0, 0, true, false); got.text != "" {
+		t.Errorf("no remote at all = %q, want empty (REMOTE column carries it)", got.text)
 	}
 }
 

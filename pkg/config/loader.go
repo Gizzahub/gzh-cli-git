@@ -231,6 +231,9 @@ func (l *ConfigLoader) applyProfile(cfg *EffectiveConfig) {
 	if prof.Push != nil {
 		l.applyPushConfig(&cfg.Push, prof.Push)
 	}
+	if prof.Audit != nil {
+		l.applyAuditConfig(&cfg.Audit, prof.Audit)
+	}
 }
 
 // applyProjectConfig applies project configuration.
@@ -256,6 +259,9 @@ func (l *ConfigLoader) applyProjectConfig(cfg *EffectiveConfig) {
 	}
 	if proj.Push != nil {
 		l.applyPushConfig(&cfg.Push, proj.Push)
+	}
+	if proj.Audit != nil {
+		l.applyAuditConfig(&cfg.Audit, proj.Audit)
 	}
 }
 
@@ -360,6 +366,24 @@ func (l *ConfigLoader) applyBranchConfig(dst, src *BranchConfig) {
 		dst.ProtectedBranches = src.ProtectedBranches
 	}
 	l.applyBranchNaming(dst, src.Naming)
+}
+
+// applyAuditConfig merges audit configuration.
+//
+// Autofix merges per key rather than being replaced wholesale, following the
+// same reasoning as branch naming templates: the codes are independent, so a
+// project that pins one code should not silently reset the profile's opinion on
+// the other fifteen back to their built-in defaults.
+func (l *ConfigLoader) applyAuditConfig(dst, src *AuditConfig) {
+	if src == nil || len(src.Autofix) == 0 {
+		return
+	}
+	if dst.Autofix == nil {
+		dst.Autofix = make(map[string]bool, len(src.Autofix))
+	}
+	for code, allowed := range src.Autofix {
+		dst.Autofix[code] = allowed
+	}
 }
 
 // applyBranchNaming merges naming templates one kind at a time. Unlike the push

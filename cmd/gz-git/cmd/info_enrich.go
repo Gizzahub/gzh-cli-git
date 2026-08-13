@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"path/filepath"
 
 	"golang.org/x/sync/errgroup"
 
@@ -36,6 +37,23 @@ type infoEnrichment struct {
 	// no entry, so this can be shorter than LinkedWorktrees.
 	WorktreeBranches []string
 
+	// Worktrees pairs each linked worktree's path with the branch it holds.
+	// The compact table only needs the branch names above; the audit needs the
+	// paths too, because reclaiming a worktree is addressed by path.
+	Worktrees []repository.AuditWorktree
+
+	// PrunableWorktrees are paths git still records but whose directories are
+	// gone. They are kept out of LinkedWorktrees because they hold no work:
+	// counting a stale record as a live worktree would overstate how much is
+	// checked out elsewhere, which is exactly the number the WT column exists
+	// to answer.
+	PrunableWorktrees []string
+
+	// MergedBranches are local branches already contained in Base, collected
+	// only in audit mode — it costs one git process per local branch, which the
+	// default one-line view has no use for.
+	MergedBranches []string
+
 	// Err records why enrichment was incomplete, or nil. It is reported in the
 	// detail view rather than aborting the scan: failing to resolve a base
 	// branch must not hide the repository's status.
@@ -56,6 +74,7 @@ func enrichInfoResults(
 	repos []repository.RepositoryStatusResult,
 	baseCandidates []string,
 	parallel int,
+	deep bool,
 ) map[string]infoEnrichment {
 	enriched := make([]infoEnrichment, len(repos))
 
@@ -69,7 +88,7 @@ func enrichInfoResults(
 	for i := range repos {
 		i := i
 		g.Go(func() error {
-			enriched[i] = enrichOne(gctx, client, wtMgr, repos[i], baseCandidates)
+			enriched[i] = enrichOne(gctx, client, wtMgr, repos[i], baseCandidates, deep)
 			return nil // never abort siblings; the error lives in the entry
 		})
 	}
@@ -85,13 +104,18 @@ func enrichInfoResults(
 }
 
 // enrichOne collects the extra facts for a single repository. It opens the
-// repository once and reuses that handle for both probes.
+// repository once and reuses that handle for every probe.
+//
+// deep adds the audit-only probes. They are opt-in because their cost scales
+// with the repository's branch count rather than being constant, and the
+// one-line view does not display what they produce.
 func enrichOne(
 	ctx context.Context,
 	client repository.Client,
 	wtMgr branch.WorktreeManager,
 	status repository.RepositoryStatusResult,
 	baseCandidates []string,
+	deep bool,
 ) infoEnrichment {
 	var out infoEnrichment
 	out.Base.Source = "none"
@@ -108,6 +132,16 @@ func enrichOne(
 		out.Base = base
 	}
 
+	if deep && out.Base.Name != "" {
+		if merged, err := client.MergedBranches(ctx, repo, out.Base.Name); err != nil {
+			if out.Err == nil {
+				out.Err = err
+			}
+		} else {
+			out.MergedBranches = merged
+		}
+	}
+
 	worktrees, err := wtMgr.List(ctx, repo)
 	if err != nil {
 		// Keep whatever base resolution produced; record the first failure only
@@ -118,15 +152,41 @@ func enrichOne(
 		return out
 	}
 
+	// Worktrees are reported relative to the repository git considers main, so
+	// scanning a linked worktree directly makes it list itself. Excluding the
+	// scanned path keeps "work parked elsewhere" meaning elsewhere; this
+	// repository's own branch and status already describe what is here.
+	self := resolvePath(status.Path)
+
 	for _, wt := range worktrees {
-		if wt == nil || wt.IsMain {
+		if wt == nil || wt.IsMain || resolvePath(wt.Path) == self {
+			continue
+		}
+		if wt.IsPrunable {
+			out.PrunableWorktrees = append(out.PrunableWorktrees, wt.Path)
 			continue
 		}
 		out.LinkedWorktrees++
+		out.Worktrees = append(out.Worktrees, repository.AuditWorktree{
+			Path:   wt.Path,
+			Branch: wt.Branch,
+		})
 		if wt.Branch != "" {
 			out.WorktreeBranches = append(out.WorktreeBranches, wt.Branch)
 		}
 	}
 
 	return out
+}
+
+// resolvePath canonicalizes a path for identity comparison. Symlinks are
+// resolved because the scanner and git can name the same directory differently
+// (/tmp vs /private/tmp on macOS being the common case); when resolution fails
+// — the path is gone, as with a prunable worktree — the cleaned path is still
+// the best available answer.
+func resolvePath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
 }

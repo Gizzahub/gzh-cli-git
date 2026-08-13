@@ -121,6 +121,7 @@ type Profile struct {
 	Fetch  *FetchConfig  `yaml:"fetch,omitempty"`
 	Pull   *PullConfig   `yaml:"pull,omitempty"`
 	Push   *PushConfig   `yaml:"push,omitempty"`
+	Audit  *AuditConfig  `yaml:"audit,omitempty"`
 }
 
 // SyncConfig holds sync command defaults.
@@ -417,6 +418,30 @@ type PushConfig struct {
 	Policy *repository.PushPolicy `yaml:"policy,omitempty"`
 }
 
+// AuditConfig holds `info --audit` defaults.
+//
+// Example:
+//
+//	audit:
+//	  autofix:
+//	    BRANCH_BEHIND_BASE: false        # this project rebases by hand
+//	    MERGED_BRANCH_NOT_RECLAIMED: true
+type AuditConfig struct {
+	// Autofix overrides repository.DefaultAutofixPolicy per finding code. Keys
+	// are finding codes (BRANCH_BEHIND_BASE, …); a code that is absent keeps its
+	// built-in default, so a project states only where it disagrees.
+	//
+	// There are no tier names to choose from. A name like "aggressive" would
+	// have to be decoded into behavior before anyone could trust it, and it
+	// would force every code added later into a bucket someone else picked. A
+	// per-code boolean is the same information without the indirection.
+	//
+	// Enabling a code here still cannot make an irreversible remediation
+	// automatic: reversibility is checked after policy, so configuration widens
+	// what is permitted but never what is safe.
+	Autofix map[string]bool `yaml:"autofix,omitempty"`
+}
+
 // GlobalConfig represents ~/.config/gz-git/config.yaml
 //
 // Example global config file:
@@ -479,6 +504,7 @@ type ProjectConfig struct {
 	Fetch  *FetchConfig  `yaml:"fetch,omitempty"`
 	Pull   *PullConfig   `yaml:"pull,omitempty"`
 	Push   *PushConfig   `yaml:"push,omitempty"`
+	Audit  *AuditConfig  `yaml:"audit,omitempty"`
 
 	// Metadata is optional project information
 	Metadata *ProjectMetadata `yaml:"metadata,omitempty"`
@@ -864,6 +890,7 @@ type EffectiveConfig struct {
 	Fetch  FetchConfig
 	Pull   PullConfig
 	Push   PushConfig
+	Audit  AuditConfig
 
 	// Metadata for debugging
 	Sources map[string]string // key -> source (e.g., "provider" -> "profile:work")

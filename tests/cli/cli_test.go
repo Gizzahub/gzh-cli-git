@@ -2,6 +2,9 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,6 +85,11 @@ func TestCLIStatus(t *testing.T) {
 }
 
 // TestCLIInfo tests the info command on current repository.
+//
+// The default view is a one-line-per-repository table, so the assertions are on
+// the columns that are always present. Columns whose every cell is empty are
+// dropped by design, which is why UPSTREAM, WT and the rest are not asserted
+// here: their absence is a correct output for a workspace in a normal state.
 func TestCLIInfo(t *testing.T) {
 	// Change to repository root
 	repoRoot := filepath.Join("..", "..")
@@ -92,17 +100,75 @@ func TestCLIInfo(t *testing.T) {
 	}
 
 	outputStr := string(output)
-	// Info command uses bulk-first format with emoji headers
 	expectedStrings := []string{
-		"📦",               // Repository indicator
-		"Current Branch:", // Branch info
-		"Remotes:",        // Remote info section
+		"REPOSITORY", // table header
+		"BRANCH",     // always populated: every repo has a branch or is detached
+		"repositories",
 	}
 
 	for _, expected := range expectedStrings {
 		if !strings.Contains(outputStr, expected) {
 			t.Errorf("Expected info output to contain '%s', got: %s", expected, outputStr)
 		}
+	}
+}
+
+// TestCLIInfoFull tests the per-repository detail view behind --full, which is
+// where the prose fields the compact table deliberately omits still live.
+func TestCLIInfoFull(t *testing.T) {
+	repoRoot := filepath.Join("..", "..")
+	cmd := exec.Command(getBinaryPath(), "info", "--full", repoRoot) //nolint:noctx // test helper, no context needed
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to run info --full command: %v\nOutput: %s", err, output)
+	}
+
+	outputStr := string(output)
+	expectedStrings := []string{
+		"📦",               // Repository indicator
+		"Current Branch:", // Branch info
+		"Base:",           // Integration branch and its divergence
+		"Remotes:",        // Remote info section
+	}
+
+	for _, expected := range expectedStrings {
+		if !strings.Contains(outputStr, expected) {
+			t.Errorf("Expected info --full output to contain '%s', got: %s", expected, outputStr)
+		}
+	}
+}
+
+// TestCLIInfoAudit tests that --audit emits a parseable document on stdout even
+// when it exits non-zero. A caller pipes stdout into a parser; findings are the
+// command's output, not a failure to produce it.
+func TestCLIInfoAudit(t *testing.T) {
+	repoRoot := filepath.Join("..", "..")
+	cmd := exec.Command(getBinaryPath(), "info", "--audit", repoRoot) //nolint:noctx // test helper, no context needed
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	// Exit 1 means findings were reported; only exit 2 is an execution failure.
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			t.Fatalf("info --audit failed: %v\nOutput: %s", err, stdout.String())
+		}
+	}
+
+	var doc struct {
+		Schema       string `json:"schema"`
+		Repositories []struct {
+			Name     string `json:"name"`
+			Complete bool   `json:"audit_complete"`
+		} `json:"repositories"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if doc.Schema != "gz-git.info.audit/v1" {
+		t.Errorf("schema = %q, want gz-git.info.audit/v1", doc.Schema)
+	}
+	if len(doc.Repositories) == 0 {
+		t.Error("audit reported no repositories")
 	}
 }
 

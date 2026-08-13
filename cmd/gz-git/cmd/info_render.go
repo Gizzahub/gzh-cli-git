@@ -14,14 +14,21 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
-// The compact view is built on one rule: normal states print nothing.
+// The table view is built on one rule: normal states carry no words.
 //
 // The previous layout spent the same twelve lines on a repository that was
 // clean and current as on one that was mid-rebase with three worktrees, so
 // scanning thirteen repositories meant reading 160 lines to find the two that
-// mattered. Here an in-sync column is blank, a clean tree is blank, and zero
-// worktrees is blank — whatever is left on the line is, by construction, the
-// thing worth looking at.
+// mattered. Here an in-sync column, a clean tree, and zero worktrees all say
+// nothing — whatever is left on the line is, by construction, the thing worth
+// looking at.
+//
+// Saying nothing is not the same as not being there, and the default view
+// keeps the difference visible: a normal cell prints cellNormal, so the column
+// stays in place and the reader can see that it was checked and had nothing to
+// report. --compact takes the further step of removing columns that came back
+// empty everywhere, which shortens the line at the cost of a header set that
+// changes between runs.
 const (
 	// markerWidth is the fixed width of the leading attention column. Emoji
 	// with Emoji_Presentation occupy two terminal cells, so the column is
@@ -32,6 +39,14 @@ const (
 	markerNone    = "  "
 	markerAttn    = "🔸" // dirty, diverged, or behind its base
 	markerBlocked = "🔻" // mid-rebase/merge, conflicts, or a scan error
+
+	// cellNormal stands in for a cell with nothing to report. It is drawn in
+	// gray so a row of them reads as background rather than as content, and it
+	// is one rune wide so it never widens a column past its real values. It is
+	// deliberately not the "·" the summary line separates its fields with —
+	// two different meanings sharing one glyph on adjacent lines is exactly the
+	// ambiguity this placeholder exists to remove.
+	cellNormal = "-"
 )
 
 // infoCell is one table cell: the plain text used for width arithmetic, plus
@@ -79,12 +94,14 @@ const (
 	colOther
 )
 
-// renderInfoCompact writes the one-line-per-repository table.
-func renderInfoCompact(
+// renderInfoTable writes the one-line-per-repository table. compact drops
+// columns that are empty for every repository instead of filling them in.
+func renderInfoTable(
 	w io.Writer,
 	result *repository.BulkStatusResult,
 	enrichment map[string]infoEnrichment,
 	useRelativePath bool,
+	compact bool,
 ) {
 	if len(result.Repositories) == 0 {
 		fmt.Fprintln(w, "No repositories found.")
@@ -107,7 +124,11 @@ func renderInfoCompact(
 	}
 
 	headers := hoistUniformBase(infoColumns, rows)
-	headers, rows = dropEmptyColumns(headers, rows)
+	if compact {
+		headers, rows = dropEmptyColumns(headers, rows)
+	} else {
+		fillNormalCells(rows)
+	}
 	widths := computeInfoWidths(headers, rows)
 
 	fmt.Fprintln(w)
@@ -130,11 +151,33 @@ func renderInfoCompact(
 	fmt.Fprintln(w)
 }
 
+// fillNormalCells replaces every empty cell with cellNormal so the reader can
+// tell "checked, nothing to report" from "this column is not here".
+//
+// It also does the work the header alone cannot: with eight columns and mostly
+// blanks, a lone value floating in whitespace has to be traced back up to its
+// header to be identified. A row of dots gives the eye a ruler, so the one cell
+// with words in it lands in a column the reader can name at a glance.
+func fillNormalCells(rows []infoRow) {
+	for i := range rows {
+		for c := range rows[i].cells {
+			if rows[i].cells[c].text == "" {
+				rows[i].cells[c] = infoCell{text: cellNormal, color: cliutil.ColorGray}
+			}
+		}
+	}
+}
+
 // dropEmptyColumns removes any column whose every cell is empty, header
 // included. An all-empty column still costs its header's width in horizontal
-// space while carrying no information — and under the "normal prints nothing"
+// space while carrying no information — and under the "normal says nothing"
 // rule, entire columns going empty is the expected case, not an edge case.
 // The trailing column is never dropped, so at least one column always remains.
+//
+// This runs only under --compact. It buys a shorter line by making the header
+// set depend on the data, which means two runs of the same command can print
+// different columns — worth it when the caller has asked for brevity, and
+// confusing when they have not.
 func dropEmptyColumns(headers []string, rows []infoRow) ([]string, []infoRow) {
 	keep := make([]int, 0, len(headers))
 	for c := range headers {

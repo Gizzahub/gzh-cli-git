@@ -73,7 +73,7 @@ func TestRenderInfoCompact_ColumnsAlignWithColorsOn(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	renderInfoCompact(&buf, result, enr, false)
+	renderInfoTable(&buf, result, enr, false, false)
 	out := buf.String()
 
 	if !strings.Contains(out, "\x1b[") {
@@ -101,10 +101,13 @@ func TestRenderInfoCompact_ColumnsAlignWithColorsOn(t *testing.T) {
 	}
 }
 
-// TestRenderInfoCompact_DropsAllEmptyColumns covers the compression rule: a
-// column no repository has anything to say in must not occupy its header width.
-func TestRenderInfoCompact_DropsAllEmptyColumns(t *testing.T) {
-	withColors(t, false)
+// cleanRepoTable renders the table for a single repository with nothing at all
+// to report, which is the case the two modes disagree about. It returns the
+// whole document plus that repository's row on its own: assertions about
+// placeholders have to be made against the row, because the summary line above
+// it is punctuation-rich and would answer a substring search for either mode.
+func cleanRepoTable(t *testing.T, compact bool) (out, row string) {
+	t.Helper()
 
 	result := bulkResult(repository.RepositoryStatusResult{
 		Path: "/w/clean", Branch: "main", Upstream: "origin/main",
@@ -115,9 +118,47 @@ func TestRenderInfoCompact_DropsAllEmptyColumns(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	renderInfoCompact(&buf, result, enr, false)
-	out := buf.String()
+	renderInfoTable(&buf, result, enr, false, compact)
+	out = buf.String()
 
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "clean ") {
+			return out, line
+		}
+	}
+	t.Fatalf("no row for the scanned repository:\n%s", out)
+	return out, ""
+}
+
+// TestRenderInfoTable_KeepsColumnsByDefault is the guard for the complaint that
+// produced this mode split: when every repository was clean the table printed
+// four columns, and a reader who wanted to know whether anything was behind its
+// base could not tell a silent BASE column from a BASE check that never ran.
+// The default answers that question — the column is there, and it says so.
+func TestRenderInfoTable_KeepsColumnsByDefault(t *testing.T) {
+	withColors(t, false)
+
+	out, row := cleanRepoTable(t, false)
+	for _, kept := range infoColumns {
+		if kept == "BASE" {
+			kept = "BASE(" // hoisted to BASE(main) when uniform
+		}
+		if !strings.Contains(out, kept) {
+			t.Errorf("column %q must survive when it has nothing to report:\n%s", kept, out)
+		}
+	}
+	if !strings.Contains(row, cellNormal) {
+		t.Errorf("a column with nothing to report must print %q, not blank:\n%s", cellNormal, out)
+	}
+}
+
+// TestRenderInfoTable_CompactDropsAllEmptyColumns covers the compression rule,
+// now behind --compact: a column no repository has anything to say in must not
+// occupy its header width.
+func TestRenderInfoTable_CompactDropsAllEmptyColumns(t *testing.T) {
+	withColors(t, false)
+
+	out, row := cleanRepoTable(t, true)
 	for _, dropped := range []string{"UPSTREAM", "DIRTY", "WT", "REMOTE"} {
 		if strings.Contains(out, dropped) {
 			t.Errorf("column %q should be dropped when every cell is empty:\n%s", dropped, out)
@@ -126,13 +167,17 @@ func TestRenderInfoCompact_DropsAllEmptyColumns(t *testing.T) {
 	if !strings.Contains(out, "REPOSITORY") || !strings.Contains(out, "BRANCH") {
 		t.Errorf("REPOSITORY and BRANCH must always survive:\n%s", out)
 	}
+	if strings.Contains(row, cellNormal) {
+		t.Errorf("--compact removes empty columns rather than filling them:\n%s", out)
+	}
 }
 
-// TestRenderInfoCompact_NoRemoteStatedOnce is the table-level guard for the
+// TestRenderInfoTable_NoRemoteStatedOnce is the table-level guard for the
 // duplication the cell tests describe: UPSTREAM and REMOTE both used to print
 // "no remote" on the same row, which spends two columns saying one thing and
-// invites the reader to look for a second problem that is not there.
-func TestRenderInfoCompact_NoRemoteStatedOnce(t *testing.T) {
+// invites the reader to look for a second problem that is not there. Filling
+// empty cells must not reintroduce it, so both modes are checked.
+func TestRenderInfoTable_NoRemoteStatedOnce(t *testing.T) {
 	withColors(t, false)
 
 	result := bulkResult(repository.RepositoryStatusResult{
@@ -144,15 +189,13 @@ func TestRenderInfoCompact_NoRemoteStatedOnce(t *testing.T) {
 		"/w/local-only": {Base: repository.BaseBranchInfo{Name: "master", Source: "heuristic"}},
 	}
 
-	var buf bytes.Buffer
-	renderInfoCompact(&buf, result, enr, false)
-	out := buf.String()
-
-	if n := strings.Count(out, "no remote"); n != 1 {
-		t.Errorf("%q appears %d times, want exactly 1:\n%s", "no remote", n, out)
-	}
-	if strings.Contains(out, "UPSTREAM") {
-		t.Errorf("UPSTREAM column survived with nothing to say:\n%s", out)
+	for _, compact := range []bool{false, true} {
+		var buf bytes.Buffer
+		renderInfoTable(&buf, result, enr, false, compact)
+		out := buf.String()
+		if n := strings.Count(out, "no remote"); n != 1 {
+			t.Errorf("compact=%v: %q appears %d times, want exactly 1:\n%s", compact, "no remote", n, out)
+		}
 	}
 }
 
@@ -171,7 +214,7 @@ func TestRenderInfoCompact_BaseNameHoistedWhenUniform(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	renderInfoCompact(&buf, result, enr, false)
+	renderInfoTable(&buf, result, enr, false, false)
 	out := buf.String()
 
 	if !strings.Contains(out, "BASE(master)") {
@@ -365,7 +408,7 @@ func TestOtherBranchesCell_WorktreeBackedFirst(t *testing.T) {
 func TestRenderInfoCompact_NoRepositories(t *testing.T) {
 	withColors(t, false)
 	var buf bytes.Buffer
-	renderInfoCompact(&buf, bulkResult(), nil, false)
+	renderInfoTable(&buf, bulkResult(), nil, false, false)
 	if !strings.Contains(buf.String(), "No repositories found.") {
 		t.Errorf("unexpected empty-scan output: %q", buf.String())
 	}

@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	infoFlags BulkCommandFlags
-	itemLimit int
-	infoFull  bool
-	infoAudit bool
+	infoFlags   BulkCommandFlags
+	itemLimit   int
+	infoFull    bool
+	infoAudit   bool
+	infoCompact bool
 )
 
 // infoCmd represents the info command
@@ -44,6 +45,9 @@ By default:
   # Verbose output with more details
   gz-git info --verbose
 
+  # Shorter lines: hide columns that have nothing to report anywhere
+  gz-git info --compact
+
   # Machine-readable branch audit for an agent to act on
   gz-git info --audit
   gz-git info --audit | jq '.repositories[] | select(.audit_complete | not)'`,
@@ -60,6 +64,8 @@ func init() {
 	// Add info-specific flags
 	infoCmd.Flags().IntVar(&itemLimit, "limit", 10, "max items to show in lists (branches, remotes)")
 	infoCmd.Flags().BoolVar(&infoFull, "full", false, "show the per-repository detail block instead of the one-line table")
+	infoCmd.Flags().BoolVar(&infoCompact, "compact", false,
+		"drop table columns that have nothing to report for any repository")
 	infoCmd.Flags().BoolVar(&infoAudit, "audit", false,
 		"emit a machine-readable branch audit (JSON) with typed findings and remediations")
 }
@@ -153,7 +159,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	renderInfoCompact(cmd.OutOrStdout(), result, enrichment, verbose)
+	renderInfoTable(cmd.OutOrStdout(), result, enrichment, verbose, infoCompact)
 
 	return nil
 }

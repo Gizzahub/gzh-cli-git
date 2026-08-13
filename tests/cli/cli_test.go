@@ -86,10 +86,9 @@ func TestCLIStatus(t *testing.T) {
 
 // TestCLIInfo tests the info command on current repository.
 //
-// The default view is a one-line-per-repository table, so the assertions are on
-// the columns that are always present. Columns whose every cell is empty are
-// dropped by design, which is why UPSTREAM, WT and the rest are not asserted
-// here: their absence is a correct output for a workspace in a normal state.
+// The default view is a one-line-per-repository table with a fixed column set,
+// so every header can be asserted regardless of what state the checkout this
+// test runs in happens to be in.
 func TestCLIInfo(t *testing.T) {
 	// Change to repository root
 	repoRoot := filepath.Join("..", "..")
@@ -103,12 +102,35 @@ func TestCLIInfo(t *testing.T) {
 	expectedStrings := []string{
 		"REPOSITORY", // table header
 		"BRANCH",     // always populated: every repo has a branch or is detached
+		"UPSTREAM",   // present even when nothing has drifted
+		"WT",
+		"DIRTY",
 		"repositories",
 	}
 
 	for _, expected := range expectedStrings {
 		if !strings.Contains(outputStr, expected) {
 			t.Errorf("Expected info output to contain '%s', got: %s", expected, outputStr)
+		}
+	}
+}
+
+// TestCLIInfoCompact tests the shorter line behind --compact. It asserts only
+// that the fixed columns survive: which of the optional ones get dropped
+// depends on the state of the checkout the test runs in, so asserting their
+// absence would make this test fail on a dirty tree rather than on a bug.
+func TestCLIInfoCompact(t *testing.T) {
+	repoRoot := filepath.Join("..", "..")
+	cmd := exec.Command(getBinaryPath(), "info", "--compact", repoRoot) //nolint:noctx // test helper, no context needed
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to run info --compact command: %v\nOutput: %s", err, output)
+	}
+
+	outputStr := string(output)
+	for _, expected := range []string{"REPOSITORY", "BRANCH", "repositories"} {
+		if !strings.Contains(outputStr, expected) {
+			t.Errorf("Expected info --compact output to contain '%s', got: %s", expected, outputStr)
 		}
 	}
 }

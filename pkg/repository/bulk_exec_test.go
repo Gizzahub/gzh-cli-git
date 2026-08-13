@@ -24,13 +24,13 @@ func setupExecTree(t *testing.T) string {
 	}
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		cmd := exec.CommandContext(t.Context(), "git", args...)
 		cmd.Dir = repo
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	cmd := exec.Command("git", "init", "r1")
+	cmd := exec.CommandContext(t.Context(), "git", "init", "r1")
 	cmd.Dir = parent
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("init: %v\n%s", err, out)
@@ -48,18 +48,10 @@ func setupExecTree(t *testing.T) string {
 func TestBulkExec_SuccessAndEnv(t *testing.T) {
 	parent := setupExecTree(t)
 	client := repository.NewClient()
-	// print env vars set by BulkExec
+	// printenv reports one of the variables BulkExec injects, which is the point
+	// of the test. It is also a program that reads no stdin and exits on its own:
+	// running a bare shell here would block on an empty stdin instead.
 	result, err := client.BulkExec(context.Background(), repository.BulkExecOptions{
-		Directory: parent,
-		MaxDepth:  1,
-		Parallel:  2,
-		Command:   "sh",
-		// sh -c is forbidden in product code, but as user command for test of env injection
-		// we use a small program: /usr/bin/printenv
-		Args: nil,
-	})
-	// Use printenv instead
-	result, err = client.BulkExec(context.Background(), repository.BulkExecOptions{
 		Directory: parent,
 		MaxDepth:  1,
 		Parallel:  2,

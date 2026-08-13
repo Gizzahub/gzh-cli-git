@@ -6,6 +6,7 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -209,17 +210,18 @@ func (c *client) processExecRepository(ctx context.Context, rootDir, repoPath st
 
 	if err != nil {
 		exitCode := 1
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			exitCode = ee.ExitCode()
 		}
-		if runCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			result.Status = StatusExecFailed
 			result.Message = fmt.Sprintf("timeout after %s", opts.Timeout)
 			result.ExitCode = -1
 			result.Error = runCtx.Err()
 			return result
 		}
-		if runCtx.Err() == context.Canceled {
+		if errors.Is(runCtx.Err(), context.Canceled) {
 			result.Status = StatusExecFailed
 			result.Message = "canceled"
 			result.ExitCode = -1
@@ -254,11 +256,11 @@ func formatArgv(command string, args []string) string {
 	return out
 }
 
-func tailBytes(s string, max int) string {
-	if max <= 0 || len(s) <= max {
+func tailBytes(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
 		return s
 	}
-	return s[len(s)-max:]
+	return s[len(s)-maxLen:]
 }
 
 func compactOneLine(s string) string {

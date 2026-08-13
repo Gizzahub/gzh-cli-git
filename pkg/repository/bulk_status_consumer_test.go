@@ -114,9 +114,9 @@ func TestProcessStatusRepositoryReportsDirty(t *testing.T) {
 			t.Fatalf("dirty repo reported clean: status=%q message=%q", result.Status, result.Message)
 		}
 	}
-	if result.UntrackedFiles < 1 && result.UncommittedFiles < 1 && result.TrackedChangedFiles < 1 {
-		t.Fatalf("expected dirty counts populated, got untracked=%d uncommitted=%d tracked=%d status=%q msg=%q",
-			result.UntrackedFiles, result.UncommittedFiles, result.TrackedChangedFiles, result.Status, result.Message)
+	if result.UntrackedFiles < 1 && result.TrackedChangedFiles < 1 {
+		t.Fatalf("expected dirty counts populated, got untracked=%d tracked=%d status=%q msg=%q",
+			result.UntrackedFiles, result.TrackedChangedFiles, result.Status, result.Message)
 	}
 	if result.Error != nil {
 		t.Fatalf("unexpected error: %v", result.Error)

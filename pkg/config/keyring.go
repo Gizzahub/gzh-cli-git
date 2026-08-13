@@ -4,6 +4,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -62,7 +63,7 @@ func (s *KeyringTokenStore) Set(provider, token string) error {
 	defer s.mu.Unlock()
 	if err := keyring.Set(keyringService, provider, token); err != nil {
 		s.unavailable = true
-		return fmt.Errorf("%w: %v", ErrKeyringUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrKeyringUnavailable, err)
 	}
 	return nil
 }
@@ -77,11 +78,11 @@ func (s *KeyringTokenStore) Get(provider string) (string, error) {
 	defer s.mu.Unlock()
 	tok, err := keyring.Get(keyringService, provider)
 	if err != nil {
-		if err == keyring.ErrNotFound {
+		if errors.Is(err, keyring.ErrNotFound) {
 			return "", nil
 		}
 		s.unavailable = true
-		return "", fmt.Errorf("%w: %v", ErrKeyringUnavailable, err)
+		return "", fmt.Errorf("%w: %w", ErrKeyringUnavailable, err)
 	}
 	return tok, nil
 }
@@ -95,11 +96,11 @@ func (s *KeyringTokenStore) Delete(provider string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := keyring.Delete(keyringService, provider); err != nil {
-		if err == keyring.ErrNotFound {
+		if errors.Is(err, keyring.ErrNotFound) {
 			return nil
 		}
 		s.unavailable = true
-		return fmt.Errorf("%w: %v", ErrKeyringUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrKeyringUnavailable, err)
 	}
 	return nil
 }
@@ -123,6 +124,8 @@ func NewMemoryTokenStore() *MemoryTokenStore {
 	return &MemoryTokenStore{data: make(map[string]string), avail: true}
 }
 
+// Set stores a token in memory, or reports ErrKeyringUnavailable while the
+// store is switched off by SetAvailable.
 func (m *MemoryTokenStore) Set(provider, token string) error {
 	provider = normalizeProvider(provider)
 	m.mu.Lock()
@@ -134,6 +137,8 @@ func (m *MemoryTokenStore) Set(provider, token string) error {
 	return nil
 }
 
+// Get returns the stored token, or "" with no error when the provider was
+// never set — the same "absent is not a failure" contract KeyringTokenStore has.
 func (m *MemoryTokenStore) Get(provider string) (string, error) {
 	provider = normalizeProvider(provider)
 	m.mu.Lock()
@@ -144,6 +149,7 @@ func (m *MemoryTokenStore) Get(provider string) (string, error) {
 	return m.data[provider], nil
 }
 
+// Delete removes the provider's token, succeeding when there was none.
 func (m *MemoryTokenStore) Delete(provider string) error {
 	provider = normalizeProvider(provider)
 	m.mu.Lock()
@@ -155,6 +161,8 @@ func (m *MemoryTokenStore) Delete(provider string) error {
 	return nil
 }
 
+// Available reports the flag SetAvailable last wrote, so a test can simulate a
+// headless machine without a keychain.
 func (m *MemoryTokenStore) Available() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

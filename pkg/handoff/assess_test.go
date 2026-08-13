@@ -59,7 +59,7 @@ func TestAssessCleanRepoIsReady(t *testing.T) {
 func TestAssessUncommittedAndUnpushedAreAutoFixable(t *testing.T) {
 	r := cleanRepo()
 	r.Status = repository.StatusDirty
-	r.UncommittedFiles = 3
+	r.TrackedChangedFiles = 3
 	r.UntrackedFiles = 2
 	r.CommitsAhead = 4
 
@@ -166,7 +166,7 @@ func TestAssessLocalWorkWithoutRemoteIsNotAutoFixable(t *testing.T) {
 	r := cleanRepo()
 	r.RemoteURL = ""
 	r.Status = repository.StatusDirty
-	r.UncommittedFiles = 1
+	r.TrackedChangedFiles = 1
 
 	a := Assess([]repository.RepositoryStatusResult{r})
 
@@ -262,7 +262,7 @@ func TestAssessErrorRepoStopsAtTheError(t *testing.T) {
 	r.Error = errors.New("not a git repository")
 	// Values that would otherwise produce blockers must be ignored: a failed
 	// scan means none of them can be trusted.
-	r.UncommittedFiles = 9
+	r.TrackedChangedFiles = 9
 	r.StashCount = 3
 
 	a := Assess([]repository.RepositoryStatusResult{r})
@@ -282,7 +282,7 @@ func TestAssessVerdictTakesTheWorstRepo(t *testing.T) {
 	fixable := cleanRepo()
 	fixable.RelativePath = "fixable"
 	fixable.Status = repository.StatusDirty
-	fixable.UncommittedFiles = 1
+	fixable.TrackedChangedFiles = 1
 
 	blocked := cleanRepo()
 	blocked.RelativePath = "blocked"
@@ -320,17 +320,20 @@ func TestAssessEmptyScanIsReady(t *testing.T) {
 	}
 }
 
-func TestUncommittedDetailDoesNotDoubleCountUntracked(t *testing.T) {
+func TestUncommittedDetailCountsEachPathOnce(t *testing.T) {
 	tests := []struct {
-		name        string
-		uncommitted int
-		untracked   int
-		want        string
+		name      string
+		tracked   int
+		untracked int
+		want      string
 	}{
-		// UncommittedFiles is every line git status prints, so an untracked
-		// file appears in both counters and must not be reported twice.
-		{"untracked only", 1, 1, "1 untracked file(s) exist only here"},
-		{"mixed", 3, 1, "2 modified, 1 untracked file(s) exist only here"},
+		// The counters are disjoint — a path is either tracked with uncommitted
+		// changes or untracked, never both — so neither is subtracted from the
+		// other. Checked against the detail function rather than through Assess:
+		// the untracked-only shape cannot arrive that way, because the blocker
+		// is raised on the tracked count alone.
+		{"untracked only", 0, 1, "1 untracked file(s) exist only here"},
+		{"mixed", 3, 1, "3 modified, 1 untracked file(s) exist only here"},
 		{"modified only", 2, 0, "2 modified file(s) exist only here"},
 	}
 
@@ -338,12 +341,10 @@ func TestUncommittedDetailDoesNotDoubleCountUntracked(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := cleanRepo()
 			r.Status = repository.StatusDirty
-			r.UncommittedFiles = tt.uncommitted
+			r.TrackedChangedFiles = tt.tracked
 			r.UntrackedFiles = tt.untracked
 
-			a := Assess([]repository.RepositoryStatusResult{r})
-
-			if got := a.Repositories[0].Blockers[0].Detail; got != tt.want {
+			if got := uncommittedDetail(r); got != tt.want {
 				t.Errorf("detail = %q, want %q", got, tt.want)
 			}
 		})

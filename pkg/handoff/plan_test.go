@@ -15,7 +15,7 @@ func dirty(name string) repository.RepositoryStatusResult {
 	r.Path = "/w/" + name
 	r.RelativePath = name
 	r.Status = repository.StatusDirty
-	r.UncommittedFiles = 1
+	r.TrackedChangedFiles = 1
 	return r
 }
 

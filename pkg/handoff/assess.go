@@ -89,7 +89,7 @@ func assessRepository(r repository.RepositoryStatusResult) RepoAssessment {
 		})
 	}
 
-	if r.UncommittedFiles > 0 {
+	if r.TrackedChangedFiles > 0 {
 		assessment.Blockers = append(assessment.Blockers, Blocker{
 			Reason:      ReasonUncommitted,
 			Detail:      uncommittedDetail(r),
@@ -166,11 +166,14 @@ func errorDetail(r repository.RepositoryStatusResult) string {
 
 // uncommittedDetail describes the working tree.
 //
-// UncommittedFiles counts every line git status prints, untracked files
-// included, so the modified count is what remains after subtracting them.
+// The two counters no longer overlap: TrackedChangedFiles counts tracked paths
+// with uncommitted changes and UntrackedFiles counts the rest, so each path is
+// in exactly one of them. This used to subtract the second from the first,
+// which was right while the tracked counter was the raw porcelain line count
+// and became an under-report of the modified files once it stopped being that.
 func uncommittedDetail(r repository.RepositoryStatusResult) string {
-	untracked := min(r.UntrackedFiles, r.UncommittedFiles)
-	modified := r.UncommittedFiles - untracked
+	modified := r.TrackedChangedFiles
+	untracked := r.UntrackedFiles
 
 	switch {
 	case modified > 0 && untracked > 0:

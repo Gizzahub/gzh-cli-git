@@ -6,14 +6,14 @@ LLM-optimized guidance for gzh-cli-gitforge.
 
 ## Top Commands
 
-| Command              | Purpose                                                               | When                  |
-| -------------------- | --------------------------------------------------------------------- | --------------------- |
+| Command              | Purpose                                                                         | When                  |
+| -------------------- | ------------------------------------------------------------------------------- | --------------------- |
 | `make quality-check` | Source-non-mutating format + unlimited lint + security + build + unit/E2E tests | Pre-commit (CRITICAL) |
 | `make quality`       | Alias for `quality-check`                                                       | Pre-commit (CRITICAL) |
-| `make dev-fast`      | format + unit tests                                                   | Quick dev cycle       |
-| `make build`         | Build binary                                                          | After changes         |
-| `make pr-check`      | Pre-PR verification                                                   | Before PR             |
-| `make test-coverage` | Coverage report                                                       | Check coverage        |
+| `make dev-fast`      | format + unit tests                                                             | Quick dev cycle       |
+| `make build`         | Build binary                                                                    | After changes         |
+| `make pr-check`      | Pre-PR verification                                                             | Before PR             |
+| `make test-coverage` | Coverage report                                                                 | Check coverage        |
 
 ## Absolute Rules
 

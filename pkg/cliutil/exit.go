@@ -17,12 +17,17 @@ import (
 //	1  tool or configuration error (bad flag, scan failure)
 //	2  completed, but one or more repositories failed
 //
+// Reclaim after a successful integrate:
+//
+//	3  integrate succeeded, reclaim did not finish
+//
 // Diagnostic commands follow the grep convention instead (e.g.
 // `conflict detect`): 0 = nothing found, 1 = findings, 2 = execution error.
 const (
-	ExitOK            = 0
-	ExitToolError     = 1
-	ExitPartialFailed = 2
+	ExitOK                = 0
+	ExitToolError         = 1
+	ExitPartialFailed     = 2
+	ExitReclaimIncomplete = 3
 )
 
 // ExitError carries a process exit code alongside an error so a command's RunE

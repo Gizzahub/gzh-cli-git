@@ -9,6 +9,25 @@ import (
 	"testing"
 )
 
+func TestExitCodesPinned(t *testing.T) {
+	// Name and value are the contract. 0/1/2 must not change meaning.
+	pins := []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"ExitOK", ExitOK, 0},
+		{"ExitToolError", ExitToolError, 1},
+		{"ExitPartialFailed", ExitPartialFailed, 2},
+		{"ExitReclaimIncomplete", ExitReclaimIncomplete, 3},
+	}
+	for _, p := range pins {
+		if p.got != p.want {
+			t.Errorf("%s = %d, want %d", p.name, p.got, p.want)
+		}
+	}
+}
+
 func TestNewExitError_NilPassthrough(t *testing.T) {
 	if err := NewExitError(ExitPartialFailed, nil); err != nil {
 		t.Fatalf("NewExitError(_, nil) = %v, want nil", err)
@@ -42,6 +61,7 @@ func TestExitCodeForError(t *testing.T) {
 		{"plain error defaults to 1", errors.New("x"), ExitToolError},
 		{"tool error code 1", NewExitError(ExitToolError, errors.New("bad flag")), ExitToolError},
 		{"partial failure code 2", NewExitError(ExitPartialFailed, errors.New("3 of 3 failed")), ExitPartialFailed},
+		{"reclaim incomplete code 3", NewExitError(ExitReclaimIncomplete, errors.New("reclaim held back")), ExitReclaimIncomplete},
 		{"wrapped exit error keeps its code", fmt.Errorf("outer: %w", NewExitError(ExitPartialFailed, errors.New("inner"))), ExitPartialFailed},
 	}
 	for _, tt := range tests {

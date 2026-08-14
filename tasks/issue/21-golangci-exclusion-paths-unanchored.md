@@ -95,13 +95,13 @@ $ golangci-lint run -c <anchored-and-unlimited> ./... # master 326f6e4 기준
 ## Acceptance Criteria
 
 - [x] `vendor`/`tmp` 패턴에 경로 앵커를 붙인다. `.git` 패턴은 Go 패키지 목록 기반 실행에서
-      불필요하므로 제거했다.
+  불필요하므로 제거했다.
 - [x] `golangci-lint run -v ./cmd/...` 에서 `Skipped ... by pattern ".git"`가 0이 된다
-      (`.git` 제외 항목 제거; 2026-08-14)
+  (`.git` 제외 항목 제거; 2026-08-14)
 - [x] `max-issues-per-linter` / `max-same-issues` 를 일시적으로 올려 **실제 총량**을 먼저 측정하고
-      이 문서에 기록한다 (71은 상한에 잘린 값)
+  이 문서에 기록한다 (71은 상한에 잘린 값)
 - [x] 게이트 기준선은 0건으로 복구했다. 자동 수정 및 제한적인, 사유가 기록된 exclusion으로
-      기존 변경의 비악화 판정을 다시 수행할 수 있다.
+  기존 변경의 비악화 판정을 다시 수행할 수 있다.
 - [x] `make lint` 가 앵커 적용 상태에서 0건으로 완주한다 (2026-08-14)
 - [x] `.git` 제외 항목이 필요한지 재검토했다. Go 패키지 목록 기반이라 불필요해 제거했다.
 

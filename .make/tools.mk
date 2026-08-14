@@ -19,6 +19,8 @@ install-format-tools: ## install advanced formatting tools
 	@echo -e "$(CYAN)Installing formatting tools...$(RESET)"
 	@which gofumpt > /dev/null || (echo "Installing gofumpt..." && go install mvdan.cc/gofumpt@latest)
 	@which gci > /dev/null || (echo "Installing gci..." && go install github.com/daixiang0/gci@latest)
+	@command -v uv >/dev/null 2>&1 || { echo "uv is required to install mdformat" >&2; exit 1; }
+	@command -v mdformat >/dev/null 2>&1 || (echo "Installing mdformat..." && uv tool install --with mdformat-gfm --with mdformat-tables mdformat)
 	@echo -e "$(GREEN)✅ All formatting tools installed!$(RESET)"
 
 install-analysis-tools: ## install code analysis tools

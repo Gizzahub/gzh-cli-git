@@ -397,7 +397,7 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	// Open editor
-	cmd := exec.CommandContext(context.Background(), editorPath, tmpPath)
+	cmd := exec.CommandContext(context.Background(), editorPath, tmpPath) // #nosec G702 -- editorPath is resolved from the user's trusted editor configuration and no shell is used.
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

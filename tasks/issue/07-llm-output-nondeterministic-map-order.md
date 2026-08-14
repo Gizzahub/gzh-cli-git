@@ -68,11 +68,11 @@ sort.Slice(entries, func(i, j int) bool {
    `MapIndex`가 타입 불일치로 **panic**한다. `v.MapKeys()`가 돌려주는 `reflect.Value`를
    그대로 들고 있으면 이 경로 자체가 사라진다. 회귀 테스트로 고정
    (`TestLLMFormatter_MapNamedKeyType`).
-2. **정렬 기준을 "렌더링된 키 문자열"로 잡았다.** 키 타입별 switch(string/int/uint/float)
+1. **정렬 기준을 "렌더링된 키 문자열"로 잡았다.** 키 타입별 switch(string/int/uint/float)
    대신 이미 방출에 쓰는 문자열을 기준으로 삼는다. 키 타입에 무관하게 결정성이 서고
    정렬 기준과 출력 바이트가 일치한다. 대가는 `map[int]X`가 사전순(`10` < `2`)이라는 것 —
    실사용 맵이 전부 `map[string]...`이고, 비결정성 제거가 목적이므로 수용했다.
-3. **값 문자열로 tie-break한다.** `map[any]any`에서 `1`과 `"1"`처럼 서로 다른 키가 같은
+1. **값 문자열로 tie-break한다.** `map[any]any`에서 `1`과 `"1"`처럼 서로 다른 키가 같은
    문자열로 렌더링되면 정렬만으로는 순서가 다시 불안정해진다. 값은 어차피 방출 전에
    계산하므로(빈 값 skip 판정 때문에) 추가 비용 없이 완전 결정성을 얻는다.
 
@@ -102,20 +102,20 @@ $ make test                                          # 6개 패키지 전부 ok 
 - [x] `WriteLLM`이 동일 구조체 입력에 대해 항상 동일 바이트 출력을 생성
 - [x] 맵 키가 정렬 순으로 방출됨
 - [x] `gzh-cli-core/cli/llm_formatter_test.go`에 비결정성 회귀 테스트 추가
-      (`TestLLMFormatter_MapDeterministicOrder` — 8키 맵 100회 렌더 바이트 일치 +
-      사전순 확인. 8키로 잡은 이유는 2키에서는 미정렬 구현도 50% 확률로 통과하기 때문)
+  (`TestLLMFormatter_MapDeterministicOrder` — 8키 맵 100회 렌더 바이트 일치 +
+  사전순 확인. 8키로 잡은 이유는 2키에서는 미정렬 구현도 50% 확률로 통과하기 때문)
 - [x] gzh-cli-gitforge의 `sortLLMSummaryBlock`(`cmd/gz-git/cmd/diff_output_test.go`)
-      정규화 헬퍼 제거 — **2026-08-07** 완료 (raw golden assert)
+  정규화 헬퍼 제거 — **2026-08-07** 완료 (raw golden assert)
 
 ## 완료 노트 (2026-08-14)
 
 `sortLLMSummaryBlock` 제거 완료. `TestDiffLLMFormatShowsUntracked`는 raw output으로
 `assertGolden` 호출. 골든은 이미 사전순(`clean` → `has-changes`).
 
-| 경로 | core 출처 | 결과 |
-|------|-----------|------|
-| 로컬 / devbox `go.work` | `./gzh-cli-core` (sorted `formatMap`) | `go test ./cmd/gz-git/cmd/ -run Diff\|LLM\|Golden -count=3` ok |
-| CI / 단독 모듈 (`GOWORK=off`) | `go.mod` → `gzh-cli-core@v0.0.0-20260805234833-84a0f3d05f5d` | published core를 소비하도록 bump 완료 (`51aadf0`) |
+| 경로                          | core 출처                                                    | 결과                                                           |
+| ----------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
+| 로컬 / devbox `go.work`       | `./gzh-cli-core` (sorted `formatMap`)                        | `go test ./cmd/gz-git/cmd/ -run Diff\|LLM\|Golden -count=3` ok |
+| CI / 단독 모듈 (`GOWORK=off`) | `go.mod` → `gzh-cli-core@v0.0.0-20260805234833-84a0f3d05f5d` | published core를 소비하도록 bump 완료 (`51aadf0`)              |
 
 소비자 단독 CI에서 정렬된 core를 사용하도록 `go.mod`/`go.sum`을 갱신했고, 이제
 `GOWORK=off` 경로도 로컬 `go.work`와 같은 formatter 구현을 사용한다. 따라서 이 태스크의

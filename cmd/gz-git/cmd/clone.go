@@ -471,7 +471,7 @@ func cloneSingleRepository( //nolint:gocyclo // TODO(issue-21): split clone vali
 			parentDir = "."
 		}
 		// Ensure parent directory exists
-		if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		if err := os.MkdirAll(parentDir, 0o755); err != nil { // #nosec G301 -- cloned repositories must retain normal shared directory readability.
 			return repository.RepositoryCloneResult{
 				URL:          spec.URL,
 				Path:         destination,

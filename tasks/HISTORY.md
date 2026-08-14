@@ -2,46 +2,46 @@
 
 > 완료 기록·감사 이력 보관. 인덱스 아님 — 열린 항목은 [README.md](README.md) 참조.
 
----
+______________________________________________________________________
 
 ## 완료 (2026-08-14 — quality-debt follow-up)
 
-| # | 태스크 | 우선순위 | 요지 |
-|---|--------|---------|------|
-| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | published core `84a0f3d`를 `go.mod`/`go.sum`에 반영해 `GOWORK=off` 단독 CI도 정렬 formatter를 사용 ✅ |
-| 21 | [golangci-exclusion-paths-unanchored](issue/21-golangci-exclusion-paths-unanchored.md) | P1 | exclusion 경로 교정·254건 기준선 측정·lint-zero 게이트 복구; 범위별 suppression 부채는 문서에 지연 항목으로 명시 ✅ |
+| #   | 태스크                                                                                     | 우선순위 | 요지                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| 07  | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3       | published core `84a0f3d`를 `go.mod`/`go.sum`에 반영해 `GOWORK=off` 단독 CI도 정렬 formatter를 사용 ✅               |
+| 21  | [golangci-exclusion-paths-unanchored](issue/21-golangci-exclusion-paths-unanchored.md)     | P1       | exclusion 경로 교정·254건 기준선 측정·lint-zero 게이트 복구; 범위별 suppression 부채는 문서에 지연 항목으로 명시 ✅ |
 
 검증·범위 메모: handoff의 untracked-only 실제 CLI 경로와 artifact guard는
 `tests/e2e/handoff_test.go`에 추가했다. 린트 0건은 게이트 복구를 뜻하며, 모든 기존
-lint 지적을 근본 해결했다는 의미는 아니다. 남은 항목은 [issue 21의 지연된 린트 부채](issue/21-golangci-exclusion-paths-unanchored.md#지연된-린트-부채)에 링크한다.
+lint 지적을 근본 해결했다는 의미는 아니다. 남은 항목은 [issue 21의 지연된 린트 부채](issue/21-golangci-exclusion-paths-unanchored.md#%EC%A7%80%EC%97%B0%EB%90%9C-%EB%A6%B0%ED%8A%B8-%EB%B6%80%EC%B1%84)에 링크한다.
 
----
+______________________________________________________________________
 
 ## 완료 (2026-08-07)
 
-| # | 태스크 | 우선순위 | 요지 |
-|---|--------|---------|------|
-| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | core `WriteLLM` 맵 정렬 후 `sortLLMSummaryBlock` 제거; 로컬 go.work 기준. 단독 모듈 CI는 core pseudo-version publish 후 `go.mod` bump 필요 ✅ |
+| #   | 태스크                                                                                     | 우선순위 | 요지                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 07  | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3       | core `WriteLLM` 맵 정렬 후 `sortLLMSummaryBlock` 제거; 로컬 go.work 기준. 단독 모듈 CI는 core pseudo-version publish 후 `go.mod` bump 필요 ✅ |
 
----
+______________________________________________________________________
 
 ## 완료 (2026-08-05)
 
-| # | 태스크 | 우선순위 | 요지 |
-|---|--------|---------|------|
-| 01 | [changeset-unify-diff-commit-scope](issue/01-changeset-unify-diff-commit-scope.md) | **P0** | `diff`/`commit`이 변경집합 정의를 공유하지 않음 — 공용 `collectChangeSet` 도입 ✅ |
-| 02 | [commit-merge-conflict-guard](issue/02-commit-merge-conflict-guard.md) | **P0** | 미해결 merge conflict를 그대로 커밋 (유일한 비가역 손상) ✅ |
-| 03 | [untracked-read-loop-security-and-oom](issue/03-untracked-read-loop-security-and-oom.md) | **P0** | `--include-untracked`의 `os.ReadFile` 루프 — 정보유출·OOM·무음 누락 ✅ |
-| 04 | [commit-stats-accuracy-numstat](issue/04-commit-stats-accuracy-numstat.md) | P2 | `additions`/`deletions` 부정확, 실패가 exit code에 안 드러남 ✅ |
-| 05 | [diff-output-untracked-visibility](issue/05-diff-output-untracked-visibility.md) | P2 | default/compact 포맷에 untracked 신호 전무 ✅ |
-| 06 | [porcelain-parsers-outside-diff-commit](issue/06-porcelain-parsers-outside-diff-commit.md) | P3 | 동일 porcelain 결함이 `bulk.go`·`client.go`의 상태/헬스 경로에 잔존 — 패키지 단일 파서(`porcelain.go`)로 통합, `internal/parser.ParseStatus` 삭제 ✅ <br>⚠️ **완료 후 세션 리뷰에서 신규 파서에 P0 유입 확인** — 수정 완료, 아래 "P0 유입과 수정" 참조 |
-| 10 | [porcelain-parsers-outside-pkg-repository](issue/10-porcelain-parsers-outside-pkg-repository.md) | P2 | `pkg/repository` 밖 재파싱 6곳 — `internal/porcelain` 단일 파서로 통합, `AA`/`DD` 충돌 누락 수정, 읽기 실패를 "정상"으로 렌더하던 3경로 정정 ✅ (2026-08-06) |
-| 14 | [worktree-get-does-not-resolve-symlinks](issue/14-worktree-get-does-not-resolve-symlinks.md) | P2 | `Get`의 `filepath.Abs`가 심볼릭 링크를 안 풀어 macOS `/var` 하위 워크트리를 못 찾음 — `samePath`로 교체 ✅ (2026-08-06) |
-| 13 | [branch-manager-cleanup-fail-open-on-git-failure](issue/13-branch-manager-cleanup-fail-open-on-git-failure.md) | P2 | `manager.go`·`cleanup.go` 10곳이 실패한 git을 성공으로 읽음 — 패키지 `runGit` 도입. `Execute`가 삭제 실패를 버리던 것을 `ExecuteResult`로 반환, `✓ Deleted N`이 후보 수 대신 삭제 수를 출력하고 실패 시 exit 2 ✅ (2026-08-06) |
-| 15 | [cleanup-gone-flag-is-a-no-op](issue/15-cleanup-gone-flag-is-a-no-op.md) | P2 | 단일 리포 `--gone`이 무동작 — 독립 결함 3개. "고아"의 정의가 벌크 경로와 달랐던 것이 본질(로컬 `[gone]` vs 원격추적 ref). `findGoneBranches`로 통일, `IncludeGone` 추가, CLI 배선 ✅ (2026-08-06) |
-| 12 | [internal-parser-is-dead-code](issue/12-internal-parser-is-dead-code.md) | P3 | 임포터 0건 패키지 `internal/parser` 삭제(소스 8.9KB + 테스트 21KB). `internal/` 하위라 공개 API 변경 아님. 살아있는 `parseAheadBehind` **3개** 사본은 통합 대상이 아니라 별건으로 보존 ✅ (2026-08-06) |
-| 09 | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2 | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip ✅ |
-| 17 | [execute-skips-protected-screen-when-exclude-empty](issue/17-execute-skips-protected-screen-when-exclude-empty.md) | P3 | `cleanup.Execute`의 보호 브랜치 검사가 `len(opts.Exclude) > 0`일 때만 실행되던 것 — 항상 스크리닝 ✅ |
+| #   | 태스크                                                                                                             | 우선순위 | 요지                                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 01  | [changeset-unify-diff-commit-scope](issue/01-changeset-unify-diff-commit-scope.md)                                 | **P0**   | `diff`/`commit`이 변경집합 정의를 공유하지 않음 — 공용 `collectChangeSet` 도입 ✅                                                                                                                                                                      |
+| 02  | [commit-merge-conflict-guard](issue/02-commit-merge-conflict-guard.md)                                             | **P0**   | 미해결 merge conflict를 그대로 커밋 (유일한 비가역 손상) ✅                                                                                                                                                                                            |
+| 03  | [untracked-read-loop-security-and-oom](issue/03-untracked-read-loop-security-and-oom.md)                           | **P0**   | `--include-untracked`의 `os.ReadFile` 루프 — 정보유출·OOM·무음 누락 ✅                                                                                                                                                                                 |
+| 04  | [commit-stats-accuracy-numstat](issue/04-commit-stats-accuracy-numstat.md)                                         | P2       | `additions`/`deletions` 부정확, 실패가 exit code에 안 드러남 ✅                                                                                                                                                                                        |
+| 05  | [diff-output-untracked-visibility](issue/05-diff-output-untracked-visibility.md)                                   | P2       | default/compact 포맷에 untracked 신호 전무 ✅                                                                                                                                                                                                          |
+| 06  | [porcelain-parsers-outside-diff-commit](issue/06-porcelain-parsers-outside-diff-commit.md)                         | P3       | 동일 porcelain 결함이 `bulk.go`·`client.go`의 상태/헬스 경로에 잔존 — 패키지 단일 파서(`porcelain.go`)로 통합, `internal/parser.ParseStatus` 삭제 ✅ <br>⚠️ **완료 후 세션 리뷰에서 신규 파서에 P0 유입 확인** — 수정 완료, 아래 "P0 유입과 수정" 참조 |
+| 10  | [porcelain-parsers-outside-pkg-repository](issue/10-porcelain-parsers-outside-pkg-repository.md)                   | P2       | `pkg/repository` 밖 재파싱 6곳 — `internal/porcelain` 단일 파서로 통합, `AA`/`DD` 충돌 누락 수정, 읽기 실패를 "정상"으로 렌더하던 3경로 정정 ✅ (2026-08-06)                                                                                           |
+| 14  | [worktree-get-does-not-resolve-symlinks](issue/14-worktree-get-does-not-resolve-symlinks.md)                       | P2       | `Get`의 `filepath.Abs`가 심볼릭 링크를 안 풀어 macOS `/var` 하위 워크트리를 못 찾음 — `samePath`로 교체 ✅ (2026-08-06)                                                                                                                                |
+| 13  | [branch-manager-cleanup-fail-open-on-git-failure](issue/13-branch-manager-cleanup-fail-open-on-git-failure.md)     | P2       | `manager.go`·`cleanup.go` 10곳이 실패한 git을 성공으로 읽음 — 패키지 `runGit` 도입. `Execute`가 삭제 실패를 버리던 것을 `ExecuteResult`로 반환, `✓ Deleted N`이 후보 수 대신 삭제 수를 출력하고 실패 시 exit 2 ✅ (2026-08-06)                         |
+| 15  | [cleanup-gone-flag-is-a-no-op](issue/15-cleanup-gone-flag-is-a-no-op.md)                                           | P2       | 단일 리포 `--gone`이 무동작 — 독립 결함 3개. "고아"의 정의가 벌크 경로와 달랐던 것이 본질(로컬 `[gone]` vs 원격추적 ref). `findGoneBranches`로 통일, `IncludeGone` 추가, CLI 배선 ✅ (2026-08-06)                                                      |
+| 12  | [internal-parser-is-dead-code](issue/12-internal-parser-is-dead-code.md)                                           | P3       | 임포터 0건 패키지 `internal/parser` 삭제(소스 8.9KB + 테스트 21KB). `internal/` 하위라 공개 API 변경 아님. 살아있는 `parseAheadBehind` **3개** 사본은 통합 대상이 아니라 별건으로 보존 ✅ (2026-08-06)                                                 |
+| 09  | [porcelain-parser-silently-skips-malformed-records](issue/09-porcelain-parser-silently-skips-malformed-records.md) | P2       | 06 통합 시 계약이 조용히 바뀜 — 구 파서는 형식 오류에 에러, 신규는 skip ✅                                                                                                                                                                             |
+| 17  | [execute-skips-protected-screen-when-exclude-empty](issue/17-execute-skips-protected-screen-when-exclude-empty.md) | P3       | `cleanup.Execute`의 보호 브랜치 검사가 `len(opts.Exclude) > 0`일 때만 실행되던 것 — 항상 스크리닝 ✅                                                                                                                                                   |
 
 **검증**: `go build`·`go vet`·`gofumpt`·전체 테스트 통과.
 01~05는 `golangci-lint`(신규 결함 0)까지 통과. 06 시점에는 설치본이 go1.25로 빌드되어 있고
@@ -66,11 +66,11 @@ lint 지적을 근본 해결했다는 의미는 아니다. 남은 항목은 [iss
 
 ### 06 실측 대조 (`uncommitted` + `untracked`)
 
-| 픽스처 | git 실제 | v0.7.0 | 수정 후 |
-|--------|---------|--------|--------|
-| 이 리포 (`info`) | 18 + 3 | 21 + 3 | **18 + 3** |
-| 워크트리 삭제 2 + untracked 디렉터리(파일 2) (`info`) | 2 + 2 | 3 + 1 | **2 + 2** |
-| 같은 픽스처 (`status --skip-fetch`, 헬스 경로) | 2 + 2 | 1 + 1 | **2 + 2** |
+| 픽스처                                                | git 실제 | v0.7.0 | 수정 후    |
+| ----------------------------------------------------- | -------- | ------ | ---------- |
+| 이 리포 (`info`)                                      | 18 + 3   | 21 + 3 | **18 + 3** |
+| 워크트리 삭제 2 + untracked 디렉터리(파일 2) (`info`) | 2 + 2    | 3 + 1  | **2 + 2**  |
+| 같은 픽스처 (`status --skip-fetch`, 헬스 경로)        | 2 + 2    | 1 + 1  | **2 + 2**  |
 
 ### 06 공개 API 변경 (CHANGELOG 기재됨)
 
@@ -80,7 +80,7 @@ lint 지적을 근본 해결했다는 의미는 아니다. 남은 항목은 [iss
 - `Status`에 `StagedCount`/`UnstagedCount`/`TrackedChangedCount` 신설.
 - `internal/parser.ParseStatus` **삭제** (프로덕션 호출자 0건).
 
----
+______________________________________________________________________
 
 ### 2026-08-05 — 06 착수 전 조사에서 추가 확인 (전부 처리됨)
 
@@ -136,32 +136,32 @@ classifyHealth → HealthHealthy
 
 #### 바이너리 실측 (`tmp/bin/gz-git`, v0.7.0 대조)
 
-| 픽스처 | v0.7.0 | 수정 후 |
-|--------|--------|--------|
-| `mv` + `add -N` (`status --skip-fetch`) | `✓ healthy` | **`⚠ [1 modified]`** |
-| 같은 픽스처 (`info`) | `Status: error` | **`Status: dirty (1 uncommitted)`** |
-| `.git/index` 파손 (`status`) | `✓ All 1 repositories are healthy`, exit 0 | **`✗ 1 error`, exit 2** |
+| 픽스처                                  | v0.7.0                                     | 수정 후                             |
+| --------------------------------------- | ------------------------------------------ | ----------------------------------- |
+| `mv` + `add -N` (`status --skip-fetch`) | `✓ healthy`                                | **`⚠ [1 modified]`**                |
+| 같은 픽스처 (`info`)                    | `Status: error`                            | **`Status: dirty (1 uncommitted)`** |
+| `.git/index` 파손 (`status`)            | `✓ All 1 repositories are healthy`, exit 0 | **`✗ 1 error`, exit 2**             |
 
 세 번째 줄은 **06 이전부터 있던 v0.7.0 fail-open**이다. `diagnostic_executor.go` 수정의
 부수 효과로 함께 닫혔다.
 
 #### 수정 내역
 
-| 파일 | 변경 |
-|---|---|
-| `pkg/repository/porcelain.go` | `isRenameOrCopyCode` — X/Y 어느 쪽이든 `R`/`C`면 페어링. worktree측 `R`/`C`를 `RenamedFiles`에, ` A`(intent-to-add)를 `ModifiedFiles`에 분류 |
-| `pkg/reposync/diagnostic.go` | `WorkTreeUnknown` 신설 — `WorkTreeClean`과 구분 |
-| `pkg/reposync/diagnostic_executor.go` | fail-open 제거. 읽기 실패 → `WorkTreeUnknown` + `HealthError` + 에러 보존 |
-| `pkg/tui/formatter.go`, `pkg/reposynccli/status_command.go` | 신규 상태 렌더링 (`default` 없는 switch라 안 넣으면 무음 누락) |
-| `pkg/repository/bulk.go` | `checkRepositoryState`: `-uall` → `-uno` (`ConflictFiles`만 읽으므로 효과 0인 전체 워크) |
-| `docs/.claude-context/common-tasks.md` | 06이 지운 안티패턴을 그대로 가르치고 있던 절 교체 |
+| 파일                                                        | 변경                                                                                                                                         |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pkg/repository/porcelain.go`                               | `isRenameOrCopyCode` — X/Y 어느 쪽이든 `R`/`C`면 페어링. worktree측 `R`/`C`를 `RenamedFiles`에, ` A`(intent-to-add)를 `ModifiedFiles`에 분류 |
+| `pkg/reposync/diagnostic.go`                                | `WorkTreeUnknown` 신설 — `WorkTreeClean`과 구분                                                                                              |
+| `pkg/reposync/diagnostic_executor.go`                       | fail-open 제거. 읽기 실패 → `WorkTreeUnknown` + `HealthError` + 에러 보존                                                                    |
+| `pkg/tui/formatter.go`, `pkg/reposynccli/status_command.go` | 신규 상태 렌더링 (`default` 없는 switch라 안 넣으면 무음 누락)                                                                               |
+| `pkg/repository/bulk.go`                                    | `checkRepositoryState`: `-uall` → `-uno` (`ConflictFiles`만 읽으므로 효과 0인 전체 워크)                                                     |
+| `docs/.claude-context/common-tasks.md`                      | 06이 지운 안티패턴을 그대로 가르치고 있던 절 교체                                                                                            |
 
 #### 뮤테이션 검증 (테스트가 실제로 붙잡는지)
 
-| 되돌린 수정 | 결과 |
-|---|---|
-| 페어링 → `Code[0]`만 | `TestParseStatus`·`TestGetStatusPairsWorktreeSideRename`·`TestCheckHealthSeesWorktreeSideRename` FAIL |
-| fail-open 복원 | `TestCheckHealthDoesNotCallUnreadableTreeHealthy`가 `clean`/`healthy`/`No action needed`로 P0 재현하며 FAIL |
+| 되돌린 수정          | 결과                                                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 페어링 → `Code[0]`만 | `TestParseStatus`·`TestGetStatusPairsWorktreeSideRename`·`TestCheckHealthSeesWorktreeSideRename` FAIL       |
+| fail-open 복원       | `TestCheckHealthDoesNotCallUnreadableTreeHealthy`가 `clean`/`healthy`/`No action needed`로 P0 재현하며 FAIL |
 
 둘 다 되돌림 완료. 06에 있던 `TestCheckRepositoryStateExpandsUntrackedDirectories`는
 **아무것도 검증하지 않는 테스트**여서 `...SeparatesDirtyFromConflicted`로 교체했다.
@@ -230,7 +230,7 @@ git이 전부 거부해도 `✓ Deleted N` + exit 0이 나왔다. 패키지 `run
 **19**: `tasks/README.md`가 10KB 가이드라인을 2배 초과 → 완료·감사 기록을 이 파일
 (`HISTORY.md`)으로 분리. README에는 구조·Open Issues 인덱스만 유지.
 
----
+______________________________________________________________________
 
 ## 감사 이력
 
@@ -242,22 +242,22 @@ git이 전부 거부해도 `✓ Deleted N` + exit 0이 나왔다. 패키지 `run
 
 #### Finding → 태스크 매핑
 
-| Finding ID | 위치 | 태스크 | 수동재현 |
-|-----------|------|--------|:-------:|
-| (원 보고) 스코프 불일치 | `bulk_diff.go:284` vs `bulk_commit.go:316` | 01 | ✅ |
-| `diff-omits-staged-changes` | `bulk_diff.go:309`, `:332` | 01 | |
-| `commit-preview-undercounts-untracked-dirs` | `bulk_commit.go:301` | 01 | ✅ |
-| `porcelain-quoted-paths-never-unquoted` | `bulk_diff.go:268`, `bulk_commit.go:320` | 01 | ✅ |
-| `commit-commits-merge-conflict-markers` | `bulk_commit.go:333`, `:368` | 02 | ✅ |
-| `untracked-symlink-dereference-leak` | `bulk_diff.go:349` | 03 | ✅ |
-| `include-untracked-noop-on-directories` | `bulk_diff.go:349` | 03 | ✅ |
-| `include-untracked-silently-drops-files` | `bulk_diff.go:349` | 03 | |
-| `untracked-read-unbounded-memory` | `bulk_diff.go:349` | 03 | |
-| `commit-stats-sum-not-head-delta` | `bulk_commit.go:336`, `:342` | 04 | |
-| `commit-additions-double-count-staged-plus-unstaged` | `bulk_commit.go:342` | 04 | |
-| `commit-untracked-lines-never-counted` | `bulk_commit.go:336-346` | 04 | |
-| `parse-diff-stats-filename-poisoning` | `bulk_commit.go:478` | 04 | |
-| default/compact 포맷 untracked 미표시 | `diff.go:194`, `:263` | 05 | ✅ |
+| Finding ID                                           | 위치                                       | 태스크 | 수동재현 |
+| ---------------------------------------------------- | ------------------------------------------ | ------ | :------: |
+| (원 보고) 스코프 불일치                              | `bulk_diff.go:284` vs `bulk_commit.go:316` | 01     |    ✅    |
+| `diff-omits-staged-changes`                          | `bulk_diff.go:309`, `:332`                 | 01     |          |
+| `commit-preview-undercounts-untracked-dirs`          | `bulk_commit.go:301`                       | 01     |    ✅    |
+| `porcelain-quoted-paths-never-unquoted`              | `bulk_diff.go:268`, `bulk_commit.go:320`   | 01     |    ✅    |
+| `commit-commits-merge-conflict-markers`              | `bulk_commit.go:333`, `:368`               | 02     |    ✅    |
+| `untracked-symlink-dereference-leak`                 | `bulk_diff.go:349`                         | 03     |    ✅    |
+| `include-untracked-noop-on-directories`              | `bulk_diff.go:349`                         | 03     |    ✅    |
+| `include-untracked-silently-drops-files`             | `bulk_diff.go:349`                         | 03     |          |
+| `untracked-read-unbounded-memory`                    | `bulk_diff.go:349`                         | 03     |          |
+| `commit-stats-sum-not-head-delta`                    | `bulk_commit.go:336`, `:342`               | 04     |          |
+| `commit-additions-double-count-staged-plus-unstaged` | `bulk_commit.go:342`                       | 04     |          |
+| `commit-untracked-lines-never-counted`               | `bulk_commit.go:336-346`                   | 04     |          |
+| `parse-diff-stats-filename-poisoning`                | `bulk_commit.go:478`                       | 04     |          |
+| default/compact 포맷 untracked 미표시                | `diff.go:194`, `:263`                      | 05     |    ✅    |
 
 > 12건이 5개 태스크로 묶인 이유: 여러 finding이 **동일한 수정 지점**을 공유한다.
 > `include-untracked-*` 4건은 `bulk_diff.go:343-367` 한 블록, `commit-stats-*` 4건은
@@ -269,7 +269,7 @@ git이 전부 거부해도 `✓ Deleted N` + exit 0이 나왔다. 패키지 `run
 
 `internal/parser/status.go:119`에 이미 porcelain 분류 로직(conflict `U` 포함)이 존재하나 두 bulk 경로 모두 이를 쓰지 않고 재구현했다. 이 중복이 문제의 표면적 징후다.
 
----
+______________________________________________________________________
 
 ## v0.7.0 사용자 우회법 (수정 전까지)
 

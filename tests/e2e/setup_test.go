@@ -66,14 +66,24 @@ func TestMain(m *testing.M) {
 func NewE2ERepo(t *testing.T) *E2ERepo {
 	t.Helper()
 
+	return newE2ERepoAt(t, t.TempDir())
+}
+
+// newE2ERepoAt creates an E2E repository at a caller-selected path. It is
+// useful for tests that need more than one independent repository under a
+// single workspace scan root.
+func newE2ERepoAt(t *testing.T, repoDir string) *E2ERepo {
+	t.Helper()
+
 	// Get current working directory
 	rootDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
 
-	// Create temp directory for test repo
-	repoDir := t.TempDir()
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("Failed to create repository directory %s: %v", repoDir, err)
+	}
 
 	// Find or build gz-git binary
 	binaryPath := findOrBuildBinary(t)
@@ -132,14 +142,44 @@ func (r *E2ERepo) runCommand(dir, name string, args ...string) string {
 func (r *E2ERepo) RunGzhGit(args ...string) string {
 	r.t.Helper()
 
-	cmd := exec.Command(r.binaryPath, args...) //nolint:noctx // test helper, no context needed
-	cmd.Dir = r.repoDir
-	output, err := cmd.CombinedOutput()
+	output, err := r.RunGzhGitResult(args...)
 	if err != nil {
 		r.t.Fatalf("gz-git command failed: %v %v\nError: %v\nOutput: %s",
 			r.binaryPath, args, err, output)
 	}
-	return string(output)
+	return output
+}
+
+// RunGzhGitResult runs gz-git and returns its output and process error. Unlike
+// RunGzhGitExpectError, callers can assert the exact exit status.
+func (r *E2ERepo) RunGzhGitResult(args ...string) (string, error) {
+	r.t.Helper()
+
+	return r.RunGzhGitAtResult(r.repoDir, args...)
+}
+
+// RunGzhGitAt runs gz-git from a caller-selected workspace directory and
+// expects success.
+func (r *E2ERepo) RunGzhGitAt(directory string, args ...string) string {
+	r.t.Helper()
+
+	output, err := r.RunGzhGitAtResult(directory, args...)
+	if err != nil {
+		r.t.Fatalf("gz-git command failed: %v %v\nError: %v\nOutput: %s",
+			r.binaryPath, args, err, output)
+	}
+	return output
+}
+
+// RunGzhGitAtResult runs gz-git from a caller-selected workspace directory
+// and returns its output and process error.
+func (r *E2ERepo) RunGzhGitAtResult(directory string, args ...string) (string, error) {
+	r.t.Helper()
+
+	cmd := exec.Command(r.binaryPath, args...) //nolint:noctx // test helper, no context needed
+	cmd.Dir = directory
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }
 
 // RunGzhGitExpectError runs gz-git command and expects failure.
@@ -166,7 +206,14 @@ func (r *E2ERepo) Git(args ...string) string {
 func (r *E2ERepo) WriteFile(path, content string) {
 	r.t.Helper()
 
-	fullPath := filepath.Join(r.repoDir, path)
+	r.WriteFileAt(r.repoDir, path, content)
+}
+
+// WriteFileAt writes content below a caller-selected directory.
+func (r *E2ERepo) WriteFileAt(directory, path, content string) {
+	r.t.Helper()
+
+	fullPath := filepath.Join(directory, path)
 	dir := filepath.Dir(fullPath)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {

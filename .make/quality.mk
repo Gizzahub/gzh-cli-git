@@ -136,17 +136,17 @@ fmt-diff: ## format only changed files (fast, for pre-commit)
 
 lint-check: install-golangci-lint ## check lint issues without fixing (exit code reflects status)
 	@echo -e "$(CYAN)Running golangci-lint...$(RESET)"
-	golangci-lint run -c .golangci.yml
+	GOWORK=off golangci-lint run -c .golangci.yml
 
 lint: lint-check ## alias for lint-check
 
 lint-fix: install-golangci-lint ## run golangci-lint with auto-fix
 	@echo -e "$(CYAN)Running golangci-lint with auto-fix...$(RESET)"
-	golangci-lint run -c .golangci.yml --fix
+	GOWORK=off golangci-lint run -c .golangci.yml --fix
 
 lint-new: install-golangci-lint ## run golangci-lint on new code only
 	@echo -e "$(CYAN)Running golangci-lint on new code only...$(RESET)"
-	golangci-lint run -c .golangci.yml --new-from-rev=HEAD~
+	GOWORK=off golangci-lint run -c .golangci.yml --new-from-rev=HEAD~
 
 lint-ci: install-golangci-lint ## run golangci-lint for CI
 	@echo -e "$(CYAN)Running golangci-lint for CI...$(RESET)"

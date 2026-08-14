@@ -1,7 +1,9 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,6 +30,54 @@ func seedHandoffRepo(t *testing.T) *E2ERepo {
 	repo.Git("add", "README.md")
 	repo.Git("commit", "-m", "Initial commit")
 	setupRemote(t, repo)
+	return repo
+}
+
+func seedProtectedBranchHandoffRepo(t *testing.T) *E2ERepo {
+	t.Helper()
+
+	repo := NewE2ERepo(t)
+	repo.WriteFile("README.md", "# Handoff E2E\n")
+	repo.Git("add", "README.md")
+	repo.Git("commit", "-m", "Initial commit")
+
+	// The project policy protects the branch this fixture is currently on. The
+	// config is committed before the work is created so it cannot become part of
+	// the checkpoint whose creation the test is guarding.
+	branch := repo.GetCurrentBranch()
+	repo.WriteFile(".gz-git.yaml", fmt.Sprintf("push:\n  policy:\n    protected:\n      - %q\n", branch))
+	repo.Git("add", ".gz-git.yaml")
+	repo.Git("commit", "-m", "Configure protected branch policy")
+	setupRemote(t, repo)
+	repo.WriteFile("notes.txt", "must remain on the protected branch\n")
+	return repo
+}
+
+func seedConflictHandoffRepo(t *testing.T) *E2ERepo {
+	t.Helper()
+
+	repo := NewE2ERepo(t)
+	repo.WriteFile("README.md", "# Handoff E2E\n")
+	repo.WriteFile("conflict.txt", "base\n")
+	repo.Git("add", "README.md", "conflict.txt")
+	repo.Git("commit", "-m", "Initial commit")
+	setupRemote(t, repo)
+
+	base := repo.GetCurrentBranch()
+	repo.Git("checkout", "-b", "feature")
+	repo.WriteFile("conflict.txt", "feature side\n")
+	repo.Git("commit", "-am", "Feature edit")
+	repo.Git("checkout", base)
+	repo.WriteFile("conflict.txt", "base side\n")
+	repo.Git("commit", "-am", "Base edit")
+
+	// A real merge conflict is required here: synthetic conflict markers in a
+	// normal working tree do not exercise the repository-state guard.
+	merge := exec.Command("git", "merge", "feature") //nolint:noctx // test helper
+	merge.Dir = repo.repoDir
+	if output, err := merge.CombinedOutput(); err == nil {
+		t.Fatalf("git merge unexpectedly succeeded; fixture must conflict\n%s", output)
+	}
 	return repo
 }
 
@@ -158,6 +208,73 @@ func TestHandoffEndHoldsCredentialContent(t *testing.T) {
 	}
 	if got := remoteHead(t, repo); got != before {
 		t.Fatalf("credential guard changed remote head from %q to %q", before, got)
+	}
+}
+
+// TestHandoffEndProtectedBranchPreservesWork verifies that push policy is
+// enforced before checkpointing: a protected branch cannot be written by an
+// unattended handoff, even when it has a real remote push target.
+func TestHandoffEndProtectedBranchPreservesWork(t *testing.T) {
+	repo := seedProtectedBranchHandoffRepo(t)
+	beforeHead := strings.TrimSpace(repo.Git("rev-parse", "HEAD"))
+	beforeRemote := remoteHead(t, repo)
+	beforeStatus := repo.Git("status", "--porcelain=v1")
+
+	output, err := repo.RunGzhGitResult("handoff", "end", "--no-trailers")
+	AssertExitCode(t, err, 1)
+	if err == nil {
+		t.Fatal("handoff end unexpectedly succeeded on a protected branch")
+	}
+	AssertContains(t, output, "blocked by push policy")
+	AssertContains(t, output, "protected")
+	if got := strings.TrimSpace(repo.Git("rev-parse", "HEAD")); got != beforeHead {
+		t.Fatalf("protected-branch blocker changed HEAD from %q to %q", beforeHead, got)
+	}
+	if repo.CommitExists("chore(wip): handoff checkpoint") {
+		t.Fatal("protected-branch blocker still created a checkpoint commit")
+	}
+	if got := remoteHead(t, repo); got != beforeRemote {
+		t.Fatalf("protected-branch blocker changed remote head from %q to %q", beforeRemote, got)
+	}
+	if got := repo.Git("status", "--porcelain=v1"); got != beforeStatus {
+		t.Fatalf("protected-branch blocker changed working state from %q to %q", beforeStatus, got)
+	}
+	if got := repo.ReadFile("notes.txt"); got != "must remain on the protected branch\n" {
+		t.Fatalf("protected-branch blocker changed work file: %q", got)
+	}
+}
+
+// TestHandoffEndMergeConflictPreservesWork verifies the hard-blocker path for
+// an unresolved real merge. The command must not stage conflict markers,
+// create a checkpoint, move HEAD, push, or otherwise touch the worktree.
+func TestHandoffEndMergeConflictPreservesWork(t *testing.T) {
+	repo := seedConflictHandoffRepo(t)
+	beforeHead := strings.TrimSpace(repo.Git("rev-parse", "HEAD"))
+	beforeRemote := remoteHead(t, repo)
+	beforeStatus := repo.Git("status", "--porcelain=v1")
+	beforeConflict := repo.ReadFile("conflict.txt")
+
+	output, err := repo.RunGzhGitResult("handoff", "end", "--no-trailers")
+	AssertExitCode(t, err, 1)
+	if err == nil {
+		t.Fatal("handoff end unexpectedly succeeded with an unresolved merge")
+	}
+	AssertContains(t, output, "unresolved conflicts")
+	AssertContains(t, output, "BLOCKED")
+	if got := strings.TrimSpace(repo.Git("rev-parse", "HEAD")); got != beforeHead {
+		t.Fatalf("merge-conflict blocker changed HEAD from %q to %q", beforeHead, got)
+	}
+	if repo.CommitExists("chore(wip): handoff checkpoint") {
+		t.Fatal("merge-conflict blocker still created a checkpoint commit")
+	}
+	if got := remoteHead(t, repo); got != beforeRemote {
+		t.Fatalf("merge-conflict blocker changed remote head from %q to %q", beforeRemote, got)
+	}
+	if got := repo.Git("status", "--porcelain=v1"); got != beforeStatus {
+		t.Fatalf("merge-conflict blocker changed working state from %q to %q", beforeStatus, got)
+	}
+	if got := repo.ReadFile("conflict.txt"); got != beforeConflict {
+		t.Fatalf("merge-conflict blocker changed conflict file from %q to %q", beforeConflict, got)
 	}
 }
 

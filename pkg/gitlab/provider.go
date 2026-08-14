@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/gitlab-org/api/client-go"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/ratelimit"

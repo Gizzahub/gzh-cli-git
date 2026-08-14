@@ -277,7 +277,19 @@ func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnr
 	if len(branches) == 0 {
 		return infoCell{}
 	}
-	sort.Slice(branches, func(i, j int) bool { return branches[i].full < branches[j].full })
+	// Top-level branches conventionally carry integration points (develop,
+	// release, and similar), while hierarchical names are commonly generated
+	// automation branches. Prioritize the former so truncation does not hide
+	// the branch most likely to be useful to a human reader; preserve full-ref
+	// ordering within each group for stable output across remotes.
+	sort.Slice(branches, func(i, j int) bool {
+		iTopLevel := !strings.Contains(branches[i].branch, "/")
+		jTopLevel := !strings.Contains(branches[j].branch, "/")
+		if iTopLevel != jTopLevel {
+			return iTopLevel
+		}
+		return branches[i].full < branches[j].full
+	})
 
 	shown := branches
 	suffix := ""

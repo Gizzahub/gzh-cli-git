@@ -438,6 +438,20 @@ func TestRemoteOnlyBranchesCell_MultipleRemotesSortAndTruncate(t *testing.T) {
 	}
 }
 
+func TestRemoteOnlyBranchesCell_TopLevelBranchesSurviveTruncation(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{RemoteBranches: []string{
+		"origin/dependabot/github_actions/a", "origin/dependabot/github_actions/b",
+		"origin/dependabot/github_actions/c", "origin/dependabot/github_actions/d",
+		"origin/develop",
+	}}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
+	if !strings.HasPrefix(got, "develop, ") || !strings.HasSuffix(got, " +2") {
+		t.Errorf("top-level develop must lead a truncated remote-only list, got %q", got)
+	}
+}
+
 func TestRenderInfoTable_CompactKeepsRemoteOnlyColumn(t *testing.T) {
 	withColors(t, false)
 

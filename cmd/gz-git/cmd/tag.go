@@ -25,7 +25,7 @@ var (
 	tagStatusBulkFlags BulkCommandFlags
 )
 
-// tagCmd represents the tag command group
+// tagCmd represents the tag command group.
 var tagCmd = &cobra.Command{
 	Use:   "tag",
 	Short: "Tag management commands",
@@ -50,7 +50,7 @@ var tagCmd = &cobra.Command{
 	Args:    cobra.NoArgs,
 }
 
-// tagCreateCmd creates a tag
+// tagCreateCmd creates a tag.
 var tagCreateCmd = &cobra.Command{
 	Use:   "create <name> [directory]",
 	Short: "Create a tag",
@@ -67,7 +67,7 @@ var tagCreateCmd = &cobra.Command{
 	RunE:    runTagCreate,
 }
 
-// tagAutoCmd auto-generates next version
+// tagAutoCmd auto-generates next version.
 var tagAutoCmd = &cobra.Command{
 	Use:   "auto [directory]",
 	Short: "Auto-generate next version tag",
@@ -83,7 +83,7 @@ var tagAutoCmd = &cobra.Command{
 	RunE:    runTagAuto,
 }
 
-// tagListCmd lists tags
+// tagListCmd lists tags.
 var tagListCmd = &cobra.Command{
 	Use:   "list [directory]",
 	Short: "List tags",
@@ -96,7 +96,7 @@ var tagListCmd = &cobra.Command{
 	RunE:    runTagList,
 }
 
-// tagPushCmd pushes tags
+// tagPushCmd pushes tags.
 var tagPushCmd = &cobra.Command{
 	Use:   "push [name] [directory]",
 	Short: "Push tags to remote",
@@ -112,7 +112,7 @@ var tagPushCmd = &cobra.Command{
 	RunE:    runTagPush,
 }
 
-// tagStatusCmd shows tag status
+// tagStatusCmd shows tag status.
 var tagStatusCmd = &cobra.Command{
 	Use:   "status [directory]",
 	Short: "Show tag status",
@@ -459,7 +459,7 @@ func printBulkTagResult(result *repository.BulkTagResult, operation string, dryR
 	fmt.Printf("Duration: %s\n", result.Duration.Round(time.Millisecond))
 }
 
-// TagJSONOutput represents the JSON output structure for tag command
+// TagJSONOutput represents the JSON output structure for tag command.
 type TagJSONOutput struct {
 	Operation      string                    `json:"operation"`
 	TotalScanned   int                       `json:"total_scanned"`
@@ -469,7 +469,7 @@ type TagJSONOutput struct {
 	Repositories   []TagRepositoryJSONOutput `json:"repositories"`
 }
 
-// TagRepositoryJSONOutput represents a single repository in JSON output
+// TagRepositoryJSONOutput represents a single repository in JSON output.
 type TagRepositoryJSONOutput struct {
 	Path    string `json:"path"`
 	Status  string `json:"status"`

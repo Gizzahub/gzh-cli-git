@@ -12,7 +12,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 )
 
-// schemaCmd represents the schema command
+// schemaCmd represents the schema command.
 var schemaCmd = &cobra.Command{
 	Use:   "schema",
 	Short: "Show configuration schema reference",

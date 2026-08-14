@@ -24,7 +24,7 @@ var (
 	showEffective bool // For show --effective
 )
 
-// configCmd represents the config command
+// configCmd represents the config command.
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration profiles and settings",
@@ -42,7 +42,7 @@ var configCmd = &cobra.Command{
 	Example: ``,
 }
 
-// configInitCmd initializes configuration
+// configInitCmd initializes configuration.
 var configInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize project or global configuration",
@@ -58,7 +58,7 @@ var configInitCmd = &cobra.Command{
 	RunE:    runConfigInit,
 }
 
-// configShowCmd shows effective configuration
+// configShowCmd shows effective configuration.
 var configShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Show project or effective configuration",
@@ -74,7 +74,7 @@ var configShowCmd = &cobra.Command{
 	RunE:    runConfigShow,
 }
 
-// Profile subcommands
+// Profile subcommands.
 var configProfileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage configuration profiles",
@@ -158,13 +158,13 @@ var configHierarchyCmd = &cobra.Command{
 	RunE:    runConfigHierarchy,
 }
 
-// Config command flags
+// Config command flags.
 var (
 	validateFlag bool
 	compactFlag  bool
 )
 
-// Profile creation flags
+// Profile creation flags.
 var (
 	profileProvider     string
 	profileBaseURL      string
@@ -213,7 +213,7 @@ func init() {
 	configProfileCreateCmd.Flags().StringVar(&profileSubgroupMode, "subgroup-mode", "", "Subgroup mode (flat, nested)")
 }
 
-// runConfigInit initializes configuration
+// runConfigInit initializes configuration.
 func runConfigInit(cmd *cobra.Command, args []string) error {
 	mgr, err := config.NewManager()
 	if err != nil {
@@ -246,7 +246,7 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigShow shows effective configuration
+// runConfigShow shows effective configuration.
 func runConfigShow(cmd *cobra.Command, args []string) error {
 	mgr, err := config.NewManager()
 	if err != nil {
@@ -302,7 +302,7 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigProfileList lists all profiles
+// runConfigProfileList lists all profiles.
 func runConfigProfileList(cmd *cobra.Command, args []string) error {
 	mgr, err := config.NewManager()
 	if err != nil {
@@ -341,7 +341,7 @@ func runConfigProfileList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigProfileShow shows profile details
+// runConfigProfileShow shows profile details.
 func runConfigProfileShow(cmd *cobra.Command, args []string) error {
 	profileName := args[0]
 
@@ -364,7 +364,7 @@ func runConfigProfileShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigProfileCreate creates a new profile
+// runConfigProfileCreate creates a new profile.
 func runConfigProfileCreate(cmd *cobra.Command, args []string) error {
 	profileName := args[0]
 	ctx := cmd.Context()
@@ -414,7 +414,7 @@ func runConfigProfileCreate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigProfileUse sets active profile
+// runConfigProfileUse sets active profile.
 func runConfigProfileUse(cmd *cobra.Command, args []string) error {
 	profileName := args[0]
 
@@ -431,7 +431,7 @@ func runConfigProfileUse(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigProfileDelete deletes a profile
+// runConfigProfileDelete deletes a profile.
 func runConfigProfileDelete(cmd *cobra.Command, args []string) error {
 	profileName := args[0]
 
@@ -448,7 +448,7 @@ func runConfigProfileDelete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runConfigHierarchy shows config hierarchy tree
+// runConfigHierarchy shows config hierarchy tree.
 func runConfigHierarchy(cmd *cobra.Command, args []string) error {
 	// Load config from home directory or current directory
 	cwd, err := os.Getwd()
@@ -486,7 +486,7 @@ func runConfigHierarchy(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// printConfigTree recursively prints config hierarchy
+// printConfigTree recursively prints config hierarchy.
 func printConfigTree(cfg *config.Config, path string, configFile string, depth int, validate bool, compact bool) {
 	indent := strings.Repeat("  ", depth)
 
@@ -558,7 +558,7 @@ func printConfigTree(cfg *config.Config, path string, configFile string, depth i
 	}
 }
 
-// resolveChildPath resolves child path relative to parent
+// resolveChildPath resolves child path relative to parent.
 func resolveChildPath(parentPath, childPath string) (string, error) {
 	if strings.HasPrefix(childPath, "~/") {
 		home, _ := os.UserHomeDir()
@@ -570,7 +570,7 @@ func resolveChildPath(parentPath, childPath string) (string, error) {
 	return filepath.Join(parentPath, childPath), nil
 }
 
-// printConfigValue prints a config value with its source
+// printConfigValue prints a config value with its source.
 func printConfigValue(key, value, source string) {
 	if value == "" {
 		return
@@ -582,7 +582,7 @@ func printConfigValue(key, value, source string) {
 	fmt.Println()
 }
 
-// sanitizeToken removes sensitive parts of tokens for display
+// sanitizeToken removes sensitive parts of tokens for display.
 func sanitizeToken(token string) string {
 	if token == "" {
 		return ""

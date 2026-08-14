@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// TestNewExecutor tests executor creation with options
+// TestNewExecutor tests executor creation with options.
 func TestNewExecutor(t *testing.T) {
 	tests := []struct {
 		name string
@@ -83,7 +83,7 @@ func TestNewExecutor(t *testing.T) {
 	}
 }
 
-// TestExecutorRun tests basic command execution
+// TestExecutorRun tests basic command execution.
 func TestExecutorRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping executor test in short mode")
@@ -152,7 +152,7 @@ func TestExecutorRun(t *testing.T) {
 	}
 }
 
-// TestExecutorRunInRepo tests command execution in a real Git repository
+// TestExecutorRunInRepo tests command execution in a real Git repository.
 func TestExecutorRunInRepo(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping repository test in short mode")
@@ -237,7 +237,7 @@ func TestExecutorRunInRepo(t *testing.T) {
 	}
 }
 
-// TestExecutorRunQuiet tests RunQuiet method
+// TestExecutorRunQuiet tests RunQuiet method.
 func TestExecutorRunQuiet(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping executor test in short mode")
@@ -289,7 +289,7 @@ func TestExecutorRunQuiet(t *testing.T) {
 	}
 }
 
-// TestExecutorRunOutput tests RunOutput method
+// TestExecutorRunOutput tests RunOutput method.
 func TestExecutorRunOutput(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping executor test in short mode")
@@ -335,7 +335,7 @@ func TestExecutorRunOutput(t *testing.T) {
 	}
 }
 
-// TestExecutorRunLines tests RunLines method
+// TestExecutorRunLines tests RunLines method.
 func TestExecutorRunLines(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping executor test in short mode")
@@ -356,7 +356,7 @@ func TestExecutorRunLines(t *testing.T) {
 	})
 }
 
-// TestExecutorIsGitRepository tests IsGitRepository method
+// TestExecutorIsGitRepository tests IsGitRepository method.
 func TestExecutorIsGitRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping repository test in short mode")
@@ -396,7 +396,7 @@ func TestExecutorIsGitRepository(t *testing.T) {
 	}
 }
 
-// TestExecutorGetGitVersion tests GetGitVersion method
+// TestExecutorGetGitVersion tests GetGitVersion method.
 func TestExecutorGetGitVersion(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping executor test in short mode")
@@ -421,7 +421,7 @@ func TestExecutorGetGitVersion(t *testing.T) {
 	}
 }
 
-// TestGitError tests GitError type
+// TestGitError tests GitError type.
 func TestGitError(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -462,7 +462,7 @@ func TestGitError(t *testing.T) {
 	}
 }
 
-// TestGitErrorIs tests GitError.Is method
+// TestGitErrorIs tests GitError.Is method.
 func TestGitErrorIs(t *testing.T) {
 	err1 := &GitError{Command: "git status", ExitCode: 128}
 	err2 := &GitError{Command: "git clone", ExitCode: 1}
@@ -476,7 +476,7 @@ func TestGitErrorIs(t *testing.T) {
 	}
 }
 
-// TestExecutorTimeout tests command timeout
+// TestExecutorTimeout tests command timeout.
 func TestExecutorTimeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping timeout test in short mode")
@@ -497,7 +497,7 @@ func TestExecutorTimeout(t *testing.T) {
 	}
 }
 
-// TestExecutorContextCancellation tests context cancellation
+// TestExecutorContextCancellation tests context cancellation.
 func TestExecutorContextCancellation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping cancellation test in short mode")

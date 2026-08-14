@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestSanitizeArgs tests the argument sanitization function
+// TestSanitizeArgs tests the argument sanitization function.
 func TestSanitizeArgs(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -148,7 +148,7 @@ func TestSanitizeArgs(t *testing.T) {
 	}
 }
 
-// TestSanitizePath tests path sanitization
+// TestSanitizePath tests path sanitization.
 func TestSanitizePath(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -227,7 +227,7 @@ func TestSanitizePath(t *testing.T) {
 	}
 }
 
-// TestSanitizeURL tests URL sanitization
+// TestSanitizeURL tests URL sanitization.
 func TestSanitizeURL(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -321,7 +321,7 @@ func TestSanitizeURL(t *testing.T) {
 	}
 }
 
-// TestSanitizeCommitMessage tests commit message sanitization
+// TestSanitizeCommitMessage tests commit message sanitization.
 func TestSanitizeCommitMessage(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -380,7 +380,7 @@ func TestSanitizeCommitMessage(t *testing.T) {
 	}
 }
 
-// TestSanitizeBranchName tests branch name sanitization
+// TestSanitizeBranchName tests branch name sanitization.
 func TestSanitizeBranchName(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -504,7 +504,7 @@ func TestSanitizeBranchName(t *testing.T) {
 	}
 }
 
-// TestDangerousPatternsComprehensive tests all dangerous patterns
+// TestDangerousPatternsComprehensive tests all dangerous patterns.
 func TestDangerousPatternsComprehensive(t *testing.T) {
 	dangerousInputs := []string{
 		"; echo malicious",

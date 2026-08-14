@@ -24,7 +24,7 @@ var (
 	pushForeignWork string
 )
 
-// pushCmd represents the push command for multi-repository operations
+// pushCmd represents the push command for multi-repository operations.
 var pushCmd = &cobra.Command{
 	Use:   "push [directory]",
 	Short: "Push commits to multiple repositories in parallel",

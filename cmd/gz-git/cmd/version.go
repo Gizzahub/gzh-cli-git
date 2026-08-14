@@ -9,7 +9,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 )
 
-// versionCmd represents the version command
+// versionCmd represents the version command.
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",

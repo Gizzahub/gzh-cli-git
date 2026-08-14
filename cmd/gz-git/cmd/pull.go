@@ -19,7 +19,7 @@ var (
 	pullStash    bool
 )
 
-// pullCmd represents the pull command for multi-repository operations
+// pullCmd represents the pull command for multi-repository operations.
 var pullCmd = &cobra.Command{
 	Use:   "pull [directory]",
 	Short: "Pull updates from multiple repositories in parallel",

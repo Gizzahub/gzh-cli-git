@@ -19,7 +19,7 @@ var (
 	switchForce  bool
 )
 
-// switchCmd represents the switch command
+// switchCmd represents the switch command.
 var switchCmd = &cobra.Command{
 	Use:   "switch <branch> [directory]",
 	Short: "Switch branches across multiple repositories",
@@ -122,7 +122,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	return errPartialFailure(result.Summary[repository.StatusError], result.TotalProcessed)
 }
 
-// displaySwitchResults displays the results of a bulk switch operation
+// displaySwitchResults displays the results of a bulk switch operation.
 func displaySwitchResults(result *repository.BulkSwitchResult, format string) {
 	// JSON or LLM output mode
 	if format == "json" || format == "llm" {
@@ -217,7 +217,7 @@ func displaySwitchResults(result *repository.BulkSwitchResult, format string) {
 	}
 }
 
-// displaySwitchRepoResult displays a single repository switch result
+// displaySwitchRepoResult displays a single repository switch result.
 func displaySwitchRepoResult(repo repository.RepositorySwitchResult) {
 	var icon string
 	switch repo.Status {
@@ -242,7 +242,7 @@ func displaySwitchRepoResult(repo repository.RepositorySwitchResult) {
 	fmt.Printf("[%s] %-40s %s\n", icon, repo.RelativePath, repo.Message)
 }
 
-// displaySwitchSummary displays the summary of bulk switch results
+// displaySwitchSummary displays the summary of bulk switch results.
 func displaySwitchSummary(result *repository.BulkSwitchResult) {
 	fmt.Print("Summary: ")
 
@@ -283,7 +283,7 @@ func displaySwitchSummary(result *repository.BulkSwitchResult) {
 	}
 }
 
-// SwitchJSONOutput represents the JSON output structure for switch command
+// SwitchJSONOutput represents the JSON output structure for switch command.
 type SwitchJSONOutput struct {
 	TargetBranch   string                       `json:"target_branch"`
 	TotalScanned   int                          `json:"total_scanned"`
@@ -293,7 +293,7 @@ type SwitchJSONOutput struct {
 	Repositories   []SwitchRepositoryJSONOutput `json:"repositories"`
 }
 
-// SwitchRepositoryJSONOutput represents a single repository in JSON output
+// SwitchRepositoryJSONOutput represents a single repository in JSON output.
 type SwitchRepositoryJSONOutput struct {
 	Path           string `json:"path"`
 	Status         string `json:"status"`

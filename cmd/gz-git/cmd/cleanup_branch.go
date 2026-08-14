@@ -14,7 +14,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
-// cleanupBranchBulkFlags holds bulk-specific flags
+// cleanupBranchBulkFlags holds bulk-specific flags.
 var cleanupBranchBulkFlags BulkCommandFlags
 
 var (
@@ -30,7 +30,7 @@ var (
 	cleanupBranchBaseBranch string
 )
 
-// cleanupBranchCmd represents the cleanup branch command
+// cleanupBranchCmd represents the cleanup branch command.
 var cleanupBranchCmd = &cobra.Command{
 	Use:   "branch [directory]",
 	Short: "Clean up merged, stale, or gone branches",
@@ -194,7 +194,7 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 	return nil
 }
 
-// runBulkCleanupBranch performs cleanup across multiple repositories
+// runBulkCleanupBranch performs cleanup across multiple repositories.
 func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns []string) error {
 	client := repository.NewClient()
 
@@ -291,7 +291,7 @@ func confirmBulkCleanupBranch(ctx context.Context, client repository.Client, opt
 	return confirmDestructiveBulk(cleanupBranchYes)
 }
 
-// printBulkCleanupBranchResult displays bulk cleanup results
+// printBulkCleanupBranchResult displays bulk cleanup results.
 func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun bool) {
 	modeStr := "[DRY-RUN]"
 	if !dryRun {

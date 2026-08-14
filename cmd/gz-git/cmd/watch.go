@@ -26,7 +26,7 @@ var (
 	watchNotifySound  bool
 )
 
-// watchCmd represents the watch command
+// watchCmd represents the watch command.
 var watchCmd = &cobra.Command{
 	Use:   "watch [paths...]",
 	Short: "Monitor repositories for changes",
@@ -369,7 +369,7 @@ func pluralize(count int, singular, plural string) string {
 //	Linux: exec.Command("paplay", "/usr/share/sounds/freedesktop/stereo/message.oga").Run()
 //
 // Reference: docs/design/WATCH_OUTPUT_IMPROVEMENTS.md (Phase 1)
-// Priority: Medium (P2) - Planned for v0.3.0
+// Priority: Medium (P2) - Planned for v0.3.0.
 func playNotificationSound() {
 	// Placeholder - feature not yet implemented
 	_ = playSystemSound()

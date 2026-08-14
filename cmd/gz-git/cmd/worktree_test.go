@@ -309,7 +309,7 @@ func TestWorktreeRemove_NotARepo(t *testing.T) {
 	}
 }
 
-// TestPrintWorktreesJSON verifies the JSON marshalling of worktree results.
+// TestPrintWorktreesJSON verifies the JSON marshaling of worktree results.
 func TestPrintWorktreesJSON(t *testing.T) {
 	results := []repoWorktreeResult{
 		{

@@ -12,7 +12,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/wizard"
 )
 
-// cleanupWizardCmd represents the cleanup wizard command
+// cleanupWizardCmd represents the cleanup wizard command.
 var cleanupWizardCmd = &cobra.Command{
 	Use:   "wizard [directory]",
 	Short: "Interactive wizard for branch cleanup",

@@ -24,7 +24,7 @@ var (
 	diffNoDiffContent  bool
 )
 
-// diffCmd represents the diff command
+// diffCmd represents the diff command.
 var diffCmd = &cobra.Command{
 	Use:   "diff [directory]",
 	Short: "Show diffs across multiple repositories",
@@ -74,7 +74,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	go func() {
 		<-sigChan
 		if !quiet {
-			fmt.Println("\nInterrupted, cancelling...")
+			fmt.Println("\nInterrupted, canceling...")
 		}
 		cancel()
 	}()
@@ -437,7 +437,7 @@ func getFileStatusIcon(status string) string {
 	}
 }
 
-// DiffJSONOutput represents the JSON output structure for diff command
+// DiffJSONOutput represents the JSON output structure for diff command.
 type DiffJSONOutput struct {
 	TotalScanned     int                        `json:"total_scanned"`
 	TotalWithChanges int                        `json:"total_with_changes"`
@@ -447,7 +447,7 @@ type DiffJSONOutput struct {
 	Repositories     []DiffRepositoryJSONOutput `json:"repositories"`
 }
 
-// DiffRepositoryJSONOutput represents a single repository in JSON output
+// DiffRepositoryJSONOutput represents a single repository in JSON output.
 type DiffRepositoryJSONOutput struct {
 	Path                  string                  `json:"path"`
 	Branch                string                  `json:"branch,omitempty"`
@@ -477,7 +477,7 @@ type OmittedFileJSONOutput struct {
 	Reason string `json:"reason"`
 }
 
-// ChangedFileJSONOutput represents a changed file in JSON output
+// ChangedFileJSONOutput represents a changed file in JSON output.
 type ChangedFileJSONOutput struct {
 	Path    string `json:"path"`
 	Status  string `json:"status"`

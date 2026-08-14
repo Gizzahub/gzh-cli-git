@@ -16,7 +16,7 @@ var (
 	updateNoFetch bool
 )
 
-// updateCmd represents the update command for multi-repository operations
+// updateCmd represents the update command for multi-repository operations.
 var updateCmd = &cobra.Command{
 	Use:   "update [directory]",
 	Short: "Update multiple repositories in parallel",

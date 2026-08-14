@@ -14,7 +14,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/ratelimit"
 )
 
-// Provider implements the provider.Provider interface for GitLab
+// Provider implements the provider.Provider interface for GitLab.
 type Provider struct {
 	client      *gitlab.Client
 	token       string
@@ -32,7 +32,7 @@ type ProviderOptions struct {
 	SSHPort int    // Custom SSH port (0 = default 22)
 }
 
-// NewProvider creates a new GitLab provider
+// NewProvider creates a new GitLab provider.
 func NewProvider(token, baseURL string) (*Provider, error) {
 	return NewProviderWithOptions(ProviderOptions{
 		Token:   token,
@@ -82,7 +82,7 @@ func (p *Provider) initClient() error {
 	return nil
 }
 
-// SetToken sets the authentication token
+// SetToken sets the authentication token.
 func (p *Provider) SetToken(token string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -90,7 +90,7 @@ func (p *Provider) SetToken(token string) error {
 	return p.initClient()
 }
 
-// ValidateToken validates the current token
+// ValidateToken validates the current token.
 func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	if p.token == "" {
 		return false, nil
@@ -102,7 +102,7 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Name returns the provider name
+// Name returns the provider name.
 func (p *Provider) Name() string {
 	return "gitlab"
 }
@@ -115,7 +115,7 @@ func (p *Provider) SSHPort() int {
 	return p.sshPort
 }
 
-// ListOrganizationRepos lists all repositories in a GitLab group
+// ListOrganizationRepos lists all repositories in a GitLab group.
 func (p *Provider) ListOrganizationRepos(ctx context.Context, group string) ([]*provider.Repository, error) {
 	var allRepos []*provider.Repository
 
@@ -147,7 +147,7 @@ func (p *Provider) ListOrganizationRepos(ctx context.Context, group string) ([]*
 	return allRepos, nil
 }
 
-// GetRepository gets a single repository from GitLab
+// GetRepository gets a single repository from GitLab.
 func (p *Provider) GetRepository(ctx context.Context, owner, repo string) (*provider.Repository, error) {
 	projectPath := fmt.Sprintf("%s/%s", owner, repo)
 	project, _, err := p.client.Projects.GetProject(projectPath, nil, gitlab.WithContext(ctx))
@@ -158,7 +158,7 @@ func (p *Provider) GetRepository(ctx context.Context, owner, repo string) (*prov
 	return p.convertGitLabProject(project), nil
 }
 
-// ListOrganizations lists groups the authenticated user belongs to
+// ListOrganizations lists groups the authenticated user belongs to.
 func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organization, error) {
 	var allOrgs []*provider.Organization
 
@@ -189,7 +189,7 @@ func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organizat
 	return allOrgs, nil
 }
 
-// ListUserRepos lists all repositories for a user
+// ListUserRepos lists all repositories for a user.
 func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.Repository, error) {
 	var allRepos []*provider.Repository
 
@@ -221,7 +221,7 @@ func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.
 }
 
 // GetRateLimit returns current rate limit status
-// GitLab doesn't have a dedicated rate limit API, so we return estimated values
+// GitLab doesn't have a dedicated rate limit API, so we return estimated values.
 func (p *Provider) GetRateLimit(ctx context.Context) (*provider.RateLimit, error) {
 	remaining, limit, resetTime := p.rateLimiter.Status()
 	return &provider.RateLimit{

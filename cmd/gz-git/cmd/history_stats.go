@@ -20,7 +20,7 @@ var (
 	statsFormat string
 )
 
-// statsCmd represents the history stats command
+// statsCmd represents the history stats command.
 var statsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Show commit statistics",

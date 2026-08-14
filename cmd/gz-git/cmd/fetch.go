@@ -18,7 +18,7 @@ var (
 	fetchTags       bool
 )
 
-// fetchCmd represents the fetch command for multi-repository operations
+// fetchCmd represents the fetch command for multi-repository operations.
 var fetchCmd = &cobra.Command{
 	Use:   "fetch [directory]",
 	Short: "Fetch updates from multiple repositories in parallel",

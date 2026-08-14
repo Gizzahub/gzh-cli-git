@@ -6,7 +6,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 )
 
-// branchCmd represents the branch command group
+// branchCmd represents the branch command group.
 var branchCmd = &cobra.Command{
 	Use:   "branch",
 	Short: "Branch management commands",

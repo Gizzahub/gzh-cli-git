@@ -345,7 +345,7 @@ func displayCleanRepositoryResult(repo repository.RepositoryCleanResult) {
 	}
 }
 
-// CleanJSONOutput represents the JSON output structure for clean command
+// CleanJSONOutput represents the JSON output structure for clean command.
 type CleanJSONOutput struct {
 	TotalScanned   int                         `json:"total_scanned"`
 	TotalProcessed int                         `json:"total_processed"`
@@ -355,7 +355,7 @@ type CleanJSONOutput struct {
 	Repositories   []CleanRepositoryJSONOutput `json:"repositories"`
 }
 
-// CleanRepositoryJSONOutput represents a single repository in JSON output
+// CleanRepositoryJSONOutput represents a single repository in JSON output.
 type CleanRepositoryJSONOutput struct {
 	Path         string   `json:"path"`
 	Branch       string   `json:"branch,omitempty"`

@@ -21,7 +21,7 @@ func TestConfirmDestructiveAndInterrupt(t *testing.T) {
 	select {
 	case <-ctx.Done():
 	default:
-		t.Error("expected cancelled context")
+		t.Error("expected canceled context")
 	}
 	_ = stdinIsInteractive()
 	playNotificationSound()

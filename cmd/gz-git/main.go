@@ -6,14 +6,14 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/cmd/gz-git/cmd"
 )
 
-// version is set during build time via ldflags
+// version is set during build time via ldflags.
 var version = "dev"
 
 func main() {
 	cmd.Execute(version)
 }
 
-// init sets up global application state
+// init sets up global application state.
 func init() {
 	// Ensure clean exit on interrupt
 	// Additional initialization can be added here

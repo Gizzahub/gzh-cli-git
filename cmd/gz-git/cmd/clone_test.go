@@ -237,7 +237,7 @@ repositories:
 			}
 			defer os.Remove(tmpfile.Name())
 
-			if _, err := tmpfile.Write([]byte(tt.yaml)); err != nil {
+			if _, err := tmpfile.WriteString(tt.yaml); err != nil {
 				t.Fatal(err)
 			}
 			tmpfile.Close()
@@ -305,7 +305,7 @@ repositories:
 			}
 			defer os.Remove(tmpfile.Name())
 
-			if _, err := tmpfile.Write([]byte(tt.yaml)); err != nil {
+			if _, err := tmpfile.WriteString(tt.yaml); err != nil {
 				t.Fatal(err)
 			}
 			tmpfile.Close()
@@ -393,7 +393,7 @@ repositories:
 	// Write YAML to stdin
 	go func() {
 		defer w.Close()
-		w.Write([]byte(yaml))
+		w.WriteString(yaml)
 	}()
 
 	// Parse from stdin
@@ -411,7 +411,7 @@ repositories:
 	}
 }
 
-// Helper function for string contains check
+// Helper function for string contains check.
 func containsString(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) >= len(substr) && s[:len(substr)] == substr || stringContains(s, substr))
 }
@@ -522,7 +522,7 @@ repositories:
 	}
 	defer os.Remove(tmpfile.Name())
 
-	if _, err := tmpfile.Write([]byte(yaml)); err != nil {
+	if _, err := tmpfile.WriteString(yaml); err != nil {
 		t.Fatal(err)
 	}
 	tmpfile.Close()
@@ -569,7 +569,7 @@ plugins:
 	}
 	defer os.Remove(tmpfile.Name())
 
-	if _, err := tmpfile.Write([]byte(yaml)); err != nil {
+	if _, err := tmpfile.WriteString(yaml); err != nil {
 		t.Fatal(err)
 	}
 	tmpfile.Close()
@@ -685,7 +685,7 @@ repositories:
 	}
 	defer os.Remove(tmpfile.Name())
 
-	if _, err := tmpfile.Write([]byte(yaml)); err != nil {
+	if _, err := tmpfile.WriteString(yaml); err != nil {
 		t.Fatal(err)
 	}
 	tmpfile.Close()
@@ -908,7 +908,7 @@ plugins:
 	}
 	defer os.Remove(tmpfile.Name())
 
-	if _, err := tmpfile.Write([]byte(yaml)); err != nil {
+	if _, err := tmpfile.WriteString(yaml); err != nil {
 		t.Fatal(err)
 	}
 	tmpfile.Close()

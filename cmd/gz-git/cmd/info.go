@@ -22,7 +22,7 @@ var (
 	infoCompact bool
 )
 
-// infoCmd represents the info command
+// infoCmd represents the info command.
 var infoCmd = &cobra.Command{
 	Use:   "info [directory]",
 	Short: "Display repository information",

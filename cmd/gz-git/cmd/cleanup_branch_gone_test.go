@@ -15,7 +15,7 @@ import (
 // TestCleanupBranchGoneDeletesAndCounts covers the single-repository --gone path
 // end to end.
 //
-// Two separate defects made this flag do nothing. The analysis never recognised a
+// Two separate defects made this flag do nothing. The analysis never recognized a
 // gone branch, and — even after that was fixed — this command built its
 // AnalyzeOptions without IncludeGone, so --gone was accepted, printed nothing,
 // and exited 0. The bulk path (a directory argument) always passed it, which is

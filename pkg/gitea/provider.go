@@ -11,7 +11,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/ratelimit"
 )
 
-// Provider implements the provider.Provider interface for Gitea
+// Provider implements the provider.Provider interface for Gitea.
 type Provider struct {
 	client      *gitea.Client
 	token       string
@@ -26,7 +26,7 @@ type ProviderOptions struct {
 	BaseURL string // Gitea instance URL (required)
 }
 
-// NewProvider creates a new Gitea provider
+// NewProvider creates a new Gitea provider.
 func NewProvider(token, baseURL string) (*Provider, error) {
 	return NewProviderWithOptions(ProviderOptions{
 		Token:   token,
@@ -77,12 +77,12 @@ func (p *Provider) initClient() error {
 	return nil
 }
 
-// Name returns the provider name
+// Name returns the provider name.
 func (p *Provider) Name() string {
 	return "gitea"
 }
 
-// SetToken sets the authentication token
+// SetToken sets the authentication token.
 func (p *Provider) SetToken(token string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -90,7 +90,7 @@ func (p *Provider) SetToken(token string) error {
 	return p.initClient()
 }
 
-// ValidateToken validates the current token
+// ValidateToken validates the current token.
 func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	if p.token == "" {
 		return false, nil
@@ -104,7 +104,7 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// ListOrganizationRepos lists all repositories in a Gitea organization
+// ListOrganizationRepos lists all repositories in a Gitea organization.
 func (p *Provider) ListOrganizationRepos(ctx context.Context, org string) ([]*provider.Repository, error) {
 	var allRepos []*provider.Repository
 
@@ -133,7 +133,7 @@ func (p *Provider) ListOrganizationRepos(ctx context.Context, org string) ([]*pr
 	return allRepos, nil
 }
 
-// ListUserRepos lists all repositories for a user
+// ListUserRepos lists all repositories for a user.
 func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.Repository, error) {
 	var allRepos []*provider.Repository
 
@@ -162,7 +162,7 @@ func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.
 	return allRepos, nil
 }
 
-// GetRepository gets a single repository from Gitea
+// GetRepository gets a single repository from Gitea.
 func (p *Provider) GetRepository(ctx context.Context, owner, repo string) (*provider.Repository, error) {
 	giteaRepo, _, err := p.client.GetRepo(owner, repo)
 	if err != nil {
@@ -172,7 +172,7 @@ func (p *Provider) GetRepository(ctx context.Context, owner, repo string) (*prov
 	return convertGiteaRepo(giteaRepo), nil
 }
 
-// ListOrganizations lists organizations the authenticated user belongs to
+// ListOrganizations lists organizations the authenticated user belongs to.
 func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organization, error) {
 	var allOrgs []*provider.Organization
 
@@ -206,7 +206,7 @@ func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organizat
 }
 
 // GetRateLimit returns current rate limit status
-// Gitea doesn't have a dedicated rate limit API, so we return estimated values
+// Gitea doesn't have a dedicated rate limit API, so we return estimated values.
 func (p *Provider) GetRateLimit(ctx context.Context) (*provider.RateLimit, error) {
 	remaining, limit, resetTime := p.rateLimiter.Status()
 	return &provider.RateLimit{

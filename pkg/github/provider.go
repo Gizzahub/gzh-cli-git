@@ -13,7 +13,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/ratelimit"
 )
 
-// Provider implements the provider.Provider interface for GitHub
+// Provider implements the provider.Provider interface for GitHub.
 type Provider struct {
 	client      *github.Client
 	token       string
@@ -94,7 +94,7 @@ func (p *Provider) SetToken(token string) error {
 	return p.initClient(token, p.baseURL)
 }
 
-// ValidateToken validates the current token
+// ValidateToken validates the current token.
 func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	if p.token == "" {
 		return false, nil
@@ -106,12 +106,12 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Name returns the provider name
+// Name returns the provider name.
 func (p *Provider) Name() string {
 	return "github"
 }
 
-// ListOrganizationRepos lists all repositories in a GitHub organization
+// ListOrganizationRepos lists all repositories in a GitHub organization.
 func (p *Provider) ListOrganizationRepos(ctx context.Context, org string) ([]*provider.Repository, error) {
 	var allRepos []*provider.Repository
 
@@ -138,7 +138,7 @@ func (p *Provider) ListOrganizationRepos(ctx context.Context, org string) ([]*pr
 	return allRepos, nil
 }
 
-// GetRepository gets a single repository from GitHub
+// GetRepository gets a single repository from GitHub.
 func (p *Provider) GetRepository(ctx context.Context, owner, repo string) (*provider.Repository, error) {
 	ghRepo, _, err := p.client.Repositories.Get(ctx, owner, repo)
 	if err != nil {
@@ -148,7 +148,7 @@ func (p *Provider) GetRepository(ctx context.Context, owner, repo string) (*prov
 	return convertGitHubRepo(ghRepo), nil
 }
 
-// ListOrganizations lists organizations the authenticated user belongs to
+// ListOrganizations lists organizations the authenticated user belongs to.
 func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organization, error) {
 	var allOrgs []*provider.Organization
 
@@ -177,7 +177,7 @@ func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organizat
 	return allOrgs, nil
 }
 
-// ListUserRepos lists all repositories for a user
+// ListUserRepos lists all repositories for a user.
 func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.Repository, error) {
 	var allRepos []*provider.Repository
 
@@ -205,7 +205,7 @@ func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.
 	return allRepos, nil
 }
 
-// GetRateLimit returns current rate limit status
+// GetRateLimit returns current rate limit status.
 func (p *Provider) GetRateLimit(ctx context.Context) (*provider.RateLimit, error) {
 	limits, _, err := p.client.RateLimit.Get(ctx)
 	if err != nil {

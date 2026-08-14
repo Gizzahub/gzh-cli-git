@@ -146,14 +146,15 @@ func displayExecResults(result *repository.BulkExecResult) {
 			icon = "→"
 		}
 		line := fmt.Sprintf("%s %-40s", icon, repo.RelativePath)
-		if repo.Status == repository.StatusExecOK {
+		switch repo.Status {
+		case repository.StatusExecOK:
 			line += fmt.Sprintf(" (%s)", repo.Duration.Round(time.Millisecond))
 			if verbose && repo.Output != "" {
 				line += "\n    " + strings.ReplaceAll(strings.TrimSpace(repo.Output), "\n", "\n    ")
 			}
-		} else if repo.Status == repository.StatusWouldExec {
+		case repository.StatusWouldExec:
 			line += " " + repo.Message
-		} else {
+		default:
 			line += " " + repo.Message
 		}
 		fmt.Println(line)

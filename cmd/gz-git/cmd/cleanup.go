@@ -6,7 +6,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 )
 
-// cleanupCmd represents the cleanup command group
+// cleanupCmd represents the cleanup command group.
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Clean up various Git resources",

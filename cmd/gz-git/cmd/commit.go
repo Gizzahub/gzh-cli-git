@@ -226,7 +226,7 @@ func runCommit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("editor failed: %w", err)
 		}
 		if editedMessages == nil {
-			fmt.Println("Cancelled (empty file).")
+			fmt.Println("Canceled (empty file).")
 			return nil
 		}
 		applyCustomMessages(result, editedMessages)
@@ -336,7 +336,7 @@ func applyCustomMessages(result *repository.BulkCommitResult, messages map[strin
 }
 
 // editMessagesInEditor opens an editor for bulk message editing
-// Returns nil if the user cancelled (empty file)
+// Returns nil if the user canceled (empty file)
 func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]string, error) {
 	// Create temp file
 	tmpFile, err := os.CreateTemp("", "gz-git-commit-*.txt")
@@ -362,7 +362,7 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 		if repo.Message != "" {
 			msg = repo.Message
 		}
-		content.WriteString(fmt.Sprintf("%s: %s\n", repo.RelativePath, msg))
+		fmt.Fprintf(&content, "%s: %s\n", repo.RelativePath, msg)
 	}
 
 	if _, err := tmpFile.WriteString(content.String()); err != nil {
@@ -403,7 +403,8 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 
 	if err := cmd.Run(); err != nil {
 		// Check for specific error types
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			return nil, fmt.Errorf("editor exited with code %d: consider using --json instead", exitErr.ExitCode())
 		}
 		return nil, fmt.Errorf("failed to run editor '%s': %w", editor, err)
@@ -443,7 +444,7 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	if !hasContent {
-		return nil, nil // Cancelled
+		return nil, nil // Canceled
 	}
 
 	return messages, nil

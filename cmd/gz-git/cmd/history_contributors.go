@@ -21,7 +21,7 @@ var (
 	contribFormat     string
 )
 
-// contributorsCmd represents the history contributors command
+// contributorsCmd represents the history contributors command.
 var contributorsCmd = &cobra.Command{
 	Use:   "contributors",
 	Short: "Analyze repository contributors",
@@ -125,7 +125,7 @@ func runHistoryContributors(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// parseContributorSortBy converts string to ContributorSortBy enum
+// parseContributorSortBy converts string to ContributorSortBy enum.
 func parseContributorSortBy(sort string) (history.ContributorSortBy, error) {
 	switch sort {
 	case "commits":
@@ -141,7 +141,7 @@ func parseContributorSortBy(sort string) (history.ContributorSortBy, error) {
 	}
 }
 
-// parseDate parses a date string in common formats
+// parseDate parses a date string in common formats.
 func parseDate(dateStr string) (time.Time, error) {
 	if dateStr == "" {
 		return time.Time{}, nil

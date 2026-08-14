@@ -101,8 +101,8 @@ func TestWithInterruptCancel_CancelsOnSignal(t *testing.T) {
 
 	select {
 	case <-ctx.Done():
-		// success — the signal cancelled the context
+		// success — the signal canceled the context
 	case <-time.After(2 * time.Second):
-		t.Fatal("context was not cancelled within 2s of SIGTERM")
+		t.Fatal("context was not canceled within 2s of SIGTERM")
 	}
 }

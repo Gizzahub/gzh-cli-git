@@ -16,7 +16,7 @@ var (
 	branchListFlags BulkCommandFlags
 )
 
-// branchListCmd lists branches in repositories
+// branchListCmd lists branches in repositories.
 var branchListCmd = &cobra.Command{
 	Use:   "list [directory]",
 	Short: "List branches in repositories",

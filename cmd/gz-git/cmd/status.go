@@ -16,7 +16,7 @@ import (
 
 var statusFlags BulkCommandFlags
 
-// statusCmd represents the status command
+// statusCmd represents the status command.
 var statusCmd = &cobra.Command{
 	Use:   "status [directory]",
 	Short: "Check status of multiple repositories",

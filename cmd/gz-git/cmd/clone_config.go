@@ -454,7 +454,7 @@ func buildCloneOptionsFromConfig(
 }
 
 // resolveCloneStrategy resolves the effective strategy with precedence:
-// CLI --update-strategy > YAML strategy > default (skip)
+// CLI --update-strategy > YAML strategy > default (skip).
 func resolveCloneStrategy(cliStrategy string, yamlStrategy string) repository.UpdateStrategy {
 	// CLI --update-strategy takes highest precedence
 	if cliStrategy != "" {

@@ -13,17 +13,17 @@ import (
 )
 
 var (
-	// version is set by main.go
+	// version is set by main.go.
 	appVersion string
 
-	// Global flags
+	// Global flags.
 	verbose         bool
 	quiet           bool
 	profileOverride string // Override active profile
 	rootFormat      string // Root command format (local)
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:   "gz-git",
 	Short: "Advanced Git operations CLI",

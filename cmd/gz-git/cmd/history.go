@@ -6,7 +6,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 )
 
-// historyCmd represents the history command group
+// historyCmd represents the history command group.
 var historyCmd = &cobra.Command{
 	Use:   "history",
 	Short: "History analysis commands",

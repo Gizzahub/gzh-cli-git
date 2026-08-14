@@ -153,7 +153,8 @@ func (e *Executor) RunWithEnv(ctx context.Context, dir string, extraEnv []string
 	// Determine exit code
 	exitCode := 0
 	if execErr != nil {
-		if exitError, ok := execErr.(*exec.ExitError); ok {
+		exitError := &exec.ExitError{}
+		if errors.As(execErr, &exitError) {
 			exitCode = exitError.ExitCode()
 		} else {
 			// Non-exit error (e.g., command not found)
@@ -249,7 +250,7 @@ func (e *Executor) IsGitRepository(ctx context.Context, dir string) bool {
 }
 
 // GetGitVersion returns the Git version string.
-// Example: "2.40.0"
+// Example: "2.40.0".
 func (e *Executor) GetGitVersion(ctx context.Context) (string, error) {
 	output, err := e.RunOutput(ctx, "", "version")
 	if err != nil {

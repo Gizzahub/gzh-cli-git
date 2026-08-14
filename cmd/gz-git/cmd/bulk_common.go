@@ -45,7 +45,7 @@ Watch Mode:
     - Track sync status in real-time
     - CI/CD polling for git state changes`
 
-// BulkCommandFlags holds common flags for bulk operations (fetch, pull, push)
+// BulkCommandFlags holds common flags for bulk operations (fetch, pull, push).
 type BulkCommandFlags struct {
 	Depth             int
 	Parallel          int
@@ -108,7 +108,7 @@ func addBulkFlags(cmd *cobra.Command, flags *BulkCommandFlags) {
 }
 
 // validateBulkDirectory parses and validates the directory argument
-// Returns the directory path (defaults to ".") or an error
+// Returns the directory path (defaults to ".") or an error.
 func validateBulkDirectory(args []string) (string, error) {
 	directory := "."
 	if len(args) > 0 {
@@ -124,7 +124,7 @@ func validateBulkDirectory(args []string) (string, error) {
 }
 
 // validateBulkDepth validates the scan-depth flag
-// Returns an error if depth is explicitly set to 0
+// Returns an error if depth is explicitly set to 0.
 func validateBulkDepth(cmd *cobra.Command, depth int) error {
 	if cmd.Flags().Changed("scan-depth") && depth == 0 {
 		return fmt.Errorf("scan-depth must be at least 1 (use --scan-depth 1 to scan current directory and immediate subdirectories)")
@@ -143,31 +143,31 @@ func errPartialFailure(failed, total int) error {
 	return nil
 }
 
-// Core formats (supported by all commands)
+// Core formats (supported by all commands).
 var CoreFormats = cliutil.CoreFormats
 
 // ValidBulkFormats contains valid output formats for bulk operations
-// Core formats + compact (bulk-specific)
+// Core formats + compact (bulk-specific).
 var ValidBulkFormats = cliutil.CoreFormats
 
 // ValidHistoryFormats contains valid output formats for history commands
-// Core formats + table, csv, markdown (history-specific)
+// Core formats + table, csv, markdown (history-specific).
 var ValidHistoryFormats = cliutil.TabularFormats
 
 // validateBulkFormat validates the format flag for bulk operations
-// Returns an error if the format is not supported
+// Returns an error if the format is not supported.
 func validateBulkFormat(format string) error {
 	return cliutil.ValidateFormat(format, ValidBulkFormats)
 }
 
 // validateHistoryFormat validates the format flag for history commands
-// Returns an error if the format is not supported
+// Returns an error if the format is not supported.
 func validateHistoryFormat(format string) error {
 	return cliutil.ValidateFormat(format, ValidHistoryFormats)
 }
 
 // createBulkLogger creates a logger for bulk operations
-// Returns a logger if verbose mode is enabled, nil otherwise
+// Returns a logger if verbose mode is enabled, nil otherwise.
 func createBulkLogger(verbose bool) repository.Logger {
 	if verbose {
 		return repository.NewWriterLogger(os.Stdout)
@@ -176,7 +176,7 @@ func createBulkLogger(verbose bool) repository.Logger {
 }
 
 // createProgressCallback creates a progress callback function for bulk operations
-// The callback is used to display progress during bulk operations
+// The callback is used to display progress during bulk operations.
 func createProgressCallback(operationName string, format string, quiet bool) func(int, int, string) {
 	return func(current, total int, repo string) {
 		if !quiet && format != "compact" && !cliutil.IsMachineFormat(format) {
@@ -185,14 +185,14 @@ func createProgressCallback(operationName string, format string, quiet bool) fun
 	}
 }
 
-// shouldShowProgress returns true if progress messages should be displayed
+// shouldShowProgress returns true if progress messages should be displayed.
 func shouldShowProgress(format string, quiet bool) bool {
 	return !quiet && !cliutil.IsMachineFormat(format)
 }
 
 // getBulkStatusIcon returns the appropriate icon for bulk operation status.
 // The changesCount parameter indicates actual changes (commits behind/ahead/pushed).
-// Icons: ✓ (changes occurred/clean), = (no changes), ✗ (error), ⚠ (warning), ⊘ (skipped)
+// Icons: ✓ (changes occurred/clean), = (no changes), ✗ (error), ⚠ (warning), ⊘ (skipped).
 func getBulkStatusIcon(status string, changesCount int) string {
 	switch status {
 	// Clean state (for status command)
@@ -303,7 +303,7 @@ func getSummaryIcon(status string) string {
 }
 
 // WriteSummaryLine prints a one-line summary for bulk operations.
-// Example: "Fetched 6 repos  [=4 up-to-date  ↓2 fetched]  1.2s"
+// Example: "Fetched 6 repos  [=4 up-to-date  ↓2 fetched]  1.2s".
 func WriteSummaryLine(w io.Writer, verb string, total int, summary map[string]int, duration time.Duration) {
 	var parts []string
 	seen := make(map[string]bool)
@@ -334,7 +334,7 @@ func WriteSummaryLine(w io.Writer, verb string, total int, summary map[string]in
 }
 
 // WriteHealthSummaryLine prints a one-line health summary for diagnostic status.
-// Example: "Status 6 repos  [✓4 healthy  ⚠1 warning  ✗1 error]  1.2s"
+// Example: "Status 6 repos  [✓4 healthy  ⚠1 warning  ✗1 error]  1.2s".
 func WriteHealthSummaryLine(w io.Writer, total int, summary reposync.HealthSummary, duration time.Duration) {
 	var parts []string
 	if summary.Healthy > 0 {
@@ -384,7 +384,7 @@ func printScanningMessage(directory string, depth, parallel int, dryRun bool) {
 // Returns an error if the operation fails.
 type WatchExecutor func() error
 
-// StatusJSONOutput represents the JSON output structure for status command
+// StatusJSONOutput represents the JSON output structure for status command.
 type StatusJSONOutput struct {
 	TotalScanned   int                          `json:"total_scanned"`
 	TotalProcessed int                          `json:"total_processed"`
@@ -393,7 +393,7 @@ type StatusJSONOutput struct {
 	Repositories   []StatusRepositoryJSONOutput `json:"repositories"`
 }
 
-// StatusRepositoryJSONOutput represents a single repository in JSON output
+// StatusRepositoryJSONOutput represents a single repository in JSON output.
 type StatusRepositoryJSONOutput struct {
 	Path             string   `json:"path"`
 	Branch           string   `json:"branch,omitempty"`
@@ -491,7 +491,7 @@ func RunBulkWatch(cfg WatchConfig, executor WatchExecutor) error {
 // confirm gate on bulk×destructive, SIGINT graceful shutdown).
 // See docs/design/DESTRUCTIVE_OP_SAFETY.md.
 
-// withInterruptCancel returns a child context that is cancelled when the process
+// withInterruptCancel returns a child context that is canceled when the process
 // receives SIGINT or SIGTERM, so long-running bulk operations stop gracefully and
 // report partial results instead of being hard-killed by the default handler.
 // The caller MUST defer the returned cancel func; it also tears down the signal
@@ -506,7 +506,7 @@ func withInterruptCancel(ctx context.Context) (context.Context, context.CancelFu
 		select {
 		case <-sigChan:
 			if !quiet {
-				fmt.Fprintln(os.Stderr, "\nInterrupted, cancelling...")
+				fmt.Fprintln(os.Stderr, "\nInterrupted, canceling...")
 			}
 			cancel()
 		case <-ctx.Done():

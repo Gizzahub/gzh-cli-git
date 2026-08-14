@@ -32,7 +32,7 @@ var (
 	cloneGroup        []string // --group flag (select specific groups)
 )
 
-// cloneCmd represents the clone command
+// cloneCmd represents the clone command.
 var cloneCmd = &cobra.Command{
 	Use:   "clone [directory]",
 	Short: "Clone multiple repositories in parallel",
@@ -104,7 +104,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 	go func() {
 		<-sigChan
 		if !quiet {
-			fmt.Println("\nInterrupted, cancelling...")
+			fmt.Println("\nInterrupted, canceling...")
 		}
 		cancel()
 	}()

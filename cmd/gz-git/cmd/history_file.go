@@ -20,7 +20,7 @@ var (
 	fileHistoryFormat string
 )
 
-// fileCmd represents the history file command
+// fileCmd represents the history file command.
 var fileCmd = &cobra.Command{
 	Use:   "file <path>",
 	Short: "Show file change history",
@@ -40,7 +40,7 @@ var fileCmd = &cobra.Command{
 	RunE:    runHistoryFile,
 }
 
-// blameCmd represents the history blame command
+// blameCmd represents the history blame command.
 var blameCmd = &cobra.Command{
 	Use:   "blame <file>",
 	Short: "Show line-by-line authorship",

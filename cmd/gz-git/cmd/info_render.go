@@ -81,12 +81,11 @@ type infoRow struct {
 // infoColumns are the fixed-position columns, in print order. "REMOTE ONLY"
 // is deliberately last and unpadded so it can absorb variable-length content
 // without pushing anything else out of alignment.
-var infoColumns = []string{"REPOSITORY", "BRANCH", "UPSTREAM", "BASE", "WT", "DIRTY", "REMOTE", "OTHER BRANCHES", "REMOTE ONLY"}
+var infoColumns = []string{"REPOSITORY", "BRANCH", "BASE", "WT", "DIRTY", "REMOTE", "OTHER BRANCHES", "REMOTE ONLY"}
 
 const (
 	colRepo = iota
 	colBranch
-	colUpstream
 	colBase
 	colWorktree
 	colDirty
@@ -109,15 +108,11 @@ func renderInfoTable(
 		return
 	}
 
-	// The dominant remote owner is established first so each row can stay
-	// silent about it and speak up only when it differs.
-	majorityOwner, majorityCount := majorityRemoteOwner(result.Repositories)
-
 	rows := make([]infoRow, 0, len(result.Repositories))
 	attention := 0
 	for i := range result.Repositories {
 		repo := &result.Repositories[i]
-		row := buildInfoRow(repo, enrichment[repo.Path], majorityOwner, useRelativePath)
+		row := buildInfoRow(repo, enrichment[repo.Path], useRelativePath)
 		if row.marker != markerNone {
 			attention++
 		}
@@ -145,10 +140,6 @@ func renderInfoTable(
 		fmt.Fprintln(w, strings.TrimRight(line, " "))
 	}
 
-	if note := remoteFooter(majorityOwner, majorityCount, len(result.Repositories)); note != "" {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, note)
-	}
 	fmt.Fprintln(w)
 }
 
@@ -287,17 +278,4 @@ func summarizeInfoScan(result *repository.BulkStatusResult, attention int) strin
 		parts = append(parts, cliutil.ColorGreen+"all clean"+cliutil.ColorReset)
 	}
 	return strings.Join(parts, "  ·  ")
-}
-
-// remoteFooter states the dominant remote once, so the REMOTE column can stay
-// empty for every repository that follows it.
-func remoteFooter(owner string, count, total int) string {
-	if owner == "" || count == 0 {
-		return ""
-	}
-	scope := fmt.Sprintf("%d of %d", count, total)
-	if count == total {
-		scope = fmt.Sprintf("all %d", total)
-	}
-	return fmt.Sprintf("%sremote: %s (%s)%s", cliutil.ColorGray, owner, scope, cliutil.ColorReset)
 }

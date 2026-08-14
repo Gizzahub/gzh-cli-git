@@ -29,7 +29,6 @@ const (
 func buildInfoRow(
 	repo *repository.RepositoryStatusResult,
 	enr infoEnrichment,
-	majorityOwner string,
 	useRelativePath bool,
 ) infoRow {
 	name := filepath.Base(repo.Path)
@@ -40,12 +39,10 @@ func buildInfoRow(
 	cells := make([]infoCell, len(infoColumns))
 	cells[colRepo] = infoCell{text: name}
 	cells[colBranch] = branchCell(repo)
-	cells[colUpstream] = divergenceCell(repo.CommitsAhead, repo.CommitsBehind,
-		repo.Upstream == "", repo.RemoteURL != "")
 	cells[colBase] = baseCell(repo.Branch, enr)
 	cells[colWorktree] = worktreeCell(enr)
 	cells[colDirty] = dirtyCell(repo)
-	cells[colRemote] = remoteCell(repo, majorityOwner)
+	cells[colRemote] = remoteCell(repo)
 	cells[colOther] = otherBranchesCell(repo, enr)
 	cells[colRemoteOnly] = remoteOnlyBranchesCell(repo, enr)
 
@@ -87,7 +84,15 @@ func hasLocalChanges(repo *repository.RepositoryStatusResult) bool {
 		repo.StashCount > 0
 }
 
-// branchCell shows the current branch, elided if long, and flags detached HEAD.
+// branchCell shows the current branch in the shape a shell prompt uses: the
+// name, then its position against the upstream as arrows on the same line.
+// "develop ↑2" is one fact about one branch in the form `git status -sb`
+// trained readers on, and an in-sync branch prints its name alone — the blank
+// where arrows would go is the "nothing to report" of this table.
+//
+// The cell takes the divergence's color when there is one: the name is the
+// stable part and the arrows are the news. A detached HEAD has no branch to
+// compare against, so it keeps its own red form with no arrows appended.
 func branchCell(repo *repository.RepositoryStatusResult) infoCell {
 	if repo.Branch == "" {
 		sha := repo.HeadSHA
@@ -96,24 +101,30 @@ func branchCell(repo *repository.RepositoryStatusResult) infoCell {
 		}
 		return infoCell{text: "detached@" + sha, color: cliutil.ColorRed}
 	}
-	return infoCell{text: elideMiddle(repo.Branch, maxBranchWidth), color: cliutil.ColorCyan}
+	name := elideMiddle(repo.Branch, maxBranchWidth)
+	div := upstreamDivergence(repo)
+	if div.text == "" {
+		return infoCell{text: name, color: cliutil.ColorCyan}
+	}
+	return infoCell{text: name + " " + div.text, color: div.color}
 }
 
-// divergenceCell renders HEAD's position against its upstream.
+// upstreamDivergence renders the fragment that follows the branch name: HEAD's
+// position against its upstream.
 //
 // The two ways a comparison can be missing look identical from ahead/behind
 // alone but have different repairs, so they render differently. With a remote
-// configured, an untracked branch is one `push -u` away and the cell says so.
-// With no remote at all there is nothing to push to; the REMOTE column already
-// reports that, and repeating it here would spend two columns on one fact.
-func divergenceCell(ahead, behind int, noUpstream, hasRemote bool) infoCell {
-	if noUpstream {
-		if !hasRemote {
+// configured, an untracked branch is one `push -u` away and the fragment says
+// so. With no remote at all there is nothing to push to; the REMOTE column
+// already reports that, and repeating it here would say one thing twice.
+func upstreamDivergence(repo *repository.RepositoryStatusResult) infoCell {
+	if repo.Upstream == "" {
+		if repo.RemoteURL == "" {
 			return infoCell{}
 		}
 		return infoCell{text: "no upstream", color: cliutil.ColorYellow}
 	}
-	return divergenceText(ahead, behind)
+	return divergenceText(repo.CommitsAhead, repo.CommitsBehind)
 }
 
 // divergenceText renders an ahead/behind pair with no opinion about what is
@@ -384,96 +395,15 @@ func remoteTrackingBranch(ref string, remotes map[string]string) (remote, branch
 	return remote, branch, true
 }
 
-// remoteCell names the remote owner only when it is not the workspace's
-// dominant one. Printing the same owner on every row spends a column to convey
-// a single fact; the footer states that fact once, and this column is left to
-// call out the repositories that break the pattern — which is the case a user
-// actually needs to see.
-func remoteCell(repo *repository.RepositoryStatusResult, majorityOwner string) infoCell {
-	owner := remoteOwner(repo.RemoteURL)
-	if owner == "" {
+// remoteCell reports whether the repository has a remote at all. Presence is
+// the normal case, so it says nothing; "no remote" marks the repository that
+// cannot push or pull — a freshly `git init`ed one. Which owner a remote
+// points at is detail rather than state, and detail lives in --full.
+func remoteCell(repo *repository.RepositoryStatusResult) infoCell {
+	if repo.RemoteURL == "" {
 		return infoCell{text: "no remote", color: cliutil.ColorRed}
 	}
-	if sameOwner(owner, majorityOwner) {
-		return infoCell{}
-	}
-	return infoCell{text: owner, color: cliutil.ColorMagenta}
-}
-
-// majorityRemoteOwner returns the most common remote owner across the scan and
-// how many repositories use it. Owners are grouped case-insensitively because
-// forge hosts treat "Gizzahub" and "gizzahub" as the same account, so counting
-// them separately would invent a discrepancy that does not exist. The returned
-// spelling is the one that occurs most often, ties broken alphabetically for a
-// stable result across runs.
-func majorityRemoteOwner(repos []repository.RepositoryStatusResult) (owner string, count int) {
-	counts := make(map[string]int)
-	spellings := make(map[string]map[string]int)
-
-	for i := range repos {
-		o := remoteOwner(repos[i].RemoteURL)
-		if o == "" {
-			continue
-		}
-		key := strings.ToLower(o)
-		counts[key]++
-		if spellings[key] == nil {
-			spellings[key] = make(map[string]int)
-		}
-		spellings[key][o]++
-	}
-
-	bestKey := ""
-	for key, n := range counts {
-		if n > counts[bestKey] || (n == counts[bestKey] && key < bestKey) {
-			bestKey = key
-		}
-	}
-	if bestKey == "" {
-		return "", 0
-	}
-
-	best := ""
-	for spelling, n := range spellings[bestKey] {
-		if n > spellings[bestKey][best] || (n == spellings[bestKey][best] && spelling < best) {
-			best = spelling
-		}
-	}
-	return best, counts[bestKey]
-}
-
-// sameOwner compares owners the way forge hosts do.
-func sameOwner(a, b string) bool {
-	return a != "" && strings.EqualFold(a, b)
-}
-
-// remoteOwner reduces a remote URL to "host/owner", covering both the scp-like
-// form (git@host:owner/repo.git) and the URL form (https://host/owner/repo).
-// It returns "" when the URL is empty or does not carry an owner segment.
-func remoteOwner(remoteURL string) string {
-	url := strings.TrimSuffix(strings.TrimSpace(remoteURL), ".git")
-	if url == "" {
-		return ""
-	}
-
-	// scp-like: strip the user@ prefix and turn the single ":" into "/".
-	if !strings.Contains(url, "://") {
-		if at := strings.Index(url, "@"); at >= 0 {
-			url = url[at+1:]
-		}
-		url = strings.Replace(url, ":", "/", 1)
-	} else {
-		url = url[strings.Index(url, "://")+3:]
-		if at := strings.Index(url, "@"); at >= 0 {
-			url = url[at+1:]
-		}
-	}
-
-	parts := strings.Split(strings.Trim(url, "/"), "/")
-	if len(parts) < 3 {
-		return ""
-	}
-	return parts[0] + "/" + parts[1]
+	return infoCell{}
 }
 
 // elideMiddle shortens s to max runes, keeping both ends. Branch names carry

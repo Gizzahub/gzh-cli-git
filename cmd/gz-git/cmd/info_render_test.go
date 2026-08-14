@@ -159,7 +159,7 @@ func TestRenderInfoTable_CompactDropsAllEmptyColumns(t *testing.T) {
 	withColors(t, false)
 
 	out, row := cleanRepoTable(t, true)
-	for _, dropped := range []string{"UPSTREAM", "DIRTY", "WT"} {
+	for _, dropped := range []string{"DIRTY", "WT", "REMOTE"} {
 		if strings.Contains(out, dropped) {
 			t.Errorf("column %q should be dropped when every cell is empty:\n%s", dropped, out)
 		}
@@ -249,32 +249,40 @@ func TestBaseCell_SilentOnBaseBranch(t *testing.T) {
 	}
 }
 
-// TestDivergenceCell_DistinguishesInSyncFromNoUpstream is why Upstream was
-// added to RepositoryStatusResult: both states produce zero ahead/behind, but
-// only one of them is fine.
-func TestDivergenceCell_DistinguishesInSyncFromNoUpstream(t *testing.T) {
+// TestBranchCell_PromptStyleDivergence is why Upstream was added to
+// RepositoryStatusResult: in-sync and no-upstream both produce zero
+// ahead/behind, but only one of them is fine. The divergence now rides on the
+// branch name in the shape a shell prompt uses, so an in-sync branch prints
+// its name alone.
+func TestBranchCell_PromptStyleDivergence(t *testing.T) {
 	withColors(t, false)
 
-	if got := divergenceCell(0, 0, false, true); got.text != "" {
-		t.Errorf("in sync = %q, want empty", got.text)
+	repo := &repository.RepositoryStatusResult{Branch: "main", Upstream: "origin/main"}
+	if got := branchCell(repo); got.text != "main" {
+		t.Errorf("in sync = %q, want the bare name", got.text)
 	}
-	if got := divergenceCell(0, 0, true, true); got.text != "no upstream" {
-		t.Errorf("untracked branch = %q, want \"no upstream\"", got.text)
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsAhead: 2, CommitsBehind: 3}
+	if got := branchCell(repo); got.text != "feat/x ↑2 ↓3" {
+		t.Errorf("diverged = %q, want %q", got.text, "feat/x ↑2 ↓3")
 	}
-	if got := divergenceCell(2, 3, false, true); got.text != "↑2 ↓3" {
-		t.Errorf("diverged = %q, want \"↑2 ↓3\"", got.text)
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", RemoteURL: "git@github.com:Acme/b.git"}
+	if got := branchCell(repo); got.text != "feat/x no upstream" {
+		t.Errorf("untracked branch = %q, want %q", got.text, "feat/x no upstream")
 	}
 }
 
-// TestDivergenceCell_SilentWithoutARemote keeps the two columns from printing
-// the same words for two different facts. A repository with no remote has
-// nothing to track and nothing to push to; REMOTE says "no remote" once, and
-// UPSTREAM saying it again would double the noise without adding a fact.
-func TestDivergenceCell_SilentWithoutARemote(t *testing.T) {
+// TestBranchCell_SilentWithoutARemote keeps the branch and REMOTE columns from
+// printing the same words for two different facts. A repository with no remote
+// has nothing to track and nothing to push to; REMOTE says "no remote" once,
+// and the branch saying it again would double the noise without adding a fact.
+func TestBranchCell_SilentWithoutARemote(t *testing.T) {
 	withColors(t, false)
 
-	if got := divergenceCell(0, 0, true, false); got.text != "" {
-		t.Errorf("no remote at all = %q, want empty (REMOTE column carries it)", got.text)
+	repo := &repository.RepositoryStatusResult{Branch: "feat/x"}
+	if got := branchCell(repo); got.text != "feat/x" {
+		t.Errorf("no remote at all = %q, want the bare name (REMOTE column carries it)", got.text)
 	}
 }
 
@@ -291,6 +299,22 @@ func TestRemoteOwner(t *testing.T) {
 		if got := remoteOwner(tc.in); got != tc.want {
 			t.Errorf("remoteOwner(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+// TestOwnerNote covers the --full replacement for the table's old owner
+// callout: only a remote pointing away from the workspace majority is worth a
+// line, and the comparison must not trip on case.
+func TestOwnerNote(t *testing.T) {
+	if got := ownerNote("", "github.com/Acme"); got != "" {
+		t.Errorf("no remote = %q, want no note", got)
+	}
+	if got := ownerNote("git@github.com:acme/a.git", "github.com/Acme"); got != "" {
+		t.Errorf("majority owner (any case) = %q, want no note", got)
+	}
+	got := ownerNote("git@gitlab.com:other/b.git", "github.com/Acme")
+	if !strings.Contains(got, "gitlab.com/other") || !strings.Contains(got, "github.com/Acme") {
+		t.Errorf("stray owner = %q, want both owners named", got)
 	}
 }
 

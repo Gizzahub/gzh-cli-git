@@ -33,6 +33,38 @@ func TestCommitMessageGeneratorUsesPathPrecedence(t *testing.T) {
 	}
 }
 
+func TestLoadCommitMessagesFallsBackWhenPipedStdinIsEmpty(t *testing.T) {
+	previousStdin := os.Stdin
+	previousJSON, previousYAML, previousMessages := commitJSON, commitYAML, commitMessages
+	t.Cleanup(func() {
+		os.Stdin = previousStdin
+		commitJSON = previousJSON
+		commitYAML = previousYAML
+		commitMessages = previousMessages
+	})
+
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeEnd.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = readEnd.Close() })
+	os.Stdin = readEnd
+	commitJSON = `{"repo":"feat: from json"}`
+	commitYAML = ""
+	commitMessages = nil
+
+	got, err := loadCommitMessages()
+	if err != nil {
+		t.Fatalf("loadCommitMessages returned error: %v", err)
+	}
+	if got["repo"] != "feat: from json" {
+		t.Fatalf("repo message = %q, want JSON fallback", got["repo"])
+	}
+}
+
 func TestEditMessagesInEditorEmptyFileCancels(t *testing.T) {
 	editor := filepath.Join(t.TempDir(), "empty-editor")
 	if err := os.WriteFile(editor, []byte("#!/bin/sh\n: > \"$1\"\n"), 0o700); err != nil {

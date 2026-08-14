@@ -6,7 +6,7 @@
 # ==============================================================================
 
 .PHONY: fmt format format-all format-check format-diff format-imports format-simplify format-ci format-strict format-list format-file format-install-tools format-md format-md-check format-md-diff
-.PHONY: pre-commit-install dev dev-fast verify ci-local pr-check lint-help fmt-diff lint-diff quality-fast quality-push quality-check
+.PHONY: pre-commit-install dev dev-fast verify ci-local pr-check lint-help fmt-diff lint-diff quality-fast quality-push quality-build quality-check
 
 # ==============================================================================
 # Code Formatting Targets
@@ -338,13 +338,23 @@ pre-commit-update: ## update pre-commit hooks to latest versions
 # Quality Assurance Workflows
 # ==============================================================================
 
-.PHONY: quality quality-strict quality-fix quality-check-validate lint-all
+.PHONY: quality quality-strict quality-fix quality-build quality-check-validate lint-all
 
 # quality-check is the one canonical source-non-mutating gate. Keep build/tests
 # here instead of in each workflow wrapper so security and test work is never
-# silently skipped or repeated. Build/test coverage artifacts are ignored.
+# silently skipped or repeated. Build/test artifacts are kept outside the
+# repository and removed when each target exits.
+quality-build: ## build the application in a private temporary directory
+	@set -eu; \
+	export GOWORK=off; \
+	quality_tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/gzh-cli-quality-build.XXXXXX"); \
+	trap 'rm -rf "$$quality_tmp"' EXIT HUP INT TERM; \
+	echo -e "$(CYAN)Building $(BINARY) in a temporary directory...$(RESET)"; \
+	go build -ldflags "-X main.version=$(VERSION)" -o "$$quality_tmp/$(BINARY)" ./cmd/gz-git; \
+	test -x "$$quality_tmp/$(BINARY)"
+
 quality-check: export GOWORK := off
-quality-check: format-check lint-check security-code security-deps build test-unit test-e2e-only ## run the canonical source-non-mutating quality gate
+quality-check: format-check lint-check security-code security-deps quality-build test-unit-quality test-e2e-only ## run the canonical source-non-mutating quality gate
 	@echo -e "$(GREEN)✅ Canonical quality gate passed!$(RESET)"
 
 quality: quality-check ## compatibility alias for the canonical quality gate

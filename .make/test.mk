@@ -9,7 +9,7 @@
 # Testing Targets
 # ==============================================================================
 
-.PHONY: test test-unit test-integration test-integration-only test-e2e test-e2e-only test-all
+.PHONY: test test-unit test-unit-quality test-integration test-integration-only test-e2e test-e2e-only test-all
 .PHONY: cover cover-html cover-report bench test-coverage test-docker
 
 test: clean build ## run all tests with coverage (requires binary for integration tests)
@@ -24,6 +24,22 @@ test-unit: ## run only unit tests (exclude integration and e2e)
 		$$(go list ./... | grep -v -E '(tests/integration|tests/e2e)')
 	go tool cover -func=coverage-unit.out | sort -rnk3
 	@echo -e "$(GREEN)✅ Unit tests completed$(RESET)"
+
+# quality-check is deliberately source-non-mutating with respect to the
+# checkout. Keep the coverage profile in a private temporary directory; CI can
+# opt into a runner-temporary output by setting QUALITY_COVERAGE_OUT for Codecov
+# upload.
+test-unit-quality: ## run unit tests without leaving a coverage artifact in the checkout
+	@set -eu; \
+	export GOWORK=off; \
+	quality_tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/gzh-cli-quality-tests.XXXXXX"); \
+	trap 'rm -rf "$$quality_tmp"' EXIT HUP INT TERM; \
+	coverage_out="$${QUALITY_COVERAGE_OUT:-$$quality_tmp/coverage-unit.out}"; \
+	echo -e "$(CYAN)Running unit tests with coverage...$(RESET)"; \
+	GOWORK=off go test -short --cover -parallel=1 -v -coverprofile="$$coverage_out" \
+		$$(GOWORK=off go list ./... | grep -v -E '(tests/integration|tests/e2e)'); \
+	go tool cover -func="$$coverage_out" | sort -rnk3; \
+	echo -e "$(GREEN)✅ Unit tests completed$(RESET)"
 
 test-integration-only: build ## run only integration tests with build tag
 	@echo -e "$(CYAN)Running integration tests...$(RESET)"

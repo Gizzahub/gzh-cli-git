@@ -50,12 +50,12 @@ jobs:
       run: make quality-check-validate
 
     - name: Run canonical quality gate
-      run: make quality-check
+      run: make quality-check QUALITY_COVERAGE_OUT="${{ runner.temp }}/coverage-unit.out"
 
     - name: Upload coverage
       uses: codecov/codecov-action@v6
       with:
-        files: ./coverage-unit.out
+        files: ${{ runner.temp }}/coverage-unit.out
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: true

@@ -164,6 +164,82 @@ func (g gitRepo) currentBranch(ctx context.Context) (string, error) {
 	return g.output(ctx, "rev-parse", "--abbrev-ref", "HEAD")
 }
 
+func (g gitRepo) headSHA(ctx context.Context) (string, error) {
+	return g.output(ctx, "rev-parse", "HEAD")
+}
+
+func (g gitRepo) porcelain(ctx context.Context) (string, error) {
+	res, err := g.run(ctx, "status", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("git status --porcelain failed: %s", strings.TrimSpace(res.Stderr))
+	}
+	return res.Stdout, nil
+}
+
+func (g gitRepo) upstreamSHA(ctx context.Context, branch string) (string, bool, error) {
+	return g.revParse(ctx, branch+"@{upstream}")
+}
+
+func (g gitRepo) branchRemote(ctx context.Context, branch string) (string, error) {
+	res, err := g.run(ctx, "config", "--get", "branch."+branch+".remote")
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(res.Stdout), nil
+}
+
+func (g gitRepo) isAncestor(ctx context.Context, ancestor, tip string) (bool, error) {
+	res, err := g.run(ctx, "merge-base", "--is-ancestor", ancestor, tip)
+	if err != nil {
+		return false, err
+	}
+	return res.ExitCode == 0, nil
+}
+
+func (g gitRepo) lsTreeNames(ctx context.Context, sha string) ([]string, error) {
+	out, err := g.output(ctx, "ls-tree", "-r", "--name-only", sha)
+	if err != nil {
+		return nil, err
+	}
+	return splitNonEmpty(out), nil
+}
+
+func (g gitRepo) diffNames(ctx context.Context, a, b string) ([]string, error) {
+	out, err := g.output(ctx, "diff", "--name-only", a, b)
+	if err != nil {
+		return nil, err
+	}
+	return splitNonEmpty(out), nil
+}
+
+func (g gitRepo) worktreeAddDetach(ctx context.Context, path, sha string) error {
+	res, err := g.run(ctx, "worktree", "add", "--detach", path, sha)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("git worktree add failed: %s", strings.TrimSpace(res.Stderr))
+	}
+	return nil
+}
+
+func (g gitRepo) worktreeRemoveForce(ctx context.Context, path string) error {
+	res, err := g.run(ctx, "worktree", "remove", "--force", path)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("git worktree remove failed: %s", strings.TrimSpace(res.Stderr))
+	}
+	return nil
+}
+
 func parseAheadBehind(raw string) (ahead, behind int, err error) {
 	raw = strings.TrimSpace(raw)
 	parts := strings.Fields(raw)

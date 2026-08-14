@@ -16,13 +16,15 @@ var integrateCmd = &cobra.Command{
 	Long: cliutil.QuickStartHelp(`  # What is waiting to land?
   gz-git integrate queue
 
-  # Compare against a specific base
-  gz-git integrate queue --base origin/develop
+  # Is this branch ready?
+  gz-git integrate check
+
+  # Required when no integration branch can be resolved
+  gz-git integrate check --target origin/main --direct-to-default
 
 integrate answers a different question than branch list. branch list is a
-bulk inventory. integrate queue asks which unfinished task branches are
-not the base, the remote HEAD, or the integration branch — and whether
-they are stale, conflicting, or expired.`),
+bulk inventory. queue lists unfinished task branches; check is the
+read-only readiness gate.`),
 	Args: cobra.NoArgs,
 }
 

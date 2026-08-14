@@ -1,0 +1,110 @@
+// Copyright (c) 2026 Gizzahub
+// SPDX-License-Identifier: MIT
+
+package integrate
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
+)
+
+func TestCheck_TargetRequiredWithoutIntegration(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	_, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   "feature/worktree",
+	})
+	if err == nil || !strings.Contains(err.Error(), "--target") {
+		t.Fatalf("want --target required, got %v", err)
+	}
+}
+
+func TestCheck_ReadyWhenFreshCleanPushed(t *testing.T) {
+	fx := readyTaskFixture(t)
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   "dev/actor/feat/task",
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !report.Ready {
+		t.Fatalf("want READY, got\n%s", FormatCheck(report))
+	}
+}
+
+func TestCheck_StaleTargetFailsFreshness(t *testing.T) {
+	fx := readyTaskFixture(t)
+	// Advance develop after the task branch was created.
+	runGit(t, fx.Clone, "checkout", "develop")
+	writeFile(t, fx.Clone, "later.txt", "later\n")
+	runGit(t, fx.Clone, "add", "later.txt")
+	runGit(t, fx.Clone, "commit", "-m", "develop moves")
+	runGit(t, fx.Clone, "push", fx.Remote, "develop")
+
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   "dev/actor/feat/task",
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if report.Ready {
+		t.Fatal("stale target must not be READY")
+	}
+	found := false
+	for _, item := range report.Items {
+		if item.Name == "freshness" && item.Status == checkFail {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected freshness FAIL:\n%s", FormatCheck(report))
+	}
+}
+
+func TestCheck_DirectToDefaultWithoutIntegration(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath:        fx.Worktree,
+		Branch:          "feature/worktree",
+		Target:          fx.Remote + "/main",
+		DirectToDefault: true,
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if report.Plan.Target != fx.Remote+"/main" {
+		t.Fatalf("target = %q", report.Plan.Target)
+	}
+}
+
+func readyTaskFixture(t *testing.T) *testutil.WorktreeOrigin {
+	t.Helper()
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "branch", "develop")
+	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+	runGit(t, fx.Worktree, "checkout", "-B", "dev/actor/feat/task", "develop")
+	writeFile(t, fx.Worktree, "task.txt", "task\n")
+	runGit(t, fx.Worktree, "add", "task.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "task work")
+	writeRepoFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n")
+	runGit(t, fx.Worktree, "add", ".gz-git.yaml")
+	runGit(t, fx.Worktree, "commit", "-m", "declare integration branch")
+	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")
+	return fx
+}
+
+func writeRepoFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}

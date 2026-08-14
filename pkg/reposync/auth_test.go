@@ -282,6 +282,15 @@ func TestBuildSSHCommand(t *testing.T) {
 	}
 }
 
+func TestBuildSSHCommandQuotesWindowsMetacharacterPath(t *testing.T) {
+	keyPath := `C:\keys\id&whoami`
+	command := buildSSHCommand(keyPath, 0)
+	want := "-i '" + keyPath + "'"
+	if !strings.Contains(command, want) {
+		t.Fatalf("buildSSHCommand() = %q, want quoted Windows path %q", command, want)
+	}
+}
+
 func TestBuildSSHCommandProtectsKeyPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell to verify GIT_SSH_COMMAND parsing")

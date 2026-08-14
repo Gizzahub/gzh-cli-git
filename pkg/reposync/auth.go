@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -221,50 +220,14 @@ func buildSSHCommand(keyPath string, sshPort int) string {
 	return cmd
 }
 
-// quoteShellArg quotes one argument in the command language used to execute
-// GIT_SSH_COMMAND. Git for Unix-like systems uses a POSIX shell; Git for
-// Windows uses the Windows command-line quoting rules for native commands.
-// Keeping this at the boundary is important because key paths come from user
-// configuration and are otherwise interpreted as command syntax.
+// quoteShellArg quotes one argument in the POSIX shell command language used
+// to execute GIT_SSH_COMMAND. Git for Windows also evaluates this variable
+// through its bundled sh, so using one contract on every platform avoids
+// leaving Windows paths vulnerable to shell metacharacters.
 func quoteShellArg(arg string) string {
-	if runtime.GOOS == "windows" {
-		return quoteWindowsCommandLineArg(arg)
-	}
-
 	// A single-quoted POSIX argument treats every byte literally. The only
 	// character that needs escaping is a single quote itself.
 	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
-}
-
-// quoteWindowsCommandLineArg applies the quoting rules consumed by the
-// Windows C runtime. Git for Windows passes GIT_SSH_COMMAND to a native SSH
-// executable, so this keeps paths containing whitespace or quotes in one
-// argument without relying on shell interpolation.
-func quoteWindowsCommandLineArg(arg string) string {
-	if arg != "" && !strings.ContainsAny(arg, " \t\"") {
-		return arg
-	}
-
-	var quoted strings.Builder
-	quoted.WriteByte('"')
-	backslashes := 0
-	for _, char := range arg {
-		switch char {
-		case '\\':
-			backslashes++
-		case '"':
-			quoted.WriteString(strings.Repeat("\\", backslashes*2+1))
-			quoted.WriteByte('"')
-			backslashes = 0
-		default:
-			quoted.WriteString(strings.Repeat("\\", backslashes))
-			quoted.WriteRune(char)
-			backslashes = 0
-		}
-	}
-	quoted.WriteString(strings.Repeat("\\", backslashes*2))
-	quoted.WriteByte('"')
-	return quoted.String()
 }
 
 // createTempSSHKey creates a temporary file containing the SSH key content.

@@ -14,6 +14,9 @@ BINEXT := $(shell go env GOEXE)
 BINARY := $(executablename)$(BINEXT)
 GOBIN := $(shell go env GOBIN)
 GOPATH := $(shell go env GOPATH)
+HOST_GOCACHE := $(shell go env GOCACHE)
+HOST_GOMODCACHE := $(shell go env GOMODCACHE)
+HOST_GOTOOLCHAIN := $(shell go env GOTOOLCHAIN)
 
 # OS-specific path separator and binary install dir
 ifeq ($(OS),Windows_NT)
@@ -22,17 +25,19 @@ else
 SEP := /
 endif
 
-ifeq ($(strip $(GOBIN)),)
-  BINDIR := $(GOPATH)$(SEP)bin
-else
-  BINDIR := $(GOBIN)
+ifndef BINDIR
+  ifeq ($(strip $(GOBIN)),)
+    BINDIR := $(GOPATH)$(SEP)bin
+  else
+    BINDIR := $(GOBIN)
+  endif
 endif
 
 # ==============================================================================
 # Build Targets
 # ==============================================================================
 
-.PHONY: build install test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
+.PHONY: build install install-check-target test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
 
 build: ## build golang binary
 	@printf "$(CYAN)Building %s...$(RESET)\n" "$(BINARY)"
@@ -40,35 +45,52 @@ build: ## build golang binary
 	@printf "$(GREEN)Built %s successfully$(RESET)\n" "$(BINARY)"
 
 
-install: build ## install golang binary
+install: install-check-target build ## install golang binary
 	@printf "$(CYAN)Installing $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@mkdir -p "$(BINDIR)"
 	@mv "$(BINARY)" "$(BINDIR)$(SEP)$(BINARY)"
 	@printf "$(GREEN)✅ Installed $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@echo ""
 	@printf "$(CYAN)Verifying installation...$(RESET)\n"
-	@"$(BINDIR)$(SEP)$(BINARY)" --version || echo -e "$(YELLOW)Note: Binary installed but --version flag not implemented$(RESET)"
+	@"$(BINDIR)$(SEP)$(BINARY)" --version
 	@echo ""
 	@printf "$(GREEN)🎉 Installation complete! Run '$(BINARY) --help' to get started.$(RESET)\n"
+
+install-check-target:
+	@if [ -d "$(BINDIR)$(SEP)$(BINARY)" ]; then \
+		printf "$(RED)Error: install target is a directory: %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)" >&2; \
+		exit 1; \
+	fi
 
 test-install: ## verify install uses only BINDIR without touching user directories
 	@set -eu; \
 		tmpdir="$$(mktemp -d "$${TMPDIR:-/tmp}/gz-git-install.XXXXXX")"; \
 		trap 'chmod -R u+w "$$tmpdir"; rm -rf "$$tmpdir"' EXIT; \
-		for mode in gobin gopath; do \
+		for mode in gobin gopath bindir; do \
 			test_home="$$tmpdir/$$mode home"; \
 			mkdir -p "$$test_home"; \
 			if [ "$$mode" = gobin ]; then \
 				bindir="$$tmpdir/gobin dir"; \
-				GOWORK=off $(MAKE) --no-print-directory install GOBIN="$$bindir" HOME="$$test_home"; \
-			else \
+				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install GOBIN="$$bindir" HOME="$$test_home"; \
+			elif [ "$$mode" = gopath ]; then \
 				gopath="$$tmpdir/gopath dir"; \
 				bindir="$$gopath$(SEP)bin"; \
-				GOWORK=off $(MAKE) --no-print-directory install GOBIN= GOPATH="$$gopath" HOME="$$test_home"; \
+				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install GOBIN= GOPATH="$$gopath" HOME="$$test_home"; \
+			else \
+				bindir="$$tmpdir/bindir override"; \
+				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR="$$bindir" GOBIN="$$tmpdir/ignored gobin" HOME="$$test_home"; \
+				test ! -e "$$tmpdir/ignored gobin$(SEP)$(BINARY)"; \
 			fi; \
 			test -x "$$bindir$(SEP)$(BINARY)"; \
 			test ! -e "$$test_home$(SEP).local$(SEP)bin$(SEP)$(BINARY)"; \
 		done; \
+		failure_target="$$tmpdir/target directory$(SEP)$(BINARY)"; \
+		mkdir -p "$$failure_target"; \
+		if GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR="$$tmpdir/target directory" HOME="$$tmpdir/failure home" >"$$tmpdir/failure.log" 2>&1; then \
+			echo "expected install to reject a directory target" >&2; \
+			exit 1; \
+		fi; \
+		grep -F "Error: install target is a directory" "$$tmpdir/failure.log" >/dev/null; \
 		printf "$(GREEN)✅ Install path regression checks passed$(RESET)\n"
 
 install-git-plugin: install ## install as git plugin (git forge)

@@ -99,7 +99,7 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	// GetMyUserInfo returns the authenticated user
 	_, _, err := p.client.GetMyUserInfo()
 	if err != nil {
-		return false, nil
+		return false, fmt.Errorf("failed to validate Gitea token: %w", err)
 	}
 	return true, nil
 }

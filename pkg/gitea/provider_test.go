@@ -4,6 +4,7 @@
 package gitea
 
 import (
+	"context"
 	"testing"
 )
 
@@ -68,7 +69,7 @@ func TestProvider_ValidateToken_EmptyToken(t *testing.T) {
 		token: "",
 	}
 
-	valid, err := p.ValidateToken(nil)
+	valid, err := p.ValidateToken(context.TODO())
 	if err != nil {
 		t.Errorf("ValidateToken returned error: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -197,7 +198,7 @@ func ensureParentDir(targetPath string) error {
 	if dir == "." || dir == "" {
 		return nil
 	}
-	return os.MkdirAll(dir, 0o755)
+	return os.MkdirAll(dir, 0o750)
 }
 
 // describeDeleteError produces a human-readable message when os.RemoveAll fails.
@@ -209,13 +210,16 @@ func describeDeleteError(targetPath string, removeErr error) string {
 
 	// Walk to find the first permission-denied file for better diagnostics
 	var permDeniedPath string
-	_ = filepath.WalkDir(targetPath, func(path string, _ os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(targetPath, func(path string, _ os.DirEntry, err error) error {
 		if err != nil && errors.Is(err, os.ErrPermission) {
 			permDeniedPath = path
 			return filepath.SkipAll
 		}
 		return nil
 	})
+	if walkErr != nil && permDeniedPath == "" {
+		return fmt.Sprintf("failed to delete %s: unable to inspect leftovers: %v", targetPath, walkErr)
+	}
 
 	if permDeniedPath != "" {
 		return fmt.Sprintf("failed to delete %s: contains files owned by other users, manual removal required (e.g., sudo rm -rf); permission denied at: %s", targetPath, permDeniedPath)
@@ -358,8 +362,12 @@ func collectPostSyncStatus(ctx context.Context, repoPath string) *PostSyncStatus
 	if out, err := cmd.Output(); err == nil {
 		parts := strings.Fields(strings.TrimSpace(string(out)))
 		if len(parts) == 2 {
-			fmt.Sscanf(parts[0], "%d", &ps.AheadBy)
-			fmt.Sscanf(parts[1], "%d", &ps.BehindBy)
+			if ahead, err := strconv.Atoi(parts[0]); err == nil {
+				ps.AheadBy = ahead
+			}
+			if behind, err := strconv.Atoi(parts[1]); err == nil {
+				ps.BehindBy = behind
+			}
 		}
 	}
 
@@ -552,9 +560,9 @@ func addAdditionalRemotes(ctx context.Context, repoPath string, remotes map[stri
 	for remoteName, remoteURL := range remotes {
 		// Check if remote already exists
 		checkCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "get-url", remoteName)
-		existingURL, _ := checkCmd.Output()
+		existingURL, err := checkCmd.Output()
 
-		if len(existingURL) > 0 {
+		if err == nil && len(existingURL) > 0 {
 			// Remote exists - update URL if different
 			currentURL := string(existingURL)
 			if currentURL != remoteURL+"\n" {

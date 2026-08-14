@@ -308,8 +308,8 @@ func matchesPattern(path, pattern string) bool {
 	}
 
 	// Simple glob match
-	matched, _ := filepath.Match(pattern, filepath.Base(path))
-	return matched
+	matched, err := filepath.Match(pattern, filepath.Base(path))
+	return err == nil && matched
 }
 
 func isDir(path string) bool {

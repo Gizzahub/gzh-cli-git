@@ -101,7 +101,7 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	}
 	_, _, err := p.client.Users.Get(ctx, "")
 	if err != nil {
-		return false, nil
+		return false, fmt.Errorf("failed to validate GitHub token: %w", err)
 	}
 	return true, nil
 }

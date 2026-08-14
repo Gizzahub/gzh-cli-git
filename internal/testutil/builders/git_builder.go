@@ -2,9 +2,11 @@
 package builders
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -80,10 +82,10 @@ func (b *GitRepoBuilder) Build() string {
 	for name, content := range b.files {
 		path := filepath.Join(b.dir, name)
 		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			b.t.Fatalf("failed to create dir %s: %v", dir, err)
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			b.t.Fatalf("failed to write file %s: %v", name, err)
 		}
 	}
@@ -114,7 +116,7 @@ func (b *GitRepoBuilder) Build() string {
 
 func (b *GitRepoBuilder) runGit(args ...string) {
 	b.t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = b.dir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		b.t.Fatalf("git %v failed: %v\n%s", args, err, output)
@@ -203,7 +205,7 @@ func (b *CloneOptionsBuilder) BuildArgs() []string {
 		args = append(args, "-b", b.branch)
 	}
 	if b.depth > 0 {
-		args = append(args, "--depth", string(rune(b.depth)))
+		args = append(args, "--depth", strconv.Itoa(b.depth))
 	}
 	if b.bare {
 		args = append(args, "--bare")

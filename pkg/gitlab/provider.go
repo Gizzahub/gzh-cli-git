@@ -97,7 +97,7 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	}
 	_, _, err := p.client.Users.CurrentUser(gitlab.WithContext(ctx))
 	if err != nil {
-		return false, nil
+		return false, fmt.Errorf("failed to validate GitLab token: %w", err)
 	}
 	return true, nil
 }
@@ -301,7 +301,7 @@ func (p *Provider) buildSSHURL(projectPath string) string {
 
 	// Ensure path ends with .git
 	if !strings.HasSuffix(projectPath, ".git") {
-		projectPath = projectPath + ".git"
+		projectPath += ".git"
 	}
 
 	// Build SSH URL

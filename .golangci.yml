@@ -391,9 +391,9 @@ linters:
       - .*\.gen\.go$
       - .*/pkg/bulk-clone/example_test\.go$
       - pkg/bulk-clone/example_test\.go$
-      - vendor
+      - (^|/)vendor/
       - .git
-      - tmp
+      - (^|/)tmp/
       - test/integration
       - third_party$
       - builtin$

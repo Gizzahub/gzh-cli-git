@@ -75,16 +75,22 @@ master에 지적이 하나라도 다시 생기는 순간 같은 방식으로 재
 ```
 
 ```console
-$ golangci-lint run -c <anchored> ./...     # master 068022e 기준
-71 issues:
-* gocritic: 10   * misspell: 10   * staticcheck: 10   * errcheck: 5
-* godot: 5       * noctx: 5       * gosec: 4          * unparam: 4
-* gocyclo: 3     * govet: 3       * nilerr: 3         * thelper: 3
-* errorlint: 2   * tagliatelle: 2 * unconvert: 2
+$ golangci-lint run -c <anchored-and-unlimited> ./... # master 326f6e4 기준
+254 issues:
+* godot: 143      * gocritic: 30   * staticcheck: 26  * noctx: 13
+* misspell: 11    * errcheck: 5    * gosec: 4         * unparam: 4
+* gocyclo: 3      * govet: 3       * nilerr: 3         * thelper: 3
+* errorlint: 2    * tagliatelle: 2 * unconvert: 2
 ```
 
-**71은 하한이다.** `.golangci.yml:401-403`의 `max-issues-per-linter: 10`에 gocritic ·
-misspell · staticcheck 세 린터가 정확히 걸려 있어, 그 뒤는 보고조차 되지 않았다.
+기존의 **71은 하한**이었다. `.golangci.yml`의 `max-issues-per-linter: 10`에 여러
+린터가 걸려 그 뒤는 보고조차 되지 않았다. 상한을 풀어 다시 측정한 실제 총량은
+254건이다. 이 중 `godot` 143건과 `misspell` 11건, 합계 154건(61%)은 `--fix`로
+자동 수정할 수 있다.
+
+`godot`을 제외한 111건의 디렉터리 분포는 `cmd/` 77건, `pkg/` 28건,
+`internal/` 6건이다. 상위 파일은 `watch.go` 13건, `clone_test.go` 11건,
+`clone_config.go` 11건, `executor_git_test.go` 8건, `commit.go` 7건이다.
 
 ## Acceptance Criteria
 

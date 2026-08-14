@@ -89,7 +89,7 @@ func assessRepository(r repository.RepositoryStatusResult) RepoAssessment {
 		})
 	}
 
-	if r.TrackedChangedFiles > 0 {
+	if r.TrackedChangedFiles > 0 || r.UntrackedFiles > 0 {
 		assessment.Blockers = append(assessment.Blockers, Blocker{
 			Reason:      ReasonUncommitted,
 			Detail:      uncommittedDetail(r),

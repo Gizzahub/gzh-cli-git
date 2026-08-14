@@ -77,6 +77,25 @@ func TestAssessUncommittedAndUnpushedAreAutoFixable(t *testing.T) {
 	}
 }
 
+func TestAssessUntrackedOnlyWorkIsAutoFixable(t *testing.T) {
+	r := cleanRepo()
+	r.Status = repository.StatusDirty
+	r.UntrackedFiles = 1
+
+	a := Assess([]repository.RepositoryStatusResult{r})
+
+	got := reasons(t, a)
+	if len(got) != 1 || got[0] != ReasonUncommitted {
+		t.Fatalf("reasons = %v, want exactly [uncommitted]", got)
+	}
+	if a.Verdict != VerdictFixable {
+		t.Errorf("verdict = %s, want %s", a.Verdict, VerdictFixable)
+	}
+	if detail := a.Repositories[0].Blockers[0].Detail; detail != "1 untracked file(s) exist only here" {
+		t.Errorf("detail = %q", detail)
+	}
+}
+
 func TestAssessStashIsNeverAutoFixable(t *testing.T) {
 	r := cleanRepo()
 	r.StashCount = 2
@@ -329,9 +348,7 @@ func TestUncommittedDetailCountsEachPathOnce(t *testing.T) {
 	}{
 		// The counters are disjoint — a path is either tracked with uncommitted
 		// changes or untracked, never both — so neither is subtracted from the
-		// other. Checked against the detail function rather than through Assess:
-		// the untracked-only shape cannot arrive that way, because the blocker
-		// is raised on the tracked count alone.
+		// other.
 		{"untracked only", 0, 1, "1 untracked file(s) exist only here"},
 		{"mixed", 3, 1, "3 modified, 1 untracked file(s) exist only here"},
 		{"modified only", 2, 0, "2 modified file(s) exist only here"},

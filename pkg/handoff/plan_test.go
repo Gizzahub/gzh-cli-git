@@ -19,6 +19,15 @@ func dirty(name string) repository.RepositoryStatusResult {
 	return r
 }
 
+func untracked(name string) repository.RepositoryStatusResult {
+	r := cleanRepo()
+	r.Path = "/w/" + name
+	r.RelativePath = name
+	r.Status = repository.StatusDirty
+	r.UntrackedFiles = 1
+	return r
+}
+
 func planFor(results ...repository.RepositoryStatusResult) Plan {
 	return PlanCheckpoint(Assess(results))
 }
@@ -37,10 +46,10 @@ func TestPlanCheckpointSelectsMovableWork(t *testing.T) {
 	unpushed.RelativePath = "unpushed"
 	unpushed.CommitsAhead = 2
 
-	plan := planFor(cleanRepo(), dirty("dirty"), unpushed)
+	plan := planFor(cleanRepo(), dirty("dirty"), untracked("untracked"), unpushed)
 
-	if got := names(plan.Checkpoint); len(got) != 2 || got[0] != "dirty" || got[1] != "unpushed" {
-		t.Errorf("checkpoint = %v, want [dirty unpushed]", got)
+	if got := names(plan.Checkpoint); len(got) != 3 || got[0] != "dirty" || got[1] != "untracked" || got[2] != "unpushed" {
+		t.Errorf("checkpoint = %v, want [dirty untracked unpushed]", got)
 	}
 	if len(plan.Skipped) != 0 {
 		t.Errorf("skipped = %v, want none", names(plan.Skipped))
@@ -135,13 +144,13 @@ func TestPlanStartUpdatesCleanAndUnpushedRepositories(t *testing.T) {
 }
 
 func TestPlanStartSkipsUncommittedWork(t *testing.T) {
-	plan := PlanStart(Assess([]repository.RepositoryStatusResult{dirty("dirty")}))
+	plan := PlanStart(Assess([]repository.RepositoryStatusResult{dirty("dirty"), untracked("untracked")}))
 
 	if len(plan.Update) != 0 {
 		t.Errorf("update = %v, want none — a rebase must not run over uncommitted work", names(plan.Update))
 	}
-	if got := names(plan.Skipped); len(got) != 1 || got[0] != "dirty" {
-		t.Errorf("skipped = %v, want [dirty]", got)
+	if got := names(plan.Skipped); len(got) != 2 || got[0] != "dirty" || got[1] != "untracked" {
+		t.Errorf("skipped = %v, want [dirty untracked]", got)
 	}
 }
 

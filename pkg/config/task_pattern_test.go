@@ -29,6 +29,31 @@ func TestLoadRepoRootTaskPattern_HotfixLoads(t *testing.T) {
 	}
 }
 
+func TestMatchTaskPattern_DevTripleStar(t *testing.T) {
+	// DECISION-004: devenv declares dev/*/*/*. Trailing-* prefix compare
+	// would look for the literal "dev/*/*/" and miss every real branch.
+	if !MatchTaskPattern("dev/a/b/c", "dev/*/*/*") {
+		t.Fatal("DECISION-004: dev/*/*/* must match dev/a/b/c")
+	}
+	if !MatchTaskPattern("dev/grok/feat/integrate-surface", "dev/*/*/*") {
+		t.Fatal("dev/*/*/* must match a real task branch")
+	}
+	if MatchTaskPattern("hotfix/foo", "dev/*/*/*") {
+		t.Fatal("dev/*/*/* must not match hotfix/foo")
+	}
+	if MatchTaskPattern("dev/a/b/c", "*") {
+		t.Fatal("pattern * must not match everything")
+	}
+}
+
+func TestLoadRepoRootTaskPattern_StarRejected(t *testing.T) {
+	root := t.TempDir()
+	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern: '*'\n")
+	if _, err := LoadRepoRootTaskPattern(root); err == nil {
+		t.Fatal("expected reject of match-everything taskPattern")
+	}
+}
+
 func TestLoadRepoRootTaskPattern_MasterRejected(t *testing.T) {
 	root := t.TempDir()
 	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern: master\n")

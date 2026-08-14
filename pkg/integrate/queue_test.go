@@ -64,6 +64,27 @@ func TestCollectQueue_ExcludesBaseAndIntegration(t *testing.T) {
 	}
 }
 
+func TestCollectQueue_BaseReleaseKeepsSlash(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	dir := fx.Clone
+	runGit(t, dir, "checkout", "-b", "release/2.0")
+	runGit(t, dir, "push", "-u", fx.Remote, "release/2.0")
+	runGit(t, dir, "checkout", "-b", "feat/task")
+
+	report, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath: dir,
+		Base:     fx.Remote + "/release/2.0",
+		NoFetch:  true,
+	})
+	if err != nil {
+		t.Fatalf("CollectQueue: %v", err)
+	}
+	got := refsOf(report)
+	if contains(got, "release/2.0") || contains(got, "2.0") {
+		t.Fatalf("base release/2.0 leaked into queue as %v", got)
+	}
+}
+
 func TestCollectQueue_ReportsFreshnessConflictAge(t *testing.T) {
 	dir := testutil.TempGitRepoWithCommit(t)
 

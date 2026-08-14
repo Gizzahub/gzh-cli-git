@@ -247,11 +247,12 @@ func dirEmpty(path string) (bool, error) {
 }
 
 func defaultBranchName(defaultRef, remote string) string {
-	if remote != "" && strings.HasPrefix(defaultRef, remote+"/") {
-		return strings.TrimPrefix(defaultRef, remote+"/")
+	remotes := []string(nil)
+	if remote != "" {
+		remotes = []string{remote}
 	}
-	if i := strings.LastIndex(defaultRef, "/"); i >= 0 {
-		return defaultRef[i+1:]
+	if name := NormalizeName(defaultRef, remotes); name != "" {
+		return name
 	}
 	return defaultRef
 }

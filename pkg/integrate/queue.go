@@ -204,8 +204,15 @@ func collectQueueRefs(ctx context.Context, g gitRepo, remote, base string, integ
 	exclude := map[string]struct{}{
 		base: {},
 	}
-	if i := strings.LastIndex(base, "/"); i >= 0 {
-		exclude[base[i+1:]] = struct{}{}
+	remotes := []string(nil)
+	if remote != "" {
+		remotes = []string{remote}
+	}
+	if bare := NormalizeName(base, remotes); bare != "" && bare != base {
+		exclude[bare] = struct{}{}
+		if remote != "" {
+			exclude[remote+"/"+bare] = struct{}{}
+		}
 	}
 	if remote != "" {
 		exclude[remote] = struct{}{}

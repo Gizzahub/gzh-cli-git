@@ -75,17 +75,23 @@ func LoadRepoRootTaskPattern(repoRoot string) (TaskPatternDecl, error) {
 	return decl, nil
 }
 
-// MatchTaskPattern reports whether name matches pattern using a trailing *
-// prefix compare, the same rule as repository.matchBranchPattern.
+// MatchTaskPattern reports whether name is in the namespace declared by
+// pattern. The prefix is everything before the first '*'. That is how
+// devenv's `dev/*/*/*` matches `dev/a/b/c` (DECISION-004). A trailing-*
+// prefix compare on the whole pattern would treat the middle stars as
+// literal characters and miss every real task branch.
+//
+// Pattern "*" (empty prefix) never matches here; load rejects it.
 func MatchTaskPattern(name, pattern string) bool {
 	if pattern == name {
 		return true
 	}
-	if pattern != "" && pattern[len(pattern)-1] == '*' {
-		prefix := pattern[:len(pattern)-1]
-		return len(name) >= len(prefix) && name[:len(prefix)] == prefix
+	star := strings.IndexByte(pattern, '*')
+	if star <= 0 {
+		return false
 	}
-	return false
+	prefix := pattern[:star]
+	return strings.HasPrefix(name, prefix)
 }
 
 // MatchesAnyTaskPattern reports whether name matches any declared pattern.
@@ -192,6 +198,9 @@ func coerceStringList(v any) []string {
 func rejectLiteralProtected(patterns []string, path string) error {
 	literals := literalProtectedNames()
 	for _, pattern := range patterns {
+		if i := strings.IndexByte(pattern, '*'); i == 0 {
+			return fmt.Errorf("%s: taskPattern %q matches every name", path, pattern)
+		}
 		for _, lit := range literals {
 			if pattern == lit {
 				return fmt.Errorf("%s: taskPattern %q equals protected name %q", path, pattern, lit)

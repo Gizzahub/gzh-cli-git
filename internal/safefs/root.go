@@ -53,6 +53,23 @@ func (r *Root) Open(name string) (*os.File, error) {
 	return r.root.Open(name)
 }
 
+// OpenRoot opens a child directory below the root and returns a filesystem
+// view anchored to that directory. The child is resolved by the parent
+// os.Root, so later path changes cannot turn it into a string-based escape.
+func (r *Root) OpenRoot(name string) (*Root, error) {
+	name, err := relative(name)
+	if err != nil {
+		return nil, err
+	}
+
+	root, err := r.root.OpenRoot(name)
+	if err != nil {
+		return nil, fmt.Errorf("open child filesystem root %q: %w", name, err)
+	}
+
+	return &Root{root: root}, nil
+}
+
 // ReadFile reads a regular file below the root.
 func (r *Root) ReadFile(name string) ([]byte, error) {
 	name, err := relative(name)

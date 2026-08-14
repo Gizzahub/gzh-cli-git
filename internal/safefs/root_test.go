@@ -63,3 +63,52 @@ func TestRootDoesNotFollowSymlinkOutsideRoot(t *testing.T) {
 		t.Errorf("Readlink(link.txt) = %q, %v; want link target text", target, err)
 	}
 }
+
+func TestRootOpenRootRejectsEscapeAndAnchorsChild(t *testing.T) {
+	base := t.TempDir()
+	rootPath := filepath.Join(base, "root")
+	childPath := filepath.Join(rootPath, "repo")
+	if err := os.MkdirAll(childPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(childPath, "marker"), []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := OpenRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+
+	for _, name := range []string{"../outside", filepath.Join(base, "outside")} {
+		if _, err := root.OpenRoot(name); err == nil {
+			t.Errorf("OpenRoot(%q) succeeded, want boundary error", name)
+		}
+	}
+
+	child, err := root.OpenRoot("repo")
+	if err != nil {
+		t.Fatalf("OpenRoot(repo): %v", err)
+	}
+	defer func() { _ = child.Close() }()
+
+	movedPath := filepath.Join(rootPath, "repo-moved")
+	if err := os.Rename(childPath, movedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(childPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(childPath, "marker"), []byte("replacement"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := child.ReadFile("marker")
+	if err != nil {
+		t.Fatalf("child.ReadFile(marker): %v", err)
+	}
+	if string(data) != "original" {
+		t.Fatalf("child root followed renamed path and read %q, want original", data)
+	}
+}

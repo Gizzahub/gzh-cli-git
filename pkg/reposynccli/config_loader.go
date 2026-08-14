@@ -808,7 +808,7 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 		repoPath := filepath.Join(dir, repoRel)
 
 		// Check if it's a git repository
-		repoRoot, err := safefs.OpenRoot(repoPath)
+		repoRoot, err := root.OpenRoot(repoRel)
 		if err != nil {
 			continue
 		}

@@ -386,28 +386,6 @@ linters:
       - linters:
           - goconst
         path: (.+)_test\.go
-      # These gocritic findings are mechanical style suggestions; preserve
-      # established public/config compatibility and avoid broad code churn.
-      - linters:
-          - gocritic
-        text: (paramTypeCombine|importShadow|ifElseChain|elseif|emptyStringTest|builtinShadowDecl|assignOp)
-      - linters:
-          - noctx
-        path: .*_test\.go
-      - linters:
-          - staticcheck
-        path: cmd/gz-git/cmd/watch\.go
-        text: (QF1012|S1039)
-      - linters:
-          - staticcheck
-        path: cmd/gz-git/cmd/(coverage_boost2_test|root)\.go
-        text: SA9003
-      - linters:
-          - unparam
-        path: pkg/scanner/git_scanner\.go
-      - linters:
-          - thelper
-        path: cmd/gz-git/cmd/clone_test\.go
     paths:
       - .*\.pb\.go$
       - .*\.gen\.go$

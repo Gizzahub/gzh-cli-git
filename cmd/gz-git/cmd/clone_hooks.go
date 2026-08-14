@@ -9,12 +9,12 @@ import (
 
 // parseCloneHooks parses hooks from a raw map interface.
 func parseCloneHooks(raw map[string]any) *CloneHooks {
-	hooks := &CloneHooks{}
+	parsedHooks := &CloneHooks{}
 
 	if before, ok := raw["before"].([]any); ok {
 		for _, b := range before {
 			if s, ok := b.(string); ok && s != "" {
-				hooks.Before = append(hooks.Before, s)
+				parsedHooks.Before = append(parsedHooks.Before, s)
 			}
 		}
 	}
@@ -22,16 +22,16 @@ func parseCloneHooks(raw map[string]any) *CloneHooks {
 	if after, ok := raw["after"].([]any); ok {
 		for _, a := range after {
 			if s, ok := a.(string); ok && s != "" {
-				hooks.After = append(hooks.After, s)
+				parsedHooks.After = append(parsedHooks.After, s)
 			}
 		}
 	}
 
-	if len(hooks.Before) == 0 && len(hooks.After) == 0 {
+	if len(parsedHooks.Before) == 0 && len(parsedHooks.After) == 0 {
 		return nil
 	}
 
-	return hooks
+	return parsedHooks
 }
 
 // mergeHooks merges group-level and repo-level hooks.

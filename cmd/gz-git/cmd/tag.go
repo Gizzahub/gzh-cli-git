@@ -476,7 +476,7 @@ type TagRepositoryJSONOutput struct {
 	Message string `json:"message,omitempty"`
 }
 
-func displayTagResultsStructured(result *repository.BulkTagResult, operation string, format string) {
+func displayTagResultsStructured(result *repository.BulkTagResult, operation, format string) {
 	output := TagJSONOutput{
 		Operation:      operation,
 		TotalScanned:   result.TotalScanned,

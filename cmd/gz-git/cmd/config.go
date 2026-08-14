@@ -487,7 +487,7 @@ func runConfigHierarchy(cmd *cobra.Command, args []string) error {
 }
 
 // printConfigTree recursively prints config hierarchy.
-func printConfigTree(cfg *config.Config, path string, configFile string, depth int, validate bool, compact bool) {
+func printConfigTree(cfg *config.Config, path, configFile string, depth int, validate, compact bool) {
 	indent := strings.Repeat("  ", depth)
 
 	// Print this level

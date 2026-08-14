@@ -135,7 +135,7 @@ func TestCleanupBranchBulkAndSingle(t *testing.T) {
 
 func runGitAllowFail(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	_ = cmd.Run()
 }

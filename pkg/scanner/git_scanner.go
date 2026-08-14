@@ -56,6 +56,12 @@ func (s *GitRepoScanner) Scan(ctx context.Context) ([]*ScannedRepo, error) {
 }
 
 func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, depth int, gitignorePatterns []string, repos *[]*ScannedRepo) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// Check depth limit
 	if depth > s.MaxDepth {
 		return nil
@@ -65,13 +71,8 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 	gitDir := filepath.Join(current, ".git")
 	if isDir(gitDir) {
 		// Found a git repository
-		repo, err := s.analyzeRepo(root, current, depth)
-		if err != nil {
-			// Log error but continue scanning
-			fmt.Fprintf(os.Stderr, "Warning: failed to analyze repo at %s: %v\n", current, err)
-		} else {
-			*repos = append(*repos, repo)
-		}
+		repo := s.analyzeRepo(current, depth)
+		*repos = append(*repos, repo)
 	}
 
 	// Scan subdirectories
@@ -115,7 +116,7 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 	return nil
 }
 
-func (s *GitRepoScanner) analyzeRepo(root, repoPath string, depth int) (*ScannedRepo, error) {
+func (s *GitRepoScanner) analyzeRepo(repoPath string, depth int) *ScannedRepo {
 	name := filepath.Base(repoPath)
 
 	// Get remotes (name -> URL map)
@@ -133,7 +134,7 @@ func (s *GitRepoScanner) analyzeRepo(root, repoPath string, depth int) (*Scanned
 		Remotes: remotes,
 		Depth:   depth,
 		Branch:  branch,
-	}, nil
+	}
 }
 
 func (s *GitRepoScanner) getRemotes(repoPath string) (map[string]string, error) {

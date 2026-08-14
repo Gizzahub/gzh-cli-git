@@ -24,7 +24,7 @@ func TestHelpHasNoANSIWhenNotTerminal(t *testing.T) {
 	}
 
 	bin := filepath.Join(t.TempDir(), "gz-git")
-	if out, err := exec.Command("go", "build", "-o", bin, "github.com/gizzahub/gzh-cli-gitforge/cmd/gz-git").CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(t.Context(), "go", "build", "-o", bin, "github.com/gizzahub/gzh-cli-gitforge/cmd/gz-git").CombinedOutput(); err != nil {
 		t.Fatalf("build gz-git: %v\n%s", err, out)
 	}
 
@@ -37,7 +37,7 @@ func TestHelpHasNoANSIWhenNotTerminal(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			c := exec.Command(bin, "--help")
+			c := exec.CommandContext(t.Context(), bin, "--help")
 			c.Env = append(os.Environ(), tc.env...)
 			out, err := c.CombinedOutput()
 			if err != nil {

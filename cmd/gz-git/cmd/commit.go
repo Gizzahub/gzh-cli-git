@@ -199,7 +199,8 @@ func prepareCommitRun(cmd *cobra.Command, args []string) (commitRunConfig, error
 func loadCommitMessages() (map[string]string, error) {
 	var messages map[string]string
 	stat, err := os.Stdin.Stat()
-	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+	switch {
+	case err == nil && (stat.Mode()&os.ModeCharDevice) == 0:
 		pipedData, _ := io.ReadAll(os.Stdin)
 		if len(pipedData) > 0 {
 			messages, err = parseJSONOrYAMLMessages(string(pipedData))
@@ -207,12 +208,12 @@ func loadCommitMessages() (map[string]string, error) {
 				return nil, fmt.Errorf("failed to parse piped data: %w", err)
 			}
 		}
-	} else if commitJSON != "" {
+	case commitJSON != "":
 		messages, err = parseJSONMessages(commitJSON)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse --json: %w", err)
 		}
-	} else if commitYAML != "" {
+	case commitYAML != "":
 		messages, err = parseYAMLMessages(commitYAML)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse --yaml: %w", err)

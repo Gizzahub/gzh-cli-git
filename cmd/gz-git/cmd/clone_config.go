@@ -14,7 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
+	configpkg "github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -74,12 +74,12 @@ func IsValidCloneStrategy(strategy string) bool {
 
 // CloneGroup represents a named group of repositories with its own target.
 type CloneGroup struct {
-	Target       string            `yaml:"target"`             // Required: target directory for this group
-	Branch       config.FlexBranch `yaml:"branch,omitempty"`   // Default branch for all repos in group
-	Depth        int               `yaml:"depth,omitempty"`    // Default depth for all repos in group
-	Strategy     string            `yaml:"strategy,omitempty"` // Override global strategy
-	Repositories []CloneRepoSpec   `yaml:"repositories"`       // Repository list
-	Hooks        *CloneHooks       `yaml:"hooks,omitempty"`    // Group-level hooks (applied to all repos in group)
+	Target       string               `yaml:"target"`             // Required: target directory for this group
+	Branch       configpkg.FlexBranch `yaml:"branch,omitempty"`   // Default branch for all repos in group
+	Depth        int                  `yaml:"depth,omitempty"`    // Default depth for all repos in group
+	Strategy     string               `yaml:"strategy,omitempty"` // Override global strategy
+	Repositories []CloneRepoSpec      `yaml:"repositories"`       // Repository list
+	Hooks        *CloneHooks          `yaml:"hooks,omitempty"`    // Group-level hooks (applied to all repos in group)
 }
 
 // CloneHooks represents before/after hook commands for clone operations.
@@ -91,12 +91,12 @@ type CloneHooks struct {
 
 // CloneRepoSpec represents a single repository specification in YAML.
 type CloneRepoSpec struct {
-	URL    string            `yaml:"url"`              // Required
-	Name   string            `yaml:"name,omitempty"`   // Optional: custom directory name (extracted from URL if empty)
-	Path   string            `yaml:"path,omitempty"`   // Optional: subdirectory within target
-	Branch config.FlexBranch `yaml:"branch,omitempty"` // Optional: branch to checkout
-	Depth  int               `yaml:"depth,omitempty"`  // Optional: shallow clone depth
-	Hooks  *CloneHooks       `yaml:"hooks,omitempty"`  // Optional: repo-level hooks
+	URL    string               `yaml:"url"`              // Required
+	Name   string               `yaml:"name,omitempty"`   // Optional: custom directory name (extracted from URL if empty)
+	Path   string               `yaml:"path,omitempty"`   // Optional: subdirectory within target
+	Branch configpkg.FlexBranch `yaml:"branch,omitempty"` // Optional: branch to checkout
+	Depth  int                  `yaml:"depth,omitempty"`  // Optional: shallow clone depth
+	Hooks  *CloneHooks          `yaml:"hooks,omitempty"`  // Optional: repo-level hooks
 }
 
 // parseCloneConfig reads and parses YAML or JSON config from file or stdin.
@@ -361,13 +361,13 @@ func validateFlatRepositories(repos []CloneRepoSpec, groupName string) error {
 
 // extractFlexBranch extracts a FlexBranch from a raw interface{} value.
 // Handles string values directly and map values by extracting the defaultBranch key.
-func extractFlexBranch(v any) config.FlexBranch {
+func extractFlexBranch(v any) configpkg.FlexBranch {
 	if v == nil {
 		return ""
 	}
 	switch val := v.(type) {
 	case string:
-		return config.FlexBranch(val)
+		return configpkg.FlexBranch(val)
 	case map[string]any:
 		db, ok := val["defaultBranch"]
 		if !ok {
@@ -375,7 +375,7 @@ func extractFlexBranch(v any) config.FlexBranch {
 		}
 		switch dbVal := db.(type) {
 		case string:
-			return config.FlexBranch(dbVal)
+			return configpkg.FlexBranch(dbVal)
 		case []any:
 			parts := make([]string, 0, len(dbVal))
 			for _, item := range dbVal {
@@ -383,7 +383,7 @@ func extractFlexBranch(v any) config.FlexBranch {
 					parts = append(parts, s)
 				}
 			}
-			return config.FlexBranch(strings.Join(parts, ","))
+			return configpkg.FlexBranch(strings.Join(parts, ","))
 		}
 	}
 	return ""

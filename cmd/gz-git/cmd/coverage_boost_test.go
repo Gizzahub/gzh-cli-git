@@ -163,7 +163,7 @@ func TestRootLLMDocsAndVersion(t *testing.T) {
 	rootFormat = "llm"
 	out := captureStdout(t, func() { runRoot(rootCmd, nil) })
 	if !strings.Contains(out, "GZ-Git") && !strings.Contains(out, "Available Commands") {
-		t.Errorf("llm docs: %q", out[:min(200, len(out))])
+		t.Errorf("llm docs: %q", out[:minInt(200, len(out))])
 	}
 	rootFormat = ""
 	// help path
@@ -244,7 +244,7 @@ func TestLoadEffectiveConfigAndPrintSources(t *testing.T) {
 	})
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

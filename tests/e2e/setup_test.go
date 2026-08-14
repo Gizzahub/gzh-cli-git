@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,12 +10,56 @@ import (
 	"testing"
 )
 
+var e2eBinaryPath string
+
 // E2ERepo represents an E2E test repository.
 type E2ERepo struct {
 	t          *testing.T
 	rootDir    string // Original working directory
 	repoDir    string // Test repository directory
 	binaryPath string
+}
+
+// TestMain builds one binary for this package in a private temporary
+// directory. The E2E tests all share this immutable binary.
+func TestMain(m *testing.M) {
+	testDir, err := os.MkdirTemp("", "gzh-cli-gitforge-e2e-tests-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create E2E test directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	goExe, err := goExecutableSuffix()
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine executable suffix: %v\n", err)
+		os.Exit(1)
+	}
+
+	e2eBinaryPath = filepath.Join(testDir, "gz-git"+goExe)
+	moduleRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine module root: %v\n", err)
+		os.Exit(1)
+	}
+
+	buildCmd := exec.Command("go", "build", "-o", e2eBinaryPath, "./cmd/gz-git") //nolint:noctx // package setup
+	buildCmd.Dir = moduleRoot
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to build gz-git: %v\n%s", err, output)
+		os.Exit(1)
+	}
+
+	code := m.Run()
+	if err := os.RemoveAll(testDir); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to remove E2E test directory: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
 }
 
 // NewE2ERepo creates a new E2E test repository.
@@ -48,27 +93,23 @@ func NewE2ERepo(t *testing.T) *E2ERepo {
 	return repo
 }
 
-// findOrBuildBinary locates the gz-git binary or builds it if necessary.
+// findOrBuildBinary returns the package-scoped binary prepared by TestMain.
 func findOrBuildBinary(t *testing.T) string {
 	t.Helper()
 
-	// Try to find existing binary
-	if _, err := os.Stat("../../gz-git"); err == nil {
-		abs, _ := filepath.Abs("../../gz-git")
-		return abs
+	if e2eBinaryPath == "" {
+		t.Fatal("gz-git E2E test binary was not initialized")
 	}
+	return e2eBinaryPath
+}
 
-	// Build the binary
-	t.Log("Building gz-git binary for E2E tests...")
-	cmd := exec.Command("go", "build", "-o", "gz-git", "./cmd/gz-git") //nolint:noctx // build step, no context needed
-	cmd.Dir = "../../"
-	output, err := cmd.CombinedOutput()
+func goExecutableSuffix() (string, error) {
+	cmd := exec.Command("go", "env", "GOEXE") //nolint:noctx // package setup
+	output, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("Failed to build gz-git: %v\nOutput: %s", err, output)
+		return "", err
 	}
-
-	abs, _ := filepath.Abs("../../gz-git")
-	return abs
+	return strings.TrimSpace(string(output)), nil
 }
 
 // runCommand runs a command in the specified directory.

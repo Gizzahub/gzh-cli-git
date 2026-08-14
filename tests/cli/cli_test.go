@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,9 +13,65 @@ import (
 	"testing"
 )
 
+var testBinaryPath string
+
 func getBinaryPath() string {
-	// Get the module root directory
-	return filepath.Join("..", "..", "gz-git")
+	if testBinaryPath == "" {
+		panic("gz-git test binary was not initialized")
+	}
+	return testBinaryPath
+}
+
+// TestMain builds one binary for this package in a private temporary
+// directory. Keeping the artifact out of the module root makes package tests
+// safe to run concurrently.
+func TestMain(m *testing.M) {
+	testDir, err := os.MkdirTemp("", "gzh-cli-gitforge-cli-tests-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create CLI test directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	goExe, err := goExecutableSuffix()
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine executable suffix: %v\n", err)
+		os.Exit(1)
+	}
+
+	testBinaryPath = filepath.Join(testDir, "gz-git"+goExe)
+	moduleRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine module root: %v\n", err)
+		os.Exit(1)
+	}
+
+	buildCmd := exec.Command("go", "build", "-o", testBinaryPath, "./cmd/gz-git") //nolint:noctx // package setup
+	buildCmd.Dir = moduleRoot
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to build gz-git: %v\n%s", err, output)
+		os.Exit(1)
+	}
+
+	code := m.Run()
+	if err := os.RemoveAll(testDir); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to remove CLI test directory: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
+
+func goExecutableSuffix() (string, error) {
+	cmd := exec.Command("go", "env", "GOEXE") //nolint:noctx // package setup
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 // TestCLIVersion tests the version command.

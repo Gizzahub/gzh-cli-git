@@ -4,6 +4,7 @@ package conformance
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -57,7 +58,7 @@ func Load(r io.Reader) ([]Row, error) {
 	line := 1 // header consumed
 	for {
 		rec, err := cr.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return rows, nil
 		}
 		if err != nil {

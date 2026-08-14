@@ -501,6 +501,20 @@ func TestRemoteOnlyBranchesCell_ExpandsCollidingElisions(t *testing.T) {
 	}
 }
 
+func TestRemoteOnlyBranchesCell_ExpandsCrossKindLabelCollisions(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes: map[string]string{"foo": "", "up": "", "origin": ""},
+		RemoteBranches: []string{
+			"foo/bar", "up/bar", "origin/foo/bar", "foo/bar", // duplicate ref must not duplicate output
+		},
+	}
+	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "foo/bar, up/bar, origin/foo/bar"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
 func TestRemoteTrackingBranch_OverlappingRemoteNamespacesUseLongestPrefix(t *testing.T) {
 	remote, branch, ok := remoteTrackingBranch("team/foo/bar", map[string]string{"team": "", "team/foo": ""})
 	if !ok || remote != "team/foo" || branch != "bar" {

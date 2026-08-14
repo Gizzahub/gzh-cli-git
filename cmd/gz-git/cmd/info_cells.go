@@ -286,13 +286,25 @@ func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnr
 		suffix = fmt.Sprintf(" +%d", len(branches)-maxOtherShown)
 	}
 	rawLabels := make([]string, 0, len(shown))
-	elidedCounts := make(map[string]int, len(shown))
+	rawCounts := make(map[string]int, len(shown))
 	for _, branch := range shown {
 		label := branch.branch
 		if counts[branch.branch] > 1 {
 			label = branch.full
 		}
 		rawLabels = append(rawLabels, label)
+		rawCounts[label]++
+	}
+	// A shorthand can itself equal another remote's full ref (for example
+	// foo/bar versus origin/foo/bar). Resolve that collision before elision so
+	// every conflicting item identifies its remote.
+	for i, label := range rawLabels {
+		if rawCounts[label] > 1 {
+			rawLabels[i] = shown[i].full
+		}
+	}
+	elidedCounts := make(map[string]int, len(rawLabels))
+	for _, label := range rawLabels {
 		elidedCounts[elideMiddle(label, maxBranchWidth)]++
 	}
 	labels := make([]string, 0, len(rawLabels))
@@ -329,12 +341,17 @@ func remoteOnlyTrackingBranches(repo *repository.RepositoryStatusResult, enr inf
 	}
 
 	branches := make([]string, 0, len(repo.RemoteBranches))
+	seen := make(map[string]struct{}, len(repo.RemoteBranches))
 	for _, full := range repo.RemoteBranches {
 		_, branch, ok := remoteTrackingBranch(full, repo.Remotes)
 		if !ok {
 			continue
 		}
 		if _, exists := local[branch]; !exists {
+			if _, duplicate := seen[full]; duplicate {
+				continue
+			}
+			seen[full] = struct{}{}
 			branches = append(branches, full)
 		}
 	}

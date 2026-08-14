@@ -31,7 +31,7 @@ var (
 )
 
 // commitCmd represents the commit command.
-var commitCmd = &cobra.Command{ //nolint:gocyclo // TODO(issue-21): split commit input, execution, and rendering paths.
+var commitCmd = &cobra.Command{
 	Use:   "commit [directory]",
 	Short: "Commit changes across multiple repositories",
 	Long: cliutil.QuickStartHelp(`  # Commit with per-repository messages (most common usage)

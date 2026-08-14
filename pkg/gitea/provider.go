@@ -3,6 +3,7 @@ package gitea
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"code.gitea.io/sdk/gitea"
@@ -97,8 +98,11 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	}
 
 	// GetMyUserInfo returns the authenticated user
-	_, _, err := p.client.GetMyUserInfo()
+	_, resp, err := p.client.GetMyUserInfo()
 	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
+		}
 		return false, fmt.Errorf("failed to validate Gitea token: %w", err)
 	}
 	return true, nil

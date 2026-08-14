@@ -10,9 +10,10 @@ import (
 	"testing"
 )
 
-func TestProvider_ValidateToken_ReturnsAPIErrors(t *testing.T) {
+func TestProvider_ValidateToken_DistinguishesInvalidTokenFromAPIErrors(t *testing.T) {
+	status := http.StatusUnauthorized
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
+		w.WriteHeader(status)
 	}))
 	defer server.Close()
 
@@ -24,7 +25,13 @@ func TestProvider_ValidateToken_ReturnsAPIErrors(t *testing.T) {
 	if valid {
 		t.Fatal("ValidateToken returned valid for unauthorized response")
 	}
-	if err == nil {
-		t.Fatal("ValidateToken returned nil error for unauthorized response")
+	if err != nil {
+		t.Fatalf("ValidateToken returned error for invalid token: %v", err)
+	}
+
+	status = http.StatusInternalServerError
+	valid, err = p.ValidateToken(context.Background())
+	if valid || err == nil {
+		t.Fatalf("ValidateToken = (%v, %v), want (false, API error)", valid, err)
 	}
 }

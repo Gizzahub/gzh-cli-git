@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -99,8 +100,11 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 	if p.token == "" {
 		return false, nil
 	}
-	_, _, err := p.client.Users.Get(ctx, "")
+	_, resp, err := p.client.Users.Get(ctx, "")
 	if err != nil {
+		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
+		}
 		return false, fmt.Errorf("failed to validate GitHub token: %w", err)
 	}
 	return true, nil

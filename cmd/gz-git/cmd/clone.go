@@ -380,7 +380,7 @@ func displayCloneResultsStructured(result *repository.BulkCloneResult, format st
 // ============================================================================
 
 // cloneSingleRepository clones a single repository with custom settings.
-func cloneSingleRepository( //nolint:gocyclo // TODO(issue-21): split clone validation, execution, and reporting paths.
+func cloneSingleRepository(
 	ctx context.Context,
 	client repository.Client,
 	spec CloneRepoSpec,
@@ -389,176 +389,142 @@ func cloneSingleRepository( //nolint:gocyclo // TODO(issue-21): split clone vali
 	groupHooks *CloneHooks,
 ) repository.RepositoryCloneResult {
 	startTime := time.Now()
-
-	// Build destination path
-	// If spec.Path is set, use it as subdirectory within target
-	// Otherwise use repoName directly under target
-	var destination string
-	var relativePath string
-	if spec.Path != "" {
-		destination = filepath.Join(baseOpts.Directory, spec.Path)
-		relativePath = spec.Path
-	} else {
-		destination = filepath.Join(baseOpts.Directory, repoName)
-		relativePath = repoName
-	}
-
-	// Determine branch
-	branch := string(spec.Branch)
-	if branch == "" && baseOpts.Branch != "" {
-		branch = baseOpts.Branch
-	}
-
-	// Determine depth
-	depth := spec.Depth
-	if depth == 0 && baseOpts.Depth > 0 {
-		depth = baseOpts.Depth
-	}
-
-	// Check if target already exists
-	exists, isGitRepo := false, false
-	if fi, err := os.Stat(destination); err == nil {
-		exists = true
-		if fi.IsDir() {
-			gitDir := filepath.Join(destination, ".git")
-			if _, err := os.Stat(gitDir); err == nil {
-				isGitRepo = true
-			}
-		}
-	}
-
-	// Determine if we should update existing repos (any strategy except skip)
+	destination, relativePath := cloneDestination(baseOpts.Directory, spec, repoName)
+	branch, depth := cloneBranchAndDepth(baseOpts, spec)
+	exists, isGitRepo := cloneTargetState(destination)
 	shouldUpdate := baseOpts.Strategy != "" && baseOpts.Strategy != repository.StrategySkip
 
-	// Dry run mode
 	if baseOpts.DryRun {
-		status := "would-clone"
-		if exists && isGitRepo && shouldUpdate {
-			status = "would-update"
-		} else if exists && isGitRepo {
-			status = "skipped"
-		}
-
-		return repository.RepositoryCloneResult{
-			URL:          spec.URL,
-			Path:         destination,
-			RelativePath: relativePath,
-			Branch:       branch,
-			Status:       status,
-			Duration:     time.Since(startTime),
-		}
+		return cloneResult(startTime, spec.URL, destination, relativePath, branch,
+			cloneDryRunStatus(exists, isGitRepo, shouldUpdate), nil)
 	}
-
-	// Skip if exists and not updating
 	if exists && isGitRepo && !shouldUpdate {
-		return repository.RepositoryCloneResult{
-			URL:          spec.URL,
-			Path:         destination,
-			RelativePath: relativePath,
-			Branch:       branch,
-			Status:       "skipped",
-			Duration:     time.Since(startTime),
-		}
+		return cloneResult(startTime, spec.URL, destination, relativePath, branch, "skipped", nil)
 	}
 
-	// Merge group and repo hooks
 	mergedHooks := mergeHooks(groupHooks, spec.Hooks)
-
-	// Execute before hooks (in parent directory)
-	if mergedHooks != nil && len(mergedHooks.Before) > 0 {
-		parentDir := baseOpts.Directory
-		if parentDir == "" {
-			parentDir = "."
-		}
-		// Ensure parent directory exists
-		if err := os.MkdirAll(parentDir, 0o755); err != nil { // #nosec G301 -- cloned repositories must retain normal shared directory readability.
-			return repository.RepositoryCloneResult{
-				URL:          spec.URL,
-				Path:         destination,
-				RelativePath: relativePath,
-				Branch:       branch,
-				Status:       "error",
-				Error:        fmt.Errorf("create parent directory for before hooks: %w", err),
-				Duration:     time.Since(startTime),
-			}
-		}
-
-		if err := executeHooks(ctx, mergedHooks.Before, parentDir, baseOpts.Logger); err != nil {
-			return repository.RepositoryCloneResult{
-				URL:          spec.URL,
-				Path:         destination,
-				RelativePath: relativePath,
-				Branch:       branch,
-				Status:       "error",
-				Error:        fmt.Errorf("before hook: %w", err),
-				Duration:     time.Since(startTime),
-			}
-		}
+	if err := runCloneBeforeHooks(ctx, mergedHooks, baseOpts); err != nil {
+		return cloneResult(startTime, spec.URL, destination, relativePath, branch, "error", err)
 	}
 
-	// Build clone options
-	cloneOpts := repository.CloneOptions{
-		URL:          spec.URL,
+	status, err := cloneOrUpdate(ctx, client, spec.URL, destination, branch, depth, baseOpts, exists, isGitRepo, shouldUpdate)
+	result := cloneResult(startTime, spec.URL, destination, relativePath, branch, status, err)
+	if result.Status != "error" {
+		if err := runCloneAfterHooks(ctx, mergedHooks, destination, baseOpts.Logger); err != nil {
+			result.Status = "error"
+			result.Error = err
+		}
+	}
+	return result
+}
+
+func cloneDestination(baseDir string, spec CloneRepoSpec, repoName string) (destination, relativePath string) {
+	if spec.Path != "" {
+		return filepath.Join(baseDir, spec.Path), spec.Path
+	}
+	return filepath.Join(baseDir, repoName), repoName
+}
+
+func cloneBranchAndDepth(opts repository.BulkCloneOptions, spec CloneRepoSpec) (branch string, depth int) {
+	branch = string(spec.Branch)
+	if branch == "" {
+		branch = opts.Branch
+	}
+	depth = spec.Depth
+	if depth == 0 {
+		depth = opts.Depth
+	}
+	return branch, depth
+}
+
+func cloneTargetState(destination string) (exists, isGitRepo bool) {
+	fi, err := os.Stat(destination)
+	if err != nil {
+		return false, false
+	}
+	exists = true
+	if fi.IsDir() {
+		_, err = os.Stat(filepath.Join(destination, ".git"))
+		isGitRepo = err == nil
+	}
+	return exists, isGitRepo
+}
+
+func cloneDryRunStatus(exists, isGitRepo, shouldUpdate bool) string {
+	if exists && isGitRepo {
+		if shouldUpdate {
+			return "would-update"
+		}
+		return "skipped"
+	}
+	return "would-clone"
+}
+
+func cloneResult(start time.Time, url, destination, relativePath, branch, status string, err error) repository.RepositoryCloneResult {
+	return repository.RepositoryCloneResult{
+		URL:          url,
+		Path:         destination,
+		RelativePath: relativePath,
+		Branch:       branch,
+		Status:       status,
+		Error:        err,
+		Duration:     time.Since(start),
+	}
+}
+
+func runCloneBeforeHooks(ctx context.Context, hooks *CloneHooks, opts repository.BulkCloneOptions) error {
+	if hooks == nil || len(hooks.Before) == 0 {
+		return nil
+	}
+	parentDir := opts.Directory
+	if parentDir == "" {
+		parentDir = "."
+	}
+	if err := os.MkdirAll(parentDir, 0o755); err != nil { // #nosec G301 -- cloned repositories must retain normal shared directory readability.
+		return fmt.Errorf("create parent directory for before hooks: %w", err)
+	}
+	if err := executeHooks(ctx, hooks.Before, parentDir, opts.Logger); err != nil {
+		return fmt.Errorf("before hook: %w", err)
+	}
+	return nil
+}
+
+func cloneOrUpdate(ctx context.Context, client repository.Client, url, destination, branch string, depth int, opts repository.BulkCloneOptions, exists, isGitRepo, shouldUpdate bool) (string, error) {
+	if exists && isGitRepo && shouldUpdate {
+		updateResult, err := client.CloneOrUpdate(ctx, repository.CloneOrUpdateOptions{
+			URL:         url,
+			Destination: destination,
+			Strategy:    opts.Strategy,
+			Branch:      branch,
+			Depth:       depth,
+			Logger:      opts.Logger,
+		})
+		if err != nil {
+			return "error", fmt.Errorf("update failed (strategy: %s): %w", opts.Strategy, err)
+		}
+		return updateResult.Action, nil
+	}
+
+	_, err := client.Clone(ctx, repository.CloneOptions{
+		URL:          url,
 		Destination:  destination,
 		Branch:       branch,
 		Depth:        depth,
 		SingleBranch: cloneSingleBranch,
 		Recursive:    cloneSubmodules,
-	}
-
-	// Clone or update
-	var err error
-	var status string
-
-	if exists && isGitRepo && shouldUpdate {
-		// Update existing repository using the configured strategy
-		// (reset/fetch/rebase/pull/clone), same dispatch as CloneOrUpdate.
-		updateResult, updateErr := client.CloneOrUpdate(ctx, repository.CloneOrUpdateOptions{
-			URL:         spec.URL,
-			Destination: destination,
-			Strategy:    baseOpts.Strategy,
-			Branch:      branch,
-			Depth:       depth,
-			Logger:      baseOpts.Logger,
-		})
-
-		if updateErr != nil {
-			err = fmt.Errorf("update failed (strategy: %s): %w", baseOpts.Strategy, updateErr)
-			status = "error"
-		} else {
-			status = updateResult.Action
-		}
-	} else {
-		// Clone new repository
-		_, err = client.Clone(ctx, cloneOpts)
-		if err != nil {
-			status = "error"
-		} else {
-			status = "cloned"
-		}
-	}
-
-	result := repository.RepositoryCloneResult{
-		URL:          spec.URL,
-		Path:         destination,
-		RelativePath: relativePath,
-		Branch:       branch,
-		Status:       status,
-		Duration:     time.Since(startTime),
-	}
-
+	})
 	if err != nil {
-		result.Error = err
+		return "error", err
 	}
+	return "cloned", nil
+}
 
-	// Execute after hooks (in cloned repo directory) only if clone/update succeeded
-	if result.Status != "error" && mergedHooks != nil && len(mergedHooks.After) > 0 {
-		if hookErr := executeHooks(ctx, mergedHooks.After, destination, baseOpts.Logger); hookErr != nil {
-			result.Status = "error"
-			result.Error = fmt.Errorf("after hook: %w", hookErr)
-		}
+func runCloneAfterHooks(ctx context.Context, hooks *CloneHooks, destination string, logger repository.Logger) error {
+	if hooks == nil || len(hooks.After) == 0 {
+		return nil
 	}
-
-	result.Duration = time.Since(startTime)
-	return result
+	if err := executeHooks(ctx, hooks.After, destination, logger); err != nil {
+		return fmt.Errorf("after hook: %w", err)
+	}
+	return nil
 }

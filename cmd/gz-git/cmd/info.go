@@ -164,7 +164,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment) { //nolint:gocyclo // TODO(issue-21): split detail formatting by status and enrichment.
+func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment) {
 	if len(result.Repositories) == 0 {
 		fmt.Println("No repositories found.")
 		return
@@ -175,130 +175,127 @@ func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment 
 
 	for _, repo := range result.Repositories {
 		fmt.Println()
-		// Header with nice formatting
-		// 📦 repo-name (relative/path)
-		path := filepath.Base(repo.Path)
-		if verbose {
-			path = repo.RelativePath
-		}
-		fmt.Printf("📦 %s\n", path)
-		fmt.Println(strings.Repeat("-", 60))
-
-		// 1. Current Branch & Hash
-		branchInfo := repo.Branch
-		if branchInfo == "" {
-			branchInfo = "DETACHED"
-		}
-		if repo.HeadSHA != "" {
-			branchInfo += fmt.Sprintf(" (%s)", repo.HeadSHA)
-		}
-		fmt.Printf("  Current Branch: %s\n", branchInfo)
-
-		enr := enrichment[repo.Path]
-
-		// 1b. Upstream divergence. Reported as an explicit line rather than
-		// left to the reader, since "no upstream" and "in sync" are different
-		// situations that both produce zero ahead/behind counts.
-		switch {
-		case repo.Upstream == "":
-			fmt.Printf("  Upstream:       (none)\n")
-		case repo.CommitsAhead > 0 || repo.CommitsBehind > 0:
-			fmt.Printf("  Upstream:       %s (ahead %d, behind %d)\n", repo.Upstream, repo.CommitsAhead, repo.CommitsBehind)
-		default:
-			fmt.Printf("  Upstream:       %s (in sync)\n", repo.Upstream)
-		}
-
-		// 1c. Base branch. Source is printed so the divergence numbers can be
-		// judged: measuring against a heuristic guess is not the same claim as
-		// measuring against the branch the project declared.
-		if enr.Base.Name == "" {
-			fmt.Printf("  Base:           (none found)\n")
-		} else {
-			fmt.Printf("  Base:           %s (ahead %d, behind %d) [%s]\n",
-				enr.Base.Name, enr.Base.Ahead, enr.Base.Behind, enr.Base.Source)
-		}
-
-		// 1d. Worktrees
-		if enr.LinkedWorktrees > 0 {
-			detail := ""
-			if len(enr.WorktreeBranches) > 0 {
-				detail = ": " + strings.Join(enr.WorktreeBranches, ", ")
-			}
-			fmt.Printf("  Worktrees:      %d linked%s\n", enr.LinkedWorktrees, detail)
-		}
-
-		if enr.Err != nil {
-			fmt.Printf("  Note:           partial info (%v)\n", enr.Err)
-		}
-
-		// 2. Version
-		if repo.Describe != "" {
-			fmt.Printf("  Version:        %s\n", repo.Describe)
-		}
-
-		// 3. Status
-		status := repo.Status
-		if repo.Status != "clean" && repo.TrackedChangedFiles > 0 {
-			status = fmt.Sprintf("%s (%d uncommitted)", repo.Status, repo.TrackedChangedFiles)
-		}
-		if repo.StashCount > 0 {
-			status += fmt.Sprintf(", %d stash(es)", repo.StashCount)
-		}
-		fmt.Printf("  Status:         %s\n", status)
-
-		// 4. Update Info
-		if repo.LastCommitDate != "" {
-			msg := repo.LastCommitMsg
-			if len(msg) > 50 {
-				msg = msg[:47] + "..."
-			}
-			fmt.Printf("  Last Update:    %s (%s)\n", repo.LastCommitDate, msg)
-			if verbose {
-				fmt.Printf("  Author:         %s\n", repo.LastCommitAuthor)
-			}
-		}
-
-		// 5. Remotes (Full List with Limit)
-		if len(repo.Remotes) > 0 {
-			fmt.Println("  Remotes:")
-			// Sort keys for consistent output
-			var keys []string
-			for k := range repo.Remotes {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-
-			displayCount := 0
-			for _, k := range keys {
-				if displayCount >= itemLimit {
-					remaining := len(keys) - displayCount
-					fmt.Printf("    ... (%d more)\n", remaining)
-					break
-				}
-				fmt.Printf("    - %-10s %s\n", k, repo.Remotes[k])
-				displayCount++
-			}
-		} else {
-			fmt.Println("  Remotes:        (none)")
-		}
-
-		// 6. Local Branches (Full List with Limit)
-		if len(repo.LocalBranches) > 0 {
-			// Sort branches
-			sort.Strings(repo.LocalBranches)
-
-			branchesStr := ""
-			if len(repo.LocalBranches) <= itemLimit {
-				branchesStr = strings.Join(repo.LocalBranches, ", ")
-			} else {
-				visible := repo.LocalBranches[:itemLimit]
-				branchesStr = strings.Join(visible, ", ") + fmt.Sprintf(", ... (%d more)", len(repo.LocalBranches)-itemLimit)
-			}
-
-			fmt.Printf("  Branches (%d):   %s\n", len(repo.LocalBranches), branchesStr)
-		}
+		displayInfoRepository(repo, enrichment[repo.Path])
 	}
 	fmt.Println()
+}
+
+func displayInfoRepository(repo repository.RepositoryStatusResult, enr infoEnrichment) {
+	path := filepath.Base(repo.Path)
+	if verbose {
+		path = repo.RelativePath
+	}
+	fmt.Printf("📦 %s\n", path)
+	fmt.Println(strings.Repeat("-", 60))
+
+	branchInfo := repo.Branch
+	if branchInfo == "" {
+		branchInfo = "DETACHED"
+	}
+	if repo.HeadSHA != "" {
+		branchInfo += fmt.Sprintf(" (%s)", repo.HeadSHA)
+	}
+	fmt.Printf("  Current Branch: %s\n", branchInfo)
+	displayInfoUpstream(repo)
+	displayInfoBase(enr)
+	if enr.LinkedWorktrees > 0 {
+		detail := ""
+		if len(enr.WorktreeBranches) > 0 {
+			detail = ": " + strings.Join(enr.WorktreeBranches, ", ")
+		}
+		fmt.Printf("  Worktrees:      %d linked%s\n", enr.LinkedWorktrees, detail)
+	}
+	if enr.Err != nil {
+		fmt.Printf("  Note:           partial info (%v)\n", enr.Err)
+	}
+	displayInfoVersion(repo)
+	displayInfoStatus(repo)
+	displayInfoLastUpdate(repo)
+	displayInfoRemotes(repo.Remotes)
+	displayInfoBranches(repo.LocalBranches)
+}
+
+func displayInfoUpstream(repo repository.RepositoryStatusResult) {
+	switch {
+	case repo.Upstream == "":
+		fmt.Printf("  Upstream:       (none)\n")
+	case repo.CommitsAhead > 0 || repo.CommitsBehind > 0:
+		fmt.Printf("  Upstream:       %s (ahead %d, behind %d)\n", repo.Upstream, repo.CommitsAhead, repo.CommitsBehind)
+	default:
+		fmt.Printf("  Upstream:       %s (in sync)\n", repo.Upstream)
+	}
+}
+
+func displayInfoBase(enr infoEnrichment) {
+	if enr.Base.Name == "" {
+		fmt.Printf("  Base:           (none found)\n")
+		return
+	}
+	fmt.Printf("  Base:           %s (ahead %d, behind %d) [%s]\n",
+		enr.Base.Name, enr.Base.Ahead, enr.Base.Behind, enr.Base.Source)
+}
+
+func displayInfoVersion(repo repository.RepositoryStatusResult) {
+	if repo.Describe != "" {
+		fmt.Printf("  Version:        %s\n", repo.Describe)
+	}
+}
+
+func displayInfoStatus(repo repository.RepositoryStatusResult) {
+	status := repo.Status
+	if repo.Status != "clean" && repo.TrackedChangedFiles > 0 {
+		status = fmt.Sprintf("%s (%d uncommitted)", repo.Status, repo.TrackedChangedFiles)
+	}
+	if repo.StashCount > 0 {
+		status += fmt.Sprintf(", %d stash(es)", repo.StashCount)
+	}
+	fmt.Printf("  Status:         %s\n", status)
+}
+
+func displayInfoLastUpdate(repo repository.RepositoryStatusResult) {
+	if repo.LastCommitDate == "" {
+		return
+	}
+	msg := repo.LastCommitMsg
+	if len(msg) > 50 {
+		msg = msg[:47] + "..."
+	}
+	fmt.Printf("  Last Update:    %s (%s)\n", repo.LastCommitDate, msg)
+	if verbose {
+		fmt.Printf("  Author:         %s\n", repo.LastCommitAuthor)
+	}
+}
+
+func displayInfoRemotes(remotes map[string]string) {
+	if len(remotes) == 0 {
+		fmt.Println("  Remotes:        (none)")
+		return
+	}
+	fmt.Println("  Remotes:")
+	keys := make([]string, 0, len(remotes))
+	for key := range remotes {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for index, key := range keys {
+		if index >= itemLimit {
+			fmt.Printf("    ... (%d more)\n", len(keys)-index)
+			break
+		}
+		fmt.Printf("    - %-10s %s\n", key, remotes[key])
+	}
+}
+
+func displayInfoBranches(branches []string) {
+	if len(branches) == 0 {
+		return
+	}
+	sort.Strings(branches)
+	branchesStr := strings.Join(branches, ", ")
+	if len(branches) > itemLimit {
+		branchesStr = strings.Join(branches[:itemLimit], ", ") + fmt.Sprintf(", ... (%d more)", len(branches)-itemLimit)
+	}
+	fmt.Printf("  Branches (%d):   %s\n", len(branches), branchesStr)
 }
 
 func displayInfoResultsStructured(result *repository.BulkStatusResult, format string) {

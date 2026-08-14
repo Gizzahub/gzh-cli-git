@@ -74,138 +74,25 @@ func init() {
 	commitCmd.Flags().BoolVar(&commitAllowConflicted, "allow-conflicted", false, "commit repositories that still have unmerged paths (writes conflict markers into history)")
 }
 
-func runCommit(cmd *cobra.Command, args []string) error { //nolint:gocyclo // TODO(issue-21): split commit input, execution, and rendering paths.
+func runCommit(cmd *cobra.Command, args []string) error {
 	// SIGINT/SIGTERM cancels the shared context so in-flight commits stop
 	// gracefully (extracted into bulk_common's withInterruptCancel).
 	ctx, cancel := withInterruptCancel(context.Background())
 	defer cancel()
 
-	// Validate and parse directory
-	directory, err := validateBulkDirectory(args)
+	config, err := prepareCommitRun(cmd, args)
 	if err != nil {
 		return err
 	}
-
-	// Validate depth
-	if err := validateBulkDepth(cmd, commitFlags.Depth); err != nil {
-		return err
-	}
-
-	// Validate format
-	if err := validateBulkFormat(commitFlags.Format); err != nil {
-		return err
-	}
-
-	// Create client
 	client := repository.NewClient()
-
-	// Create logger for verbose mode
-	logger := createBulkLogger(verbose)
-
-	// Build options
-	opts := repository.BulkCommitOptions{
-		Directory:         directory,
-		Parallel:          commitFlags.Parallel,
-		MaxDepth:          commitFlags.Depth,
-		DryRun:            commitFlags.DryRun,
-		Message:           commitAll,
-		Yes:               commitYes,
-		Verbose:           verbose,
-		IncludeSubmodules: commitFlags.IncludeSubmodules,
-		AllowConflicted:   commitAllowConflicted,
-		IncludePattern:    commitFlags.Include,
-		ExcludePattern:    commitFlags.Exclude,
-		Logger:            logger,
-		ProgressCallback:  createProgressCallback("Analyzing", commitFlags.Format, quiet),
-	}
-
-	// Load messages from piped stdin first (highest priority if data is piped)
-	var pipedData []byte
-	stat, err := os.Stdin.Stat()
-	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
-		// Data is being piped to stdin
-		pipedData, _ = io.ReadAll(os.Stdin)
-	}
-
-	// Load messages: priority piped stdin > --json > --yaml > -m
-	var customMessages map[string]string
-
-	if len(pipedData) > 0 {
-		var err error
-		customMessages, err = parseJSONOrYAMLMessages(string(pipedData))
-		if err != nil {
-			return fmt.Errorf("failed to parse piped data: %w", err)
-		}
-	} else if commitJSON != "" {
-		var err error
-		customMessages, err = parseJSONMessages(commitJSON)
-		if err != nil {
-			return fmt.Errorf("failed to parse --json: %w", err)
-		}
-	} else if commitYAML != "" {
-		var err error
-		customMessages, err = parseYAMLMessages(commitYAML)
-		if err != nil {
-			return fmt.Errorf("failed to parse --yaml: %w", err)
-		}
-	}
-
-	// Parse -m/--message flag (repo:message format)
-	if len(commitMessages) > 0 {
-		if customMessages == nil {
-			customMessages = make(map[string]string)
-		}
-		for _, msg := range commitMessages {
-			repo, message, err := parseRepoMessage(msg)
-			if err != nil {
-				return fmt.Errorf("invalid --message format: %w", err)
-			}
-			customMessages[repo] = message
-		}
-	}
-
-	// If custom messages provided, set up MessageGenerator
-	if customMessages != nil {
-		opts.MessageGenerator = func(ctx context.Context, repoPath string, files []string) (string, error) {
-			// Extract relative path from full path
-			relPath, err := filepath.Rel(directory, repoPath)
-			if err != nil {
-				relPath = filepath.Base(repoPath)
-			}
-			if relPath == "." {
-				relPath = filepath.Base(directory)
-			}
-
-			// Try to find custom message by various path formats
-			if msg, ok := customMessages[relPath]; ok {
-				return msg, nil
-			}
-			if msg, ok := customMessages[filepath.Base(relPath)]; ok {
-				return msg, nil
-			}
-			if msg, ok := customMessages[repoPath]; ok {
-				return msg, nil
-			}
-
-			// No custom message found, return empty to use default
-			return "", nil
-		}
-	}
-
-	// If --yes not specified and not using editor, this is preview only
-	// Set DryRun before first BulkCommit call to avoid accidental commits
-	previewOnly := !opts.Yes && !opts.DryRun && !commitEdit
-	if previewOnly {
-		opts.DryRun = true
-	}
 
 	// Scanning phase
 	if shouldShowProgress(commitFlags.Format, quiet) {
-		printScanningMessage(directory, commitFlags.Depth, commitFlags.Parallel, commitFlags.DryRun)
+		printScanningMessage(config.directory, commitFlags.Depth, commitFlags.Parallel, commitFlags.DryRun)
 	}
 
 	// Execute bulk commit (analysis phase if DryRun, otherwise commits)
-	result, err := client.BulkCommit(ctx, opts)
+	result, err := client.BulkCommit(ctx, config.options)
 	if err != nil {
 		return fmt.Errorf("bulk commit failed: %w", err)
 	}
@@ -216,44 +103,21 @@ func runCommit(cmd *cobra.Command, args []string) error { //nolint:gocyclo // TO
 	}
 
 	// Apply custom messages from file or CLI
-	if customMessages != nil {
-		applyCustomMessages(result, customMessages)
+	if config.customMessages != nil {
+		applyCustomMessages(result, config.customMessages)
 	}
 
 	// If -e flag is set, open editor for message editing then commit
-	if commitEdit && result.TotalDirty > 0 {
-		editedMessages, err := editMessagesInEditor(result)
-		if err != nil {
-			return fmt.Errorf("editor failed: %w", err)
-		}
-		if editedMessages == nil {
-			fmt.Println("Canceled (empty file).")
-			return nil
-		}
-		applyCustomMessages(result, editedMessages)
-
-		// Execute commits with edited messages
-		opts.DryRun = false
-		opts.Yes = true
-		opts.MessageGenerator = func(ctx context.Context, repoPath string, files []string) (string, error) {
-			for _, repo := range result.Repositories {
-				if repo.Path == repoPath {
-					if repo.Message != "" {
-						return repo.Message, nil
-					}
-					return repo.SuggestedMessage, nil
-				}
-			}
-			return "", nil
-		}
-		result, err = client.BulkCommit(ctx, opts)
-		if err != nil {
-			return fmt.Errorf("bulk commit failed: %w", err)
-		}
+	result, canceled, err := commitEditorResult(ctx, client, result, config.options)
+	if err != nil {
+		return err
+	}
+	if canceled {
+		return nil
 	}
 
 	// Show hint for preview mode
-	if previewOnly && result.TotalDirty > 0 && shouldShowProgress(commitFlags.Format, quiet) {
+	if config.previewOnly && result.TotalDirty > 0 && shouldShowProgress(commitFlags.Format, quiet) {
 		fmt.Println("Hint: Use --yes (-y) to commit, or --edit (-e) to edit messages first")
 	}
 
@@ -275,6 +139,158 @@ func runCommit(cmd *cobra.Command, args []string) error { //nolint:gocyclo // TO
 		result.TotalFailed+result.TotalConflicted,
 		result.TotalDirty+result.TotalConflicted,
 	)
+}
+
+type commitRunConfig struct {
+	directory      string
+	options        repository.BulkCommitOptions
+	customMessages map[string]string
+	previewOnly    bool
+}
+
+func prepareCommitRun(cmd *cobra.Command, args []string) (commitRunConfig, error) {
+	directory, err := validateBulkDirectory(args)
+	if err != nil {
+		return commitRunConfig{}, err
+	}
+	if err := validateBulkDepth(cmd, commitFlags.Depth); err != nil {
+		return commitRunConfig{}, err
+	}
+	if err := validateBulkFormat(commitFlags.Format); err != nil {
+		return commitRunConfig{}, err
+	}
+
+	customMessages, err := loadCommitMessages()
+	if err != nil {
+		return commitRunConfig{}, err
+	}
+
+	opts := repository.BulkCommitOptions{
+		Directory:         directory,
+		Parallel:          commitFlags.Parallel,
+		MaxDepth:          commitFlags.Depth,
+		DryRun:            commitFlags.DryRun,
+		Message:           commitAll,
+		Yes:               commitYes,
+		Verbose:           verbose,
+		IncludeSubmodules: commitFlags.IncludeSubmodules,
+		AllowConflicted:   commitAllowConflicted,
+		IncludePattern:    commitFlags.Include,
+		ExcludePattern:    commitFlags.Exclude,
+		Logger:            createBulkLogger(verbose),
+		ProgressCallback:  createProgressCallback("Analyzing", commitFlags.Format, quiet),
+	}
+	if customMessages != nil {
+		opts.MessageGenerator = customCommitMessageGenerator(directory, customMessages)
+	}
+
+	previewOnly := !opts.Yes && !opts.DryRun && !commitEdit
+	if previewOnly {
+		opts.DryRun = true
+	}
+	return commitRunConfig{
+		directory:      directory,
+		options:        opts,
+		customMessages: customMessages,
+		previewOnly:    previewOnly,
+	}, nil
+}
+
+func loadCommitMessages() (map[string]string, error) {
+	var messages map[string]string
+	stat, err := os.Stdin.Stat()
+	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+		pipedData, _ := io.ReadAll(os.Stdin)
+		if len(pipedData) > 0 {
+			messages, err = parseJSONOrYAMLMessages(string(pipedData))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse piped data: %w", err)
+			}
+		}
+	} else if commitJSON != "" {
+		messages, err = parseJSONMessages(commitJSON)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse --json: %w", err)
+		}
+	} else if commitYAML != "" {
+		messages, err = parseYAMLMessages(commitYAML)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse --yaml: %w", err)
+		}
+	}
+
+	if len(commitMessages) > 0 {
+		if messages == nil {
+			messages = make(map[string]string)
+		}
+		for _, raw := range commitMessages {
+			repo, message, parseErr := parseRepoMessage(raw)
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid --message format: %w", parseErr)
+			}
+			messages[repo] = message
+		}
+	}
+	return messages, nil
+}
+
+func customCommitMessageGenerator(directory string, messages map[string]string) func(context.Context, string, []string) (string, error) {
+	return func(_ context.Context, repoPath string, _ []string) (string, error) {
+		relPath, err := filepath.Rel(directory, repoPath)
+		if err != nil {
+			relPath = filepath.Base(repoPath)
+		}
+		if relPath == "." {
+			relPath = filepath.Base(directory)
+		}
+		if message, ok := messages[relPath]; ok {
+			return message, nil
+		}
+		if message, ok := messages[filepath.Base(relPath)]; ok {
+			return message, nil
+		}
+		if message, ok := messages[repoPath]; ok {
+			return message, nil
+		}
+		return "", nil
+	}
+}
+
+func commitEditorResult(ctx context.Context, client repository.Client, result *repository.BulkCommitResult, opts repository.BulkCommitOptions) (*repository.BulkCommitResult, bool, error) {
+	if !commitEdit || result.TotalDirty == 0 {
+		return result, false, nil
+	}
+	editedMessages, err := editMessagesInEditor(result)
+	if err != nil {
+		return nil, false, fmt.Errorf("editor failed: %w", err)
+	}
+	if editedMessages == nil {
+		fmt.Println("Canceled (empty file).")
+		return result, true, nil
+	}
+	applyCustomMessages(result, editedMessages)
+	opts.DryRun = false
+	opts.Yes = true
+	opts.MessageGenerator = commitResultMessageGenerator(result)
+	result, err = client.BulkCommit(ctx, opts)
+	if err != nil {
+		return nil, false, fmt.Errorf("bulk commit failed: %w", err)
+	}
+	return result, false, nil
+}
+
+func commitResultMessageGenerator(result *repository.BulkCommitResult) func(context.Context, string, []string) (string, error) {
+	return func(_ context.Context, repoPath string, _ []string) (string, error) {
+		for _, repo := range result.Repositories {
+			if repo.Path == repoPath {
+				if repo.Message != "" {
+					return repo.Message, nil
+				}
+				return repo.SuggestedMessage, nil
+			}
+		}
+		return "", nil
+	}
 }
 
 // parseRepoMessage parses "repo:message" format.

@@ -21,13 +21,16 @@ HOST_GOTOOLCHAIN := $(shell go env GOTOOLCHAIN)
 # OS-specific path separator and binary install dir
 ifeq ($(OS),Windows_NT)
 SEP := \\\\
+GOPATH_LIST_SEP := ;
 else
 SEP := /
+GOPATH_LIST_SEP := :
 endif
 
 ifndef BINDIR
   ifeq ($(strip $(GOBIN)),)
-    BINDIR := $(GOPATH)$(SEP)bin
+    GOPATH_FIRST := $(shell printf '%s\n' '$(GOPATH)' | cut -d '$(GOPATH_LIST_SEP)' -f1)
+    BINDIR := $(GOPATH_FIRST)$(SEP)bin
   else
     BINDIR := $(GOBIN)
   endif
@@ -37,7 +40,7 @@ endif
 # Build Targets
 # ==============================================================================
 
-.PHONY: build install install-check-target test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
+.PHONY: build install test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
 
 build: ## build golang binary
 	@printf "$(CYAN)Building %s...$(RESET)\n" "$(BINARY)"
@@ -45,9 +48,13 @@ build: ## build golang binary
 	@printf "$(GREEN)Built %s successfully$(RESET)\n" "$(BINARY)"
 
 
-install: install-check-target build ## install golang binary
+install: build ## install golang binary
 	@printf "$(CYAN)Installing $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@mkdir -p "$(BINDIR)"
+	@if [ -d "$(BINDIR)$(SEP)$(BINARY)" ]; then \
+		printf "$(RED)Error: install target is a directory: %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)" >&2; \
+		exit 1; \
+	fi
 	@mv "$(BINARY)" "$(BINDIR)$(SEP)$(BINARY)"
 	@printf "$(GREEN)✅ Installed $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@echo ""
@@ -55,12 +62,6 @@ install: install-check-target build ## install golang binary
 	@"$(BINDIR)$(SEP)$(BINARY)" --version
 	@echo ""
 	@printf "$(GREEN)🎉 Installation complete! Run '$(BINARY) --help' to get started.$(RESET)\n"
-
-install-check-target:
-	@if [ -d "$(BINDIR)$(SEP)$(BINARY)" ]; then \
-		printf "$(RED)Error: install target is a directory: %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)" >&2; \
-		exit 1; \
-	fi
 
 test-install: ## verify install uses only BINDIR without touching user directories
 	@set -eu; \
@@ -73,9 +74,12 @@ test-install: ## verify install uses only BINDIR without touching user directori
 				bindir="$$tmpdir/gobin dir"; \
 				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install GOBIN="$$bindir" HOME="$$test_home"; \
 			elif [ "$$mode" = gopath ]; then \
-				gopath="$$tmpdir/gopath dir"; \
-				bindir="$$gopath$(SEP)bin"; \
+				gopath_first="$$tmpdir/first gopath"; \
+				gopath_second="$$tmpdir/second gopath"; \
+				gopath="$$gopath_first$(GOPATH_LIST_SEP)$$gopath_second"; \
+				bindir="$$gopath_first$(SEP)bin"; \
 				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install GOBIN= GOPATH="$$gopath" HOME="$$test_home"; \
+				test ! -e "$$gopath_second$(SEP)bin$(SEP)$(BINARY)"; \
 			else \
 				bindir="$$tmpdir/bindir override"; \
 				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR="$$bindir" GOBIN="$$tmpdir/ignored gobin" HOME="$$test_home"; \
@@ -86,15 +90,26 @@ test-install: ## verify install uses only BINDIR without touching user directori
 		done; \
 		failure_target="$$tmpdir/target directory$(SEP)$(BINARY)"; \
 		mkdir -p "$$failure_target"; \
-		if GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR="$$tmpdir/target directory" HOME="$$tmpdir/failure home" >"$$tmpdir/failure.log" 2>&1; then \
+		if GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory -j2 install BINDIR="$$tmpdir/target directory" HOME="$$tmpdir/failure home" >"$$tmpdir/failure.log" 2>&1; then \
 			echo "expected install to reject a directory target" >&2; \
 			exit 1; \
 		fi; \
 		grep -F "Error: install target is a directory" "$$tmpdir/failure.log" >/dev/null; \
+		plugin_target="$$tmpdir/plugin directory$(SEP)git-forge"; \
+		mkdir -p "$$plugin_target"; \
+		if GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install-git-plugin BINDIR="$$tmpdir/plugin directory" HOME="$$tmpdir/plugin home" >"$$tmpdir/plugin-failure.log" 2>&1; then \
+			echo "expected install-git-plugin to reject a directory target" >&2; \
+			exit 1; \
+		fi; \
+		grep -F "Error: git plugin target is a directory" "$$tmpdir/plugin-failure.log" >/dev/null; \
 		printf "$(GREEN)✅ Install path regression checks passed$(RESET)\n"
 
 install-git-plugin: install ## install as git plugin (git forge)
 	@printf "$(CYAN)Installing git plugin symlink...$(RESET)\n"
+	@if [ -d "$(BINDIR)$(SEP)git-forge" ]; then \
+		printf "$(RED)Error: git plugin target is a directory: %s$(RESET)\n" "$(BINDIR)$(SEP)git-forge" >&2; \
+		exit 1; \
+	fi
 	@ln -sf "$(BINDIR)$(SEP)$(BINARY)" "$(BINDIR)$(SEP)git-forge"
 	@printf "$(GREEN)✅ Git plugin installed! Use 'git forge' to run.$(RESET)\n"
 
@@ -123,8 +138,6 @@ bootstrap: ## install build dependencies
 clean: ## clean up environment
 	@echo -e "$(CYAN)Cleaning up build artifacts...$(RESET)"
 	@rm -rf coverage.out coverage.html dist/ $(executablename) $(BINARY)
-	@rm -f $(shell go env GOPATH)/bin/$(executablename)
-	@rm -f $(shell go env GOPATH)/bin/$(BINARY)
 	@rm -f lint-report.json gosec-report.json
 	@echo -e "$(GREEN)✅ Cleanup completed$(RESET)"
 
@@ -225,11 +238,12 @@ build-info: ## show build information and current configuration
 	@echo -e "  GOPROXY:        $(GOPROXY)"
 	@echo -e "  GOSUMDB:        $(GOSUMDB)"
 	@echo "  GOPATH:         $$(go env GOPATH)"
+	@echo "  BINDIR:         $(BINDIR)"
 	@echo "  GOROOT:         $$(go env GOROOT)"
 	@echo ""
 	@echo -e "$(GREEN)🎯 Build Targets:$(RESET)"
 	@echo -e "  • $(CYAN)build$(RESET)               Build golang binary"
-	@echo -e "  • $(CYAN)install$(RESET)             Install golang binary to GOPATH/bin"
+	@echo -e "  • $(CYAN)install$(RESET)             Install golang binary to BINDIR, GOBIN, or GOPATH/bin"
 	@echo -e "  • $(CYAN)run$(RESET)                 Run the application"
 	@echo -e "  • $(CYAN)bootstrap$(RESET)           Install build dependencies"
 	@echo -e "  • $(CYAN)clean$(RESET)               Clean up build artifacts"

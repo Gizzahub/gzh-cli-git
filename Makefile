@@ -182,6 +182,7 @@ info: ## show project information and current configuration
 	@echo -e "  GOPROXY:        $(GOPROXY)"
 	@echo -e "  GOSUMDB:        $(GOSUMDB)"
 	@echo "  GOPATH:         $$(go env GOPATH)"
+	@echo "  BINDIR:         $(BINDIR)"
 	@echo "  GOROOT:         $$(go env GOROOT)"
 	@echo ""
 	@echo -e "$(GREEN)📁 Key Features:$(RESET)"

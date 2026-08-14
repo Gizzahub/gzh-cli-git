@@ -254,22 +254,44 @@ func TestBaseCell_SilentOnBaseBranch(t *testing.T) {
 // ahead/behind, but only one of them is fine. The divergence now rides on the
 // branch name in the shape a shell prompt uses, so an in-sync branch prints
 // its name alone.
+//
+// The color is asserted alongside the text because it is a decision, not a
+// side effect: the cell takes the divergence's severity color (yellow for a
+// one-way divergence, red for both), cyan when there is nothing to report,
+// and a detached HEAD keeps its own red. Colors are forced on for this —
+// with the gate off every cliutil.Color* is blank and a comparison against
+// them pins nothing.
 func TestBranchCell_PromptStyleDivergence(t *testing.T) {
-	withColors(t, false)
+	withColors(t, true)
 
 	repo := &repository.RepositoryStatusResult{Branch: "main", Upstream: "origin/main"}
-	if got := branchCell(repo); got.text != "main" {
-		t.Errorf("in sync = %q, want the bare name", got.text)
+	if got := branchCell(repo); got.text != "main" || got.color != cliutil.ColorCyan {
+		t.Errorf("in sync = (%q, %q), want the bare name in cyan", got.text, got.color)
+	}
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsAhead: 2}
+	if got := branchCell(repo); got.text != "feat/x ↑2" || got.color != cliutil.ColorYellow {
+		t.Errorf("ahead only = (%q, %q), want %q in yellow", got.text, got.color, "feat/x ↑2")
+	}
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsBehind: 4}
+	if got := branchCell(repo); got.text != "feat/x ↓4" || got.color != cliutil.ColorYellow {
+		t.Errorf("behind only = (%q, %q), want %q in yellow", got.text, got.color, "feat/x ↓4")
 	}
 
 	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsAhead: 2, CommitsBehind: 3}
-	if got := branchCell(repo); got.text != "feat/x ↑2 ↓3" {
-		t.Errorf("diverged = %q, want %q", got.text, "feat/x ↑2 ↓3")
+	if got := branchCell(repo); got.text != "feat/x ↑2 ↓3" || got.color != cliutil.ColorRed {
+		t.Errorf("diverged = (%q, %q), want %q in red", got.text, got.color, "feat/x ↑2 ↓3")
 	}
 
 	repo = &repository.RepositoryStatusResult{Branch: "feat/x", RemoteURL: "git@github.com:Acme/b.git"}
-	if got := branchCell(repo); got.text != "feat/x no upstream" {
-		t.Errorf("untracked branch = %q, want %q", got.text, "feat/x no upstream")
+	if got := branchCell(repo); got.text != "feat/x no upstream" || got.color != cliutil.ColorYellow {
+		t.Errorf("untracked branch = (%q, %q), want %q in yellow", got.text, got.color, "feat/x no upstream")
+	}
+
+	repo = &repository.RepositoryStatusResult{HeadSHA: "9f8e7d6"}
+	if got := branchCell(repo); got.text != "detached@9f8e7d6" || got.color != cliutil.ColorRed {
+		t.Errorf("detached = (%q, %q), want %q in red", got.text, got.color, "detached@9f8e7d6")
 	}
 }
 
@@ -277,12 +299,32 @@ func TestBranchCell_PromptStyleDivergence(t *testing.T) {
 // printing the same words for two different facts. A repository with no remote
 // has nothing to track and nothing to push to; REMOTE says "no remote" once,
 // and the branch saying it again would double the noise without adding a fact.
+// The name still prints in cyan: nothing-to-report is not a warning here,
+// because the REMOTE column is where this state turns red.
 func TestBranchCell_SilentWithoutARemote(t *testing.T) {
-	withColors(t, false)
+	withColors(t, true)
 
 	repo := &repository.RepositoryStatusResult{Branch: "feat/x"}
-	if got := branchCell(repo); got.text != "feat/x" {
-		t.Errorf("no remote at all = %q, want the bare name (REMOTE column carries it)", got.text)
+	if got := branchCell(repo); got.text != "feat/x" || got.color != cliutil.ColorCyan {
+		t.Errorf("no remote at all = (%q, %q), want the bare name in cyan (REMOTE column carries it)", got.text, got.color)
+	}
+}
+
+// TestRemoteCell_PresenceColors pins the REMOTE column's contract: presence is
+// the normal case and says nothing at all, while "no remote" marks the
+// repository that cannot push or pull in red. Colors forced on for the same
+// reason as the branch-cell tests — the gate blanks the values otherwise.
+func TestRemoteCell_PresenceColors(t *testing.T) {
+	withColors(t, true)
+
+	repo := &repository.RepositoryStatusResult{}
+	if got := remoteCell(repo); got.text != "no remote" || got.color != cliutil.ColorRed {
+		t.Errorf("no remote = (%q, %q), want %q in red", got.text, got.color, "no remote")
+	}
+
+	repo = &repository.RepositoryStatusResult{RemoteURL: "git@github.com:Acme/b.git"}
+	if got := remoteCell(repo); got.text != "" || got.color != "" {
+		t.Errorf("remote present = (%q, %q), want an empty cell (presence is the normal case)", got.text, got.color)
 	}
 }
 

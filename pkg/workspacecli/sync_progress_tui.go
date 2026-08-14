@@ -512,7 +512,8 @@ type tuiProgressBridge struct {
 func newTUIProgressBridge(program *tea.Program, total int) *tuiProgressBridge {
 	return &tuiProgressBridge{
 		program: program,
-		total:   int32(total), //nolint:gosec // repo count will never exceed int32 max (2^31-1)
+		// #nosec G115 -- a repository count cannot approach int32 max.
+		total: int32(total), //nolint:gosec // bounded by the number of scanned directories.
 	}
 }
 

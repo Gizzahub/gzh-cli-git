@@ -76,7 +76,7 @@ require (
     github.com/gizzahub/gzh-cli-core v0.0.0-20251230045225-725b628c716a
     github.com/google/go-github/v66 v66.0.0
     github.com/spf13/cobra v1.10.2
-    github.com/xanzy/go-gitlab v0.115.0
+    gitlab.com/gitlab-org/api/client-go v1.46.0
     golang.org/x/oauth2 v0.34.0
     golang.org/x/sync v0.19.0
     gopkg.in/yaml.v3 v3.0.1

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xanzy/go-gitlab"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/ratelimit"
@@ -136,7 +136,7 @@ func (p *Provider) ListOrganizationRepos(ctx context.Context, group string) ([]*
 
 		for _, project := range projects {
 			// Skip projects scheduled for deletion
-			if project.MarkedForDeletionAt != nil {
+			if project.MarkedForDeletionOn != nil {
 				continue
 			}
 			allRepos = append(allRepos, p.convertGitLabProject(project))
@@ -209,7 +209,7 @@ func (p *Provider) ListUserRepos(ctx context.Context, user string) ([]*provider.
 
 		for _, project := range projects {
 			// Skip projects scheduled for deletion
-			if project.MarkedForDeletionAt != nil {
+			if project.MarkedForDeletionOn != nil {
 				continue
 			}
 			allRepos = append(allRepos, p.convertGitLabProject(project))
@@ -270,7 +270,7 @@ func (p *Provider) convertGitLabProject(project *gitlab.Project) *provider.Repos
 		Disabled:      false,
 		Language:      "",
 		Size:          0,
-		Stars:         project.StarCount,
+		Stars:         int(project.StarCount),
 		Topics:        project.Topics,
 		Visibility:    string(project.Visibility),
 		CreatedAt:     createdAt,

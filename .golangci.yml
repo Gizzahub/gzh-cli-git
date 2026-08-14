@@ -400,18 +400,6 @@ linters:
         text: (QF1012|S1039)
       - linters:
           - staticcheck
-        path: pkg/gitlab/provider\.go
-        text: SA1019
-      - linters:
-          - staticcheck
-        path: pkg/gitea/provider\.go
-        text: SA1019
-      - linters:
-          - staticcheck
-        path: cmd/gz-git/cmd/(bulk_common|clone_config)\.go
-        text: SA1019
-      - linters:
-          - staticcheck
         path: cmd/gz-git/cmd/(coverage_boost2_test|root)\.go
         text: SA9003
       - linters:

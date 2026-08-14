@@ -133,7 +133,7 @@ deps-update-docker: ## check and show Docker base images that need updates
 deps-security: ## run security audit on dependencies
 	@echo -e "$(CYAN)Running security audit...$(RESET)"
 	@echo -e "$(YELLOW)Checking for known vulnerabilities...$(RESET)"
-	@go run golang.org/x/vuln/cmd/govulncheck@latest ./... || echo -e "$(RED)❌ Vulnerabilities found$(RESET)"
+	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 deps-audit: ## comprehensive dependency audit and report
 	@echo -e "$(CYAN)Comprehensive dependency audit...$(RESET)"

@@ -62,7 +62,8 @@ func DefaultConfig() *Config {
 
 // Load loads configuration from file.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G703: path is a caller-provided config file path, not tainted user input
+	// #nosec G703 -- reading the caller-selected config path is this API's purpose.
+	data, err := os.ReadFile(path) //nolint:gosec // path is caller-selected, not derived from file content.
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -88,7 +89,8 @@ func LoadDefault() (*Config, error) {
 	}
 
 	for _, loc := range locations {
-		if _, err := os.Stat(loc); err == nil { //nolint:gosec // G703: loc is constructed from known safe paths and HOME env var
+		// #nosec G703 -- loc is constructed from known config roots and HOME.
+		if _, err := os.Stat(loc); err == nil { //nolint:gosec // known candidate config path.
 			return Load(loc)
 		}
 	}

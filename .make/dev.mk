@@ -39,13 +39,13 @@ dev: fmt lint-check test ## run standard development workflow (format, lint, tes
 dev-fast: fmt test-unit ## quick development cycle (format and unit tests only)
 	@echo -e "$(GREEN)✅ Fast development cycle completed!$(RESET)"
 
-verify: fmt lint-check test cover-report check-consistency ## complete verification before PR
+verify: fmt lint-check test cover-report check-consistency security ## complete verification before PR
 	@echo -e "$(GREEN)✅ Complete verification completed!$(RESET)"
 
 ci-local: clean verify test-all security ## run full CI pipeline locally
 	@echo -e "$(GREEN)✅ Local CI pipeline completed!$(RESET)"
 
-pr-check: fmt lint-check test cover-report check-consistency ## pre-PR submission check
+pr-check: fmt lint-check test cover-report check-consistency security ## pre-PR submission check
 	@echo -e "$(GREEN)✅ Pre-PR check completed - ready for submission!$(RESET)"
 
 # ==============================================================================
@@ -55,7 +55,7 @@ pr-check: fmt lint-check test cover-report check-consistency ## pre-PR submissio
 quick: fmt lint-check test-unit ## quick development check (format + lint + unit tests)
 	@echo -e "$(GREEN)✅ Quick development check completed!$(RESET)"
 
-full: fmt lint test cover-report ## full quality check (comprehensive)
+full: fmt lint test cover-report security ## full quality check (comprehensive)
 	@echo -e "$(GREEN)✅ Full quality check completed!$(RESET)"
 
 setup-all: bootstrap install-tools ## complete project setup (dependencies + all tools)

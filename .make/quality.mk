@@ -15,14 +15,17 @@
 format: format-simplify ## quick and simple formatting (default)
 fmt: format-simplify
 
-format-simplify: ## quick basic formatting with gofumpt, goimports, and mdformat
+format-simplify: format-install-tools ## quick basic formatting with gofumpt, goimports, and mdformat
 	@echo -e "$(CYAN)🚀 Quick formatting...$(RESET)"
 	@echo "1. Running gofumpt (includes go fmt + simplification)..."
 	@gofumpt -w .
 	@echo "2. Organizing imports..."
 	@goimports -w -local github.com/gizzahub/gzh-cli .
-	@echo "3. Formatting markdown files..."
-	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat || true
+	@echo "3. Formatting changed markdown files..."
+	@BASE_REF=$$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master); \
+		BASE=$$(git merge-base HEAD "$$BASE_REF" 2>/dev/null || echo HEAD); \
+		FILES=$$({ git diff --name-only --diff-filter=ACMR "$$BASE"...HEAD; git diff --name-only --diff-filter=ACMR HEAD; } | grep '\.md$$' | sort -u || true); \
+		if [ -n "$$FILES" ]; then echo "$$FILES" | xargs mdformat; fi
 	@echo -e "$(GREEN)✅ Quick formatting complete!$(RESET)"
 
 format-md: ## format all markdown files with mdformat
@@ -30,9 +33,12 @@ format-md: ## format all markdown files with mdformat
 	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat
 	@echo -e "$(GREEN)✅ Markdown formatting complete!$(RESET)"
 
-format-md-check: ## check markdown files that need formatting
+format-md-check: format-install-tools ## check markdown files that need formatting
 	@echo -e "$(CYAN)📋 Checking markdown formatting...$(RESET)"
-	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat --check || echo -e "$(YELLOW)Some markdown files need formatting$(RESET)"
+	@BASE_REF=$$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master); \
+		BASE=$$(git merge-base HEAD "$$BASE_REF" 2>/dev/null || echo HEAD); \
+		FILES=$$({ git diff --name-only --diff-filter=ACMR "$$BASE"...HEAD; git diff --name-only --diff-filter=ACMR HEAD; } | grep '\.md$$' | sort -u || true); \
+		if [ -n "$$FILES" ]; then echo "$$FILES" | xargs mdformat --check; fi
 
 format-md-diff: ## format only changed markdown files
 	@echo -e "$(CYAN)🚀 Formatting changed markdown files...$(RESET)"
@@ -82,7 +88,8 @@ format-install-tools: ## install advanced formatting tools
 	@which goimports > /dev/null || (echo "Installing goimports..." && go install golang.org/x/tools/cmd/goimports@latest)
 	@which gofumpt > /dev/null || (echo "Installing gofumpt..." && go install mvdan.cc/gofumpt@latest)
 	@which gci > /dev/null || (echo "Installing gci..." && go install github.com/daixiang0/gci@latest)
-	@which mdformat > /dev/null || (echo "Installing mdformat..." && pip install --user mdformat mdformat-gfm mdformat-tables)
+	@command -v uv >/dev/null 2>&1 || { echo "uv is required to install mdformat" >&2; exit 1; }
+	@command -v mdformat >/dev/null 2>&1 || (echo "Installing mdformat..." && uv tool install --with mdformat-gfm --with mdformat-tables mdformat)
 	@echo -e "$(GREEN)✅ All formatting tools installed!$(RESET)"
 
 format-file: ## format specific files with gofumpt and goimports (usage: make format-file file1.go file2.go ...)
@@ -224,12 +231,12 @@ security: security-deps security-code ## run all security checks
 
 security-deps: ## check dependencies for vulnerabilities
 	@echo -e "$(CYAN)Checking dependencies for vulnerabilities...$(RESET)"
-	@go run golang.org/x/vuln/cmd/govulncheck@latest ./... || echo -e "$(RED)❌ Vulnerabilities found$(RESET)"
+	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 security-code: ## run security code analysis
 	@echo -e "$(CYAN)Running security code analysis with gosec...$(RESET)"
 	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
-	@gosec -config=.gosec.yaml ./... 2>/dev/null || echo -e "$(YELLOW)No gosec config found, using defaults$(RESET)"
+	@GOWORK=off gosec -exclude=G104,G204,G304 ./...
 
 security-json: ## run security analysis and output JSON/SARIF report
 	@echo -e "$(CYAN)Running security analysis with JSON/SARIF output...$(RESET)"

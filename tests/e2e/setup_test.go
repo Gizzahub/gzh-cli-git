@@ -294,12 +294,30 @@ func AssertNotContains(t *testing.T, output, expected string) {
 func AssertExitCode(t *testing.T, err error, expectedCode int) {
 	t.Helper()
 
+	actualCode, hasExitCode := commandExitCode(err)
+	if !hasExitCode {
+		t.Errorf("Expected process exit code %d, got non-exit error: %v", expectedCode, err)
+		return
+	}
+	if actualCode != expectedCode {
+		t.Errorf("Expected exit code %d, got %d", expectedCode, actualCode)
+	}
+}
+
+func commandExitCode(err error) (int, bool) {
+	if err == nil {
+		return 0, true
+	}
+
 	exitErr := &exec.ExitError{}
 	if errors.As(err, &exitErr) {
-		if exitErr.ExitCode() != expectedCode {
-			t.Errorf("Expected exit code %d, got %d", expectedCode, exitErr.ExitCode())
-		}
-	} else if err == nil && expectedCode != 0 {
-		t.Errorf("Expected exit code %d, got 0 (success)", expectedCode)
+		return exitErr.ExitCode(), true
+	}
+	return 0, false
+}
+
+func TestCommandExitCodeRejectsNonExitError(t *testing.T) {
+	if _, ok := commandExitCode(errors.New("process could not start")); ok {
+		t.Fatal("commandExitCode accepted a non-exit error")
 	}
 }

@@ -9,7 +9,7 @@
 # Testing Targets
 # ==============================================================================
 
-.PHONY: test test-unit test-unit-quality test-integration test-integration-only test-e2e test-e2e-only test-all
+.PHONY: test test-unit test-unit-quality test-integration-quality test-integration test-integration-only test-e2e test-e2e-only test-all
 .PHONY: cover cover-html cover-report bench test-coverage test-docker
 
 test: clean build ## run all tests with coverage (requires binary for integration tests)
@@ -40,6 +40,17 @@ test-unit-quality: ## run unit tests without leaving a coverage artifact in the 
 		$$(GOWORK=off go list ./... | grep -v -E '(tests/integration|tests/e2e)'); \
 	go tool cover -func="$$coverage_out" | sort -rnk3; \
 	echo -e "$(GREEN)✅ Unit tests completed$(RESET)"
+
+# Keep the integration package self-contained for the canonical quality gate.
+# Its TestMain builds gz-git in a private temporary directory and each test
+# uses t.TempDir, so this target must not require a checked-out binary or leave
+# build/coverage artifacts in the repository.
+test-integration-quality: ## run package integration tests without repository artifacts
+	@set -eu; \
+	export GOWORK=off; \
+	echo -e "$(CYAN)Running package integration tests...$(RESET)"; \
+	GOWORK=off go test -short -count=1 -v ./tests/integration/...; \
+	echo -e "$(GREEN)✅ Package integration tests completed$(RESET)"
 
 test-integration-only: build ## run only integration tests with build tag
 	@echo -e "$(CYAN)Running integration tests...$(RESET)"

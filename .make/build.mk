@@ -30,12 +30,12 @@ endif
 ifeq ($(strip $(BINDIR)),)
   ifeq ($(strip $(GOBIN)),)
     GOPATH_FIRST := $(shell printf '%s\n' '$(GOPATH)' | cut -d '$(GOPATH_LIST_SEP)' -f1)
-    INSTALL_BINDIR := $(GOPATH_FIRST)$(SEP)bin
+    override INSTALL_BINDIR := $(GOPATH_FIRST)$(SEP)bin
   else
-    INSTALL_BINDIR := $(GOBIN)
+    override INSTALL_BINDIR := $(GOBIN)
   endif
 else
-  INSTALL_BINDIR := $(BINDIR)
+  override INSTALL_BINDIR := $(BINDIR)
 endif
 
 # ==============================================================================
@@ -73,6 +73,9 @@ test-install: ## verify install uses only BINDIR without touching user directori
 			sentinel="$$tmpdir/external bindir"; \
 			$(MAKE) --no-print-directory test-install TEST_INSTALL_EXTERNAL_BINDIR_CHECK=1 BINDIR="$$sentinel"; \
 			test ! -e "$$sentinel$(SEP)$(BINARY)"; \
+			install_bindir_sentinel="$$tmpdir/external install bindir"; \
+			$(MAKE) --no-print-directory test-install TEST_INSTALL_EXTERNAL_BINDIR_CHECK=1 INSTALL_BINDIR="$$install_bindir_sentinel"; \
+			test ! -e "$$install_bindir_sentinel$(SEP)$(BINARY)"; \
 		fi; \
 		for mode in gobin gopath bindir; do \
 			test_home="$$tmpdir/$$mode home"; \

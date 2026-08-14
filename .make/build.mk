@@ -22,14 +22,8 @@ else
 SEP := /
 endif
 
-USERBIN := $(HOME)$(SEP).local$(SEP)bin
-
 ifeq ($(strip $(GOBIN)),)
-  ifeq ($(OS),Windows_NT)
-    BINDIR := $(GOPATH)$(SEP)bin
-  else
-    BINDIR := $(GOPATH)$(SEP)bin
-  endif
+  BINDIR := $(GOPATH)$(SEP)bin
 else
   BINDIR := $(GOBIN)
 endif
@@ -38,28 +32,44 @@ endif
 # Build Targets
 # ==============================================================================
 
-.PHONY: build install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
+.PHONY: build install test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
 
 build: ## build golang binary
 	@printf "$(CYAN)Building %s...$(RESET)\n" "$(BINARY)"
-	@go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY) ./cmd/gz-git
+	@go build -ldflags "-X main.version=$(VERSION)" -o "$(BINARY)" ./cmd/gz-git
 	@printf "$(GREEN)Built %s successfully$(RESET)\n" "$(BINARY)"
 
 
 install: build ## install golang binary
 	@printf "$(CYAN)Installing $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@mkdir -p "$(BINDIR)"
-	@mkdir -p "$(USERBIN)"
-	@echo @mkdir -p "$(USERBIN)"
-	@cp $(BINARY) "$(USERBIN)"/"$(BINARY)"
-	@echo @cp $(BINARY) "$(USERBIN)"/"$(BINARY)"
-	@mv $(BINARY) "$(BINDIR)"/
+	@mv "$(BINARY)" "$(BINDIR)$(SEP)$(BINARY)"
 	@printf "$(GREEN)✅ Installed $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
 	@echo ""
 	@printf "$(CYAN)Verifying installation...$(RESET)\n"
 	@"$(BINDIR)$(SEP)$(BINARY)" --version || echo -e "$(YELLOW)Note: Binary installed but --version flag not implemented$(RESET)"
 	@echo ""
 	@printf "$(GREEN)🎉 Installation complete! Run '$(BINARY) --help' to get started.$(RESET)\n"
+
+test-install: ## verify install uses only BINDIR without touching user directories
+	@set -eu; \
+		tmpdir="$$(mktemp -d "$${TMPDIR:-/tmp}/gz-git-install.XXXXXX")"; \
+		trap 'chmod -R u+w "$$tmpdir"; rm -rf "$$tmpdir"' EXIT; \
+		for mode in gobin gopath; do \
+			test_home="$$tmpdir/$$mode home"; \
+			mkdir -p "$$test_home"; \
+			if [ "$$mode" = gobin ]; then \
+				bindir="$$tmpdir/gobin dir"; \
+				GOWORK=off $(MAKE) --no-print-directory install GOBIN="$$bindir" HOME="$$test_home"; \
+			else \
+				gopath="$$tmpdir/gopath dir"; \
+				bindir="$$gopath$(SEP)bin"; \
+				GOWORK=off $(MAKE) --no-print-directory install GOBIN= GOPATH="$$gopath" HOME="$$test_home"; \
+			fi; \
+			test -x "$$bindir$(SEP)$(BINARY)"; \
+			test ! -e "$$test_home$(SEP).local$(SEP)bin$(SEP)$(BINARY)"; \
+		done; \
+		printf "$(GREEN)✅ Install path regression checks passed$(RESET)\n"
 
 install-git-plugin: install ## install as git plugin (git forge)
 	@printf "$(CYAN)Installing git plugin symlink...$(RESET)\n"

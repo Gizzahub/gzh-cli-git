@@ -12,14 +12,16 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/reposync"
 )
 
-func TestValidateComparisonBranchRejectsInjectionAndAllowsHEAD(t *testing.T) {
-	for _, branch := range []string{"--upload-pack=/tmp/evil", "feature;touch", "feature..bad"} {
+func TestValidateComparisonBranchUsesGitRefRules(t *testing.T) {
+	for _, branch := range []string{"--upload-pack=/tmp/evil", "feature..bad"} {
 		if err := validateComparisonBranch(branch); err == nil {
 			t.Errorf("validateComparisonBranch(%q) = nil, want error", branch)
 		}
 	}
-	if err := validateComparisonBranch("HEAD"); err != nil {
-		t.Fatalf("validateComparisonBranch(HEAD) = %v, want nil", err)
+	for _, branch := range []string{"HEAD", "feature;touch", "team/topic$1"} {
+		if err := validateComparisonBranch(branch); err != nil {
+			t.Errorf("validateComparisonBranch(%q) = %v, want nil", branch, err)
+		}
 	}
 }
 

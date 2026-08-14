@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -109,15 +110,25 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
 		}
-		status := 0
-		var headers http.Header
-		if resp != nil {
-			status = resp.StatusCode
-			headers = resp.Header
-		}
-		return false, provider.ClassifyTokenValidationError("GitHub token validation", status, headers, err)
+		return false, classifyTokenValidationError(resp, err)
 	}
 	return true, nil
+}
+
+func classifyTokenValidationError(resp *github.Response, cause error) error {
+	var rateLimitErr *github.RateLimitError
+	var abuseRateLimitErr *github.AbuseRateLimitError
+	if errors.As(cause, &rateLimitErr) || errors.As(cause, &abuseRateLimitErr) {
+		return fmt.Errorf("GitHub token validation: %w: %w", provider.ErrTokenValidationRateLimited, cause)
+	}
+
+	status := 0
+	var headers http.Header
+	if resp != nil {
+		status = resp.StatusCode
+		headers = resp.Header
+	}
+	return provider.ClassifyTokenValidationError("GitHub token validation", status, headers, cause)
 }
 
 // Name returns the provider name.

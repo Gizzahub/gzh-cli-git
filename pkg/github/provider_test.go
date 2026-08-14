@@ -8,8 +8,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+
+	github "github.com/google/go-github/v88/github"
 
 	providerapi "github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 )
@@ -54,6 +57,28 @@ func TestProvider_ValidateToken_TransportFailureIsUnreachable(t *testing.T) {
 	valid, err := p.ValidateToken(context.Background())
 	if valid || !errors.Is(err, providerapi.ErrTokenValidationUnreachable) {
 		t.Fatalf("ValidateToken = (%v, %v), want false and unreachable error", valid, err)
+	}
+}
+
+func TestClassifyTokenValidationError_SDKRateLimitErrors(t *testing.T) {
+	response := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Request:    &http.Request{Method: http.MethodGet, URL: &url.URL{Scheme: "https", Host: "github.example"}},
+	}
+	tests := []struct {
+		name  string
+		cause error
+	}{
+		{name: "primary rate limit", cause: &github.RateLimitError{Response: response}},
+		{name: "abuse rate limit", cause: &github.AbuseRateLimitError{Response: response}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := classifyTokenValidationError(nil, tt.cause)
+			if !errors.Is(err, providerapi.ErrTokenValidationRateLimited) {
+				t.Fatalf("error = %v, want rate-limited classification", err)
+			}
+		})
 	}
 }
 

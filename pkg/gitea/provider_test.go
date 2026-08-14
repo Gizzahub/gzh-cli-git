@@ -65,6 +65,58 @@ func TestProvider_ValidateToken_TransportFailureIsUnreachable(t *testing.T) {
 	}
 }
 
+func TestProvider_ValidateToken_RejectsMalformedSuccessBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer server.Close()
+
+	p, err := NewProvider("test-token", server.URL)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	valid, err := p.ValidateToken(context.Background())
+	if valid || !errors.Is(err, provider.ErrTokenValidationAPI) {
+		t.Fatalf("ValidateToken = (%v, %v), want false and API validation error", valid, err)
+	}
+}
+
+func TestProvider_ValidateToken_RejectsRedirectedLoginBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/user" {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html>login</html>"))
+	}))
+	defer server.Close()
+
+	p, err := NewProvider("test-token", server.URL)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	valid, err := p.ValidateToken(context.Background())
+	if valid || !errors.Is(err, provider.ErrTokenValidationAPI) {
+		t.Fatalf("ValidateToken = (%v, %v), want false and API validation error", valid, err)
+	}
+}
+
+func TestProvider_ValidateToken_CanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	p, err := NewProvider("test-token", "https://gitea.example.invalid")
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	valid, err := p.ValidateToken(ctx)
+	if valid || !errors.Is(err, provider.ErrTokenValidationCanceled) {
+		t.Fatalf("ValidateToken = (%v, %v), want false and canceled error", valid, err)
+	}
+}
+
 func TestNewProvider_RequiresBaseURL(t *testing.T) {
 	_, err := NewProvider("token", "")
 	if err == nil {

@@ -4,6 +4,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -15,6 +16,7 @@ func TestClassifyTokenValidationError(t *testing.T) {
 		name    string
 		status  int
 		headers http.Header
+		cause   error
 		wantErr error
 	}{
 		{name: "forbidden", status: http.StatusForbidden, wantErr: ErrTokenForbidden},
@@ -23,13 +25,21 @@ func TestClassifyTokenValidationError(t *testing.T) {
 		{name: "retry after", status: http.StatusForbidden, headers: http.Header{"Retry-After": []string{"60"}}, wantErr: ErrTokenValidationRateLimited},
 		{name: "server error", status: http.StatusInternalServerError, wantErr: ErrTokenValidationAPI},
 		{name: "transport", status: 0, wantErr: ErrTokenValidationUnreachable},
+		{name: "canceled", status: 0, cause: context.Canceled, wantErr: ErrTokenValidationCanceled},
 		{name: "other api", status: http.StatusBadRequest, wantErr: ErrTokenValidationAPI},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ClassifyTokenValidationError("test", tt.status, tt.headers, errors.New("cause"))
+			cause := tt.cause
+			if cause == nil {
+				cause = errors.New("cause")
+			}
+			err := ClassifyTokenValidationError("test", tt.status, tt.headers, cause)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("error = %v, want errors.Is(..., %v)", err, tt.wantErr)
+			}
+			if tt.cause != nil && !errors.Is(err, tt.cause) {
+				t.Fatalf("error = %v, want original cause %v", err, tt.cause)
 			}
 		})
 	}

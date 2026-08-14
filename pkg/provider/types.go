@@ -24,6 +24,8 @@ var (
 	// ErrTokenValidationAPI indicates an API response that was neither an
 	// authentication rejection nor a rate-limit response.
 	ErrTokenValidationAPI = errors.New("token validation API error")
+	// ErrTokenValidationCanceled indicates that the caller canceled validation.
+	ErrTokenValidationCanceled = errors.New("token validation canceled")
 )
 
 // ClassifyTokenValidationError wraps a provider validation failure with a
@@ -35,15 +37,19 @@ var (
 // responsibility because providers historically return (false, nil) for it.
 func ClassifyTokenValidationError(providerName string, status int, headers http.Header, cause error) error {
 	kind := ErrTokenValidationAPI
-	switch {
-	case status == http.StatusTooManyRequests || (status == http.StatusForbidden && hasRateLimitEvidence(headers)):
-		kind = ErrTokenValidationRateLimited
-	case status == http.StatusForbidden:
-		kind = ErrTokenForbidden
-	case status == 0:
-		kind = ErrTokenValidationUnreachable
-	case status >= http.StatusInternalServerError:
-		kind = ErrTokenValidationAPI
+	if errors.Is(cause, context.Canceled) {
+		kind = ErrTokenValidationCanceled
+	} else {
+		switch {
+		case status == http.StatusTooManyRequests || (status == http.StatusForbidden && hasRateLimitEvidence(headers)):
+			kind = ErrTokenValidationRateLimited
+		case status == http.StatusForbidden:
+			kind = ErrTokenForbidden
+		case status == 0:
+			kind = ErrTokenValidationUnreachable
+		case status >= http.StatusInternalServerError:
+			kind = ErrTokenValidationAPI
+		}
 	}
 
 	if cause == nil {

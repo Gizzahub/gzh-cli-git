@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 
 	"code.gitea.io/sdk/gitea"
@@ -102,24 +101,34 @@ func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// The SDK only supports a process-wide default context on Client. Build a
-	// short-lived request instead of mutating p.client, which keeps validation
-	// cancellation local and avoids a data race with concurrent operations.
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/v1/user", http.NoBody)
+	// The SDK only supports a default context on Client. Build a short-lived
+	// client instead of mutating p.client, which keeps validation cancellation
+	// local and avoids a data race with concurrent operations. Using the SDK
+	// here also preserves GetMyUserInfo's JSON/identity validation semantics.
+	validationClient, err := gitea.NewClient(
+		baseURL,
+		gitea.SetGiteaVersion(""),
+		gitea.SetToken(token),
+		gitea.SetContext(ctx),
+	)
 	if err != nil {
 		return false, provider.ClassifyTokenValidationError("Gitea token validation", 0, nil, err)
 	}
-	req.Header.Set("Authorization", "token "+token)
-	resp, err := http.DefaultClient.Do(req)
+
+	// GetMyUserInfo returns the authenticated user and reports malformed success
+	// bodies as errors, rather than accepting any 2xx login page as valid.
+	_, resp, err := validationClient.GetMyUserInfo()
 	if err != nil {
-		return false, provider.ClassifyTokenValidationError("Gitea token validation", 0, nil, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusUnauthorized {
-		return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return false, provider.ClassifyTokenValidationError("Gitea token validation", resp.StatusCode, resp.Header, fmt.Errorf("HTTP status %d", resp.StatusCode))
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
+		}
+		status := 0
+		var headers http.Header
+		if resp != nil {
+			status = resp.StatusCode
+			headers = resp.Header
+		}
+		return false, provider.ClassifyTokenValidationError("Gitea token validation", status, headers, err)
 	}
 	return true, nil
 }

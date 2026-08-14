@@ -670,6 +670,9 @@ func tokenValidationResult(profileName, providerName string, err error) CheckRes
 	case errors.Is(err, provider.ErrTokenValidationAPI):
 		result.Status = StatusError
 		result.Message = fmt.Sprintf("profile '%s': %s API returned a validation error", profileName, providerName)
+	case errors.Is(err, provider.ErrTokenValidationCanceled):
+		result.Status = StatusWarning
+		result.Message = fmt.Sprintf("profile '%s': %s token validation canceled", profileName, providerName)
 	default:
 		// Preserve the legacy interpretation for external ProviderWithAuth
 		// implementations that return an unclassified error.

@@ -22,6 +22,7 @@ func TestTokenValidationResult_ClassifiesProviderErrors(t *testing.T) {
 		{name: "rate limited", err: provider.ErrTokenValidationRateLimited, wantStatus: StatusWarning, wantIn: "rate limited"},
 		{name: "unreachable", err: provider.ErrTokenValidationUnreachable, wantStatus: StatusUnreachable, wantIn: "API unreachable"},
 		{name: "api failure", err: provider.ErrTokenValidationAPI, wantStatus: StatusError, wantIn: "validation error"},
+		{name: "canceled", err: provider.ErrTokenValidationCanceled, wantStatus: StatusWarning, wantIn: "validation canceled"},
 		{name: "legacy external provider error", err: errors.New("connection failed"), wantStatus: StatusUnreachable, wantIn: "API unreachable"},
 		{name: "legacy invalid result", err: nil, wantStatus: StatusError, wantIn: "invalid or expired"},
 	}

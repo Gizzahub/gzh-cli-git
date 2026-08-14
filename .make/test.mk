@@ -21,14 +21,14 @@ test: clean build ## run all tests with coverage (requires binary for integratio
 test-unit: ## run only unit tests (exclude integration and e2e)
 	@echo -e "$(CYAN)Running unit tests...$(RESET)"
 	go test -short --cover -parallel=1 -v -coverprofile=coverage-unit.out \
-		$$(go list ./... | grep -v -E '(test/integration|test/e2e)')
+		$$(go list ./... | grep -v -E '(tests/integration|tests/e2e)')
 	go tool cover -func=coverage-unit.out | sort -rnk3
 	@echo -e "$(GREEN)✅ Unit tests completed$(RESET)"
 
 test-integration-only: build ## run only integration tests with build tag
 	@echo -e "$(CYAN)Running integration tests...$(RESET)"
-	@if [ -d "./test/integration" ]; then \
-		cd test/integration && go test -v .; \
+	@if [ -d "./tests/integration" ]; then \
+		cd tests/integration && go test -v .; \
 	else \
 		echo -e "$(YELLOW)No integration tests found$(RESET)"; \
 	fi
@@ -36,13 +36,17 @@ test-integration-only: build ## run only integration tests with build tag
 
 test-e2e-only: ## run only e2e tests with build tag
 	@echo -e "$(CYAN)Running E2E tests...$(RESET)"
-	go test -tags=e2e -v ./test/e2e/...
+	@if [ -d "./tests/e2e" ]; then \
+		go test -tags=e2e -v ./tests/e2e/...; \
+	else \
+		echo -e "$(YELLOW)No e2e tests found$(RESET)"; \
+	fi
 	@echo -e "$(GREEN)✅ E2E tests completed$(RESET)"
 
 test-integration: ## run Docker-based integration tests (alias for test-docker)
 	@echo -e "$(CYAN)Running Docker integration tests...$(RESET)"
-	@if [ -f "./test/integration/run_docker_tests.sh" ]; then \
-		./test/integration/run_docker_tests.sh all; \
+	@if [ -f "./tests/integration/run_docker_tests.sh" ]; then \
+		./tests/integration/run_docker_tests.sh all; \
 	else \
 		echo -e "$(YELLOW)No Docker integration test script found$(RESET)"; \
 		make test-integration-only; \
@@ -51,14 +55,13 @@ test-integration: ## run Docker-based integration tests (alias for test-docker)
 
 test-e2e: build ## run End-to-End test scenarios
 	@echo -e "$(CYAN)Running E2E tests...$(RESET)"
-	@if [ -f "./test/e2e/run_e2e_tests.sh" ]; then \
-		./test/e2e/run_e2e_tests.sh all; \
+	@if [ -f "./tests/e2e/run_e2e_tests.sh" ]; then \
+		./tests/e2e/run_e2e_tests.sh all; \
 	else \
 		echo -e "$(YELLOW)No E2E test script found$(RESET)"; \
 		make test-e2e-only; \
 	fi
 	@echo -e "$(GREEN)✅ E2E tests completed$(RESET)"
-
 test-all: test test-integration test-e2e ## run all tests (unit, integration, e2e)
 	@echo -e "$(GREEN)✅ All tests completed successfully!$(RESET)"
 

@@ -33,7 +33,7 @@ logs:                         ## show recent log files
 
 .PHONY: dev dev-fast verify ci-local pr-check
 
-dev: quality-check ## run the canonical read-only quality gate
+dev: quality-check ## run the canonical source-non-mutating quality gate
 	@echo -e "$(GREEN)✅ Standard development workflow completed!$(RESET)"
 
 dev-fast: fmt test-unit ## quick development cycle (format and unit tests only)

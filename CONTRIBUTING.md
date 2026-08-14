@@ -102,7 +102,7 @@ git checkout -b fix/your-bug-fix
 Before committing, ensure all quality checks pass:
 
 ```bash
-# Run the canonical, read-only quality gate (Go + changed Markdown format,
+# Run the canonical, source-non-mutating quality gate (Go + changed Markdown format,
 # unlimited lint, gosec, govulncheck, build, unit tests, and self-contained E2E)
 make quality-check
 

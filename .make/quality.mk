@@ -15,8 +15,8 @@
 format: format-simplify ## quick and simple formatting (default)
 fmt: format-simplify
 
-# This target is deliberately read-only.  It is the formatting leg of the
-# canonical quality gate; use format/format-simplify when files should change.
+# This target is deliberately source-non-mutating. It is the formatting leg of
+# the canonical quality gate; use format/format-simplify when files should change.
 format-check: ## check Go and changed Markdown formatting without modifying files
 	@command -v gofumpt >/dev/null 2>&1 || { echo "gofumpt is required (run: make install-format-tools)" >&2; exit 1; }
 	@command -v goimports >/dev/null 2>&1 || { echo "goimports is required (run: make install-format-tools)" >&2; exit 1; }
@@ -340,11 +340,11 @@ pre-commit-update: ## update pre-commit hooks to latest versions
 
 .PHONY: quality quality-strict quality-fix quality-check-validate lint-all
 
-# quality-check is the one canonical, read-only gate.  Keep build/tests here
-# instead of in each workflow wrapper so security and test work is never
-# silently skipped or repeated.
+# quality-check is the one canonical source-non-mutating gate. Keep build/tests
+# here instead of in each workflow wrapper so security and test work is never
+# silently skipped or repeated. Build/test coverage artifacts are ignored.
 quality-check: export GOWORK := off
-quality-check: format-check lint-check security-code security-deps build test-unit test-e2e-only ## run the canonical non-mutating quality gate
+quality-check: format-check lint-check security-code security-deps build test-unit test-e2e-only ## run the canonical source-non-mutating quality gate
 	@echo -e "$(GREEN)✅ Canonical quality gate passed!$(RESET)"
 
 quality: quality-check ## compatibility alias for the canonical quality gate
@@ -414,7 +414,7 @@ quality-info: ## show code quality information and targets
 	@echo -e "  • $(CYAN)security-code$(RESET)         Static security analysis with gosec"
 	@echo ""
 	@echo -e "$(GREEN)🔄 Quality Workflows:$(RESET)"
-	@echo -e "  • $(CYAN)quality-check$(RESET)         Canonical read-only quality pipeline"
+	@echo -e "  • $(CYAN)quality-check$(RESET)         Canonical source-non-mutating quality pipeline"
 	@echo -e "  • $(CYAN)quality-check-validate$(RESET) Validate workflow dependency graph"
 	@echo -e "  • $(CYAN)quality$(RESET)               Alias for quality-check"
 	@echo -e "  • $(CYAN)quality-fix$(RESET)           Apply all automatic fixes"

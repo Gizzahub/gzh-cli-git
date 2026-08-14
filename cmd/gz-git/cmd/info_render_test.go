@@ -173,6 +173,9 @@ func TestRenderInfoTable_CompactDropsAllEmptyColumns(t *testing.T) {
 	if strings.Contains(row, cellNormal) {
 		t.Errorf("--compact removes empty columns rather than filling them:\n%s", out)
 	}
+	if strings.Contains(out, "REMOTE ONLY") {
+		t.Errorf("REMOTE ONLY should be dropped when it is empty for every repository:\n%s", out)
+	}
 }
 
 // TestRenderInfoTable_NoRemoteStatedOnce is the table-level guard for the
@@ -414,6 +417,7 @@ func TestRemoteOnlyBranchesCell_ExcludesLocalAndSymbolicHEAD(t *testing.T) {
 	repo := &repository.RepositoryStatusResult{
 		Branch:         "master",
 		Upstream:       "origin/master",
+		Remotes:        map[string]string{"origin": ""},
 		LocalBranches:  []string{"master", "feature/local"},
 		RemoteBranches: []string{"origin/HEAD", "origin/develop", "origin/feature/local", "origin/master"},
 	}
@@ -426,7 +430,7 @@ func TestRemoteOnlyBranchesCell_ExcludesLocalAndSymbolicHEAD(t *testing.T) {
 func TestRemoteOnlyBranchesCell_MultipleRemotesSortAndTruncate(t *testing.T) {
 	withColors(t, false)
 
-	repo := &repository.RepositoryStatusResult{RemoteBranches: []string{
+	repo := &repository.RepositoryStatusResult{Remotes: map[string]string{"upstream": "", "origin": "", "fork": ""}, RemoteBranches: []string{
 		"upstream/develop", "origin/zeta", "origin/develop", "fork/alpha", "origin/beta",
 	}}
 	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
@@ -441,7 +445,7 @@ func TestRemoteOnlyBranchesCell_MultipleRemotesSortAndTruncate(t *testing.T) {
 func TestRemoteOnlyBranchesCell_TopLevelBranchesSurviveTruncation(t *testing.T) {
 	withColors(t, false)
 
-	repo := &repository.RepositoryStatusResult{RemoteBranches: []string{
+	repo := &repository.RepositoryStatusResult{Remotes: map[string]string{"origin": ""}, RemoteBranches: []string{
 		"origin/dependabot/github_actions/a", "origin/dependabot/github_actions/b",
 		"origin/dependabot/github_actions/c", "origin/dependabot/github_actions/d",
 		"origin/develop",
@@ -452,12 +456,64 @@ func TestRemoteOnlyBranchesCell_TopLevelBranchesSurviveTruncation(t *testing.T) 
 	}
 }
 
+func TestRemoteOnlyBranchesCell_UsesConfiguredSlashRemoteNames(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes:        map[string]string{"team/foo": "", "origin": ""},
+		LocalBranches:  []string{"bar", "origin/develop"},
+		RemoteBranches: []string{"team/foo/bar", "origin/develop", "origin/release"},
+	}
+	// bar is a local counterpart to team/foo/bar. A local branch literally
+	// named origin/develop is not a counterpart to remote origin/develop.
+	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "develop, release"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_QualifiesAmbiguousSlashRemoteBranches(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes:        map[string]string{"team/foo": "", "origin": ""},
+		RemoteBranches: []string{"team/foo/bar", "origin/bar"},
+	}
+	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "origin/bar, team/foo/bar"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestInfoOutputsExposeRemoteOnlyBranches(t *testing.T) {
+	result := bulkResult(repository.RepositoryStatusResult{
+		Path: "/w/r", RelativePath: "r", Branch: "master", Status: "clean",
+		Remotes: map[string]string{"origin": ""}, LocalBranches: []string{"master"},
+		RemoteBranches: []string{"origin/develop"},
+	})
+	enr := map[string]infoEnrichment{"/w/r": {Base: repository.BaseBranchInfo{Name: "master"}}}
+
+	full := captureStdout(t, func() { displayInfoResultsDetailed(result, enr) })
+	if !strings.Contains(full, "Remote-only (1): origin/develop") {
+		t.Errorf("full output lacks remote-only field:\n%s", full)
+	}
+
+	jsonOut := captureStdout(t, func() { displayInfoResultsStructured(result, enr, "json") })
+	if !strings.Contains(jsonOut, "\"remote_only_branches\": [") || !strings.Contains(jsonOut, "origin/develop") {
+		t.Errorf("JSON output lacks remote_only_branches:\n%s", jsonOut)
+	}
+
+	llmOut := captureStdout(t, func() { displayInfoResultsStructured(result, enr, "llm") })
+	if !strings.Contains(llmOut, "origin/develop") {
+		t.Errorf("LLM output lacks remote-only branch value:\n%s", llmOut)
+	}
+}
+
 func TestRenderInfoTable_CompactKeepsRemoteOnlyColumn(t *testing.T) {
 	withColors(t, false)
 
 	result := bulkResult(repository.RepositoryStatusResult{
 		Path: "/w/remote-only", Branch: "master", Upstream: "origin/master",
 		RemoteURL:     "git@github.com:Acme/remote-only.git",
+		Remotes:       map[string]string{"origin": ""},
 		LocalBranches: []string{"master"}, RemoteBranches: []string{"origin/develop"},
 	})
 	enr := map[string]infoEnrichment{

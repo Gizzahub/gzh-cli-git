@@ -399,15 +399,11 @@ func (c *client) GetInfo(ctx context.Context, repo *Repository) (*Info, error) {
 		info.Describe = strings.TrimSpace(output)
 	}
 
-	// Get Local Branches
-	output, err = c.executor.RunOutput(ctx, repo.Path, "branch", "--list", "--format=%(refname:short)")
+	// Read full ref names: refname:short becomes ambiguous when a local branch
+	// is named like a remote-tracking branch (for example origin/develop).
+	output, err = c.executor.RunOutput(ctx, repo.Path, "for-each-ref", "--format=%(refname)", "refs/heads")
 	if err == nil {
-		lines := strings.SplitSeq(strings.TrimSpace(output), "\n")
-		for line := range lines {
-			if name := strings.TrimSpace(line); name != "" {
-				info.LocalBranches = append(info.LocalBranches, name)
-			}
-		}
+		info.LocalBranches = parseLocalBranches(output)
 	}
 
 	// Remote-tracking refs are intentionally collected separately from local
@@ -415,9 +411,14 @@ func (c *client) GetInfo(ctx context.Context, repo *Repository) (*Info, error) {
 	// branch a user can check out, so %(symref) lets us leave it out here.
 	// The final literal keeps RunOutput's whitespace trimming from consuming an
 	// empty symref field on the last ordinary ref.
-	output, err = c.executor.RunOutput(ctx, repo.Path, "for-each-ref", "--format=%(refname:short)%09%(symref)%09x", "refs/remotes")
+	output, err = c.executor.RunOutput(ctx, repo.Path, "for-each-ref", "--format=%(refname)%09%(symref)%09x", "refs/remotes")
 	if err == nil {
 		info.RemoteBranches = parseRemoteBranches(output)
+	} else {
+		// Remote refs are optional display metadata, like describe and stash
+		// facts above. Keep GetInfo best-effort, but make a probe failure visible
+		// in debug logs rather than indistinguishable from an empty result there.
+		c.logger.Debug("Failed to get remote-tracking branches: %v", err)
 	}
 
 	// Get stash count and the age of the oldest entry. The age is what separates
@@ -439,10 +440,23 @@ func parseRemoteBranches(output string) []string {
 	branches := make([]string, 0)
 	for line := range strings.SplitSeq(output, "\n") {
 		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) != 3 || parts[0] == "" || parts[1] != "" || parts[2] != "x" {
+		if len(parts) != 3 || parts[1] != "" || parts[2] != "x" {
 			continue
 		}
-		branches = append(branches, parts[0])
+		if ref, ok := strings.CutPrefix(parts[0], "refs/remotes/"); ok && ref != "" {
+			branches = append(branches, ref)
+		}
+	}
+	sort.Strings(branches)
+	return branches
+}
+
+func parseLocalBranches(output string) []string {
+	branches := make([]string, 0)
+	for line := range strings.SplitSeq(output, "\n") {
+		if name, ok := strings.CutPrefix(line, "refs/heads/"); ok && name != "" {
+			branches = append(branches, name)
+		}
 	}
 	sort.Strings(branches)
 	return branches

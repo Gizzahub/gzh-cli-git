@@ -247,28 +247,16 @@ func otherBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnrichme
 // when multiple remotes advertise the same branch, every occurrence keeps its
 // prefix so the result remains unambiguous.
 func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnrichment) infoCell {
-	local := make(map[string]struct{}, len(repo.LocalBranches)+3)
-	for _, branch := range repo.LocalBranches {
-		local[branch] = struct{}{}
-	}
-	for _, branch := range []string{repo.Branch, enr.Base.Name, remoteBranchName(repo.Upstream)} {
-		if branch != "" {
-			local[branch] = struct{}{}
-		}
-	}
-
 	type remoteBranch struct {
 		full   string
 		branch string
 	}
-	branches := make([]remoteBranch, 0, len(repo.RemoteBranches))
+	refs := remoteOnlyTrackingBranches(repo, enr)
+	branches := make([]remoteBranch, 0, len(refs))
 	counts := make(map[string]int)
-	for _, full := range repo.RemoteBranches {
-		branch := remoteBranchName(full)
-		if branch == "" {
-			continue
-		}
-		if _, exists := local[branch]; exists {
+	for _, full := range refs {
+		_, branch, ok := remoteTrackingBranch(full, repo.Remotes)
+		if !ok {
 			continue
 		}
 		branches = append(branches, remoteBranch{full: full, branch: branch})
@@ -308,14 +296,66 @@ func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnr
 	return infoCell{text: strings.Join(labels, ", ") + suffix, color: cliutil.ColorGray}
 }
 
-// remoteBranchName removes exactly the remote component from a tracking ref.
-// A value without both components cannot be a remote-tracking branch.
-func remoteBranchName(ref string) string {
-	_, branch, ok := strings.Cut(ref, "/")
-	if !ok || branch == "" || branch == "HEAD" {
-		return ""
+// remoteOnlyTrackingBranches returns complete remote-tracking refs rather than
+// display labels. It is shared by the table, detailed view, and structured
+// output so all formats apply exactly the same exclusion contract.
+func remoteOnlyTrackingBranches(repo *repository.RepositoryStatusResult, enr infoEnrichment) []string {
+	local := make(map[string]struct{}, len(repo.LocalBranches)+3)
+	for _, branch := range repo.LocalBranches {
+		local[branch] = struct{}{}
 	}
-	return branch
+	if _, branch, ok := remoteTrackingBranch(repo.Upstream, repo.Remotes); ok {
+		local[branch] = struct{}{}
+	}
+	if repo.Branch != "" {
+		local[repo.Branch] = struct{}{}
+	}
+	if enr.Base.Name != "" {
+		local[enr.Base.Name] = struct{}{}
+	}
+
+	branches := make([]string, 0, len(repo.RemoteBranches))
+	for _, full := range repo.RemoteBranches {
+		_, branch, ok := remoteTrackingBranch(full, repo.Remotes)
+		if !ok {
+			continue
+		}
+		if _, exists := local[branch]; !exists {
+			branches = append(branches, full)
+		}
+	}
+	sort.Slice(branches, func(i, j int) bool {
+		_, iBranch, _ := remoteTrackingBranch(branches[i], repo.Remotes)
+		_, jBranch, _ := remoteTrackingBranch(branches[j], repo.Remotes)
+		iTopLevel := !strings.Contains(iBranch, "/")
+		jTopLevel := !strings.Contains(jBranch, "/")
+		if iTopLevel != jTopLevel {
+			return iTopLevel
+		}
+		return branches[i] < branches[j]
+	})
+	return branches
+}
+
+// remoteTrackingBranch resolves a remote-tracking ref using configured remote
+// names instead of guessing where the remote name ends. Git permits slash in a
+// remote name (for example team/foo), so the longest matching <remote>/ prefix
+// is the only unambiguous split.
+func remoteTrackingBranch(ref string, remotes map[string]string) (remote, branch string, ok bool) {
+	for name := range remotes {
+		prefix := name + "/"
+		if !strings.HasPrefix(ref, prefix) {
+			continue
+		}
+		if len(name) > len(remote) {
+			remote = name
+			branch = strings.TrimPrefix(ref, prefix)
+		}
+	}
+	if remote == "" || branch == "" || branch == "HEAD" {
+		return "", "", false
+	}
+	return remote, branch, true
 }
 
 // remoteCell names the remote owner only when it is not the workspace's

@@ -173,7 +173,8 @@ func fillNormalCells(rows []infoRow) {
 // included. An all-empty column still costs its header's width in horizontal
 // space while carrying no information — and under the "normal says nothing"
 // rule, entire columns going empty is the expected case, not an edge case.
-// The trailing column is never dropped, so at least one column always remains.
+// REPOSITORY is populated for every rendered row, so at least one column
+// always remains.
 //
 // This runs only under --compact. It buys a shorter line by making the header
 // set depend on the data, which means two runs of the same command can print
@@ -182,10 +183,6 @@ func fillNormalCells(rows []infoRow) {
 func dropEmptyColumns(headers []string, rows []infoRow) ([]string, []infoRow) {
 	keep := make([]int, 0, len(headers))
 	for c := range headers {
-		if c == len(headers)-1 {
-			keep = append(keep, c)
-			continue
-		}
 		for _, row := range rows {
 			if row.cells[c].text != "" {
 				keep = append(keep, c)

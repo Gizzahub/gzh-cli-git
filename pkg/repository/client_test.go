@@ -890,10 +890,17 @@ func TestGetInfoNilRepo(t *testing.T) {
 }
 
 func TestParseRemoteBranches_ExcludesSymbolicHEADAndRetainsFinalRef(t *testing.T) {
-	output := "origin/HEAD\trefs/remotes/origin/master\tx\norigin/develop\t\tx"
+	output := "refs/remotes/origin/HEAD\trefs/remotes/origin/master\tx\nrefs/remotes/origin/develop\t\tx"
 	got := parseRemoteBranches(output)
 	if len(got) != 1 || got[0] != "origin/develop" {
 		t.Errorf("parseRemoteBranches() = %q, want [origin/develop]", got)
+	}
+}
+
+func TestParseLocalBranches_PreservesRemoteLookingLocalName(t *testing.T) {
+	got := parseLocalBranches("refs/heads/master\nrefs/heads/origin/develop")
+	if len(got) != 2 || got[0] != "master" || got[1] != "origin/develop" {
+		t.Errorf("parseLocalBranches() = %q, want [master origin/develop]", got)
 	}
 }
 

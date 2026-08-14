@@ -134,14 +134,6 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scan failed: %w", err)
 	}
 
-	// Display results. --audit is checked before --format because it defines its
-	// own document (schema, findings, remediations); reusing the status JSON
-	// would emit the shape a caller did not ask for.
-	if !infoAudit && (infoFlags.Format == "json" || infoFlags.Format == "llm") {
-		displayInfoResultsStructured(result, infoFlags.Format)
-		return nil
-	}
-
 	// Base-branch and worktree facts are info-specific and cost extra git
 	// invocations, so they are gathered here rather than in BulkStatus, which
 	// every other bulk command shares.
@@ -152,6 +144,11 @@ func runInfo(cmd *cobra.Command, args []string) error {
 
 	if infoAudit {
 		return runInfoAudit(cmd.OutOrStdout(), result, enrichment, directory, autofixOverrides, time.Now())
+	}
+
+	if infoFlags.Format == "json" || infoFlags.Format == "llm" {
+		displayInfoResultsStructured(result, enrichment, infoFlags.Format)
+		return nil
 	}
 
 	if infoFull {
@@ -213,6 +210,7 @@ func displayInfoRepository(repo repository.RepositoryStatusResult, enr infoEnric
 	displayInfoLastUpdate(repo)
 	displayInfoRemotes(repo.Remotes)
 	displayInfoBranches(repo.LocalBranches)
+	displayInfoRemoteOnlyBranches(remoteOnlyTrackingBranches(&repo, enr))
 }
 
 func displayInfoUpstream(repo repository.RepositoryStatusResult) {
@@ -298,7 +296,69 @@ func displayInfoBranches(branches []string) {
 	fmt.Printf("  Branches (%d):   %s\n", len(branches), branchesStr)
 }
 
-func displayInfoResultsStructured(result *repository.BulkStatusResult, format string) {
-	// Re-use status JSON output format as it contains all info
-	displayStatusResultsStructured(result, format)
+func displayInfoRemoteOnlyBranches(branches []string) {
+	if len(branches) == 0 {
+		return
+	}
+	shown := branches
+	if len(branches) > itemLimit {
+		shown = append([]string(nil), branches[:itemLimit]...)
+		shown = append(shown, fmt.Sprintf("... (%d more)", len(branches)-itemLimit))
+	}
+	fmt.Printf("  Remote-only (%d): %s\n", len(branches), strings.Join(shown, ", "))
+}
+
+// InfoJSONOutput is the structured contract for `gz-git info`. Unlike status,
+// it includes remote_only_branches: complete remote-tracking refs with no
+// corresponding local, current, base, or upstream branch.
+type InfoJSONOutput struct {
+	TotalScanned   int                        `json:"total_scanned"`
+	TotalProcessed int                        `json:"total_processed"`
+	DurationMs     int64                      `json:"duration_ms"`
+	Summary        map[string]int             `json:"summary"`
+	Repositories   []InfoRepositoryJSONOutput `json:"repositories"`
+}
+
+type InfoRepositoryJSONOutput struct {
+	Path               string   `json:"path"`
+	Branch             string   `json:"branch,omitempty"`
+	Status             string   `json:"status"`
+	UncommittedFiles   int      `json:"uncommitted_files,omitempty"`
+	UntrackedFiles     int      `json:"untracked_files,omitempty"`
+	CommitsAhead       int      `json:"commits_ahead,omitempty"`
+	CommitsBehind      int      `json:"commits_behind,omitempty"`
+	ConflictFiles      []string `json:"conflict_files,omitempty"`
+	RemoteOnlyBranches []string `json:"remote_only_branches"`
+	DurationMs         int64    `json:"duration_ms,omitempty"`
+	Error              string   `json:"error,omitempty"`
+}
+
+func displayInfoResultsStructured(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment, format string) {
+	output := InfoJSONOutput{
+		TotalScanned:   result.TotalScanned,
+		TotalProcessed: result.TotalProcessed,
+		DurationMs:     result.Duration.Milliseconds(),
+		Summary:        result.Summary,
+		Repositories:   make([]InfoRepositoryJSONOutput, 0, len(result.Repositories)),
+	}
+	for i := range result.Repositories {
+		repo := &result.Repositories[i]
+		repoOutput := InfoRepositoryJSONOutput{
+			Path:               repo.RelativePath,
+			Branch:             repo.Branch,
+			Status:             repo.Status,
+			UncommittedFiles:   repo.TrackedChangedFiles,
+			UntrackedFiles:     repo.UntrackedFiles,
+			CommitsAhead:       repo.CommitsAhead,
+			CommitsBehind:      repo.CommitsBehind,
+			ConflictFiles:      repo.ConflictFiles,
+			RemoteOnlyBranches: remoteOnlyTrackingBranches(repo, enrichment[repo.Path]),
+			DurationMs:         repo.Duration.Milliseconds(),
+		}
+		if repo.Error != nil {
+			repoOutput.Error = repo.Error.Error()
+		}
+		output.Repositories = append(output.Repositories, repoOutput)
+	}
+	writeBulkOutput(format, output)
 }

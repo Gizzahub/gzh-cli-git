@@ -124,16 +124,6 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, fsRoot *safefs.Root, root,
 	return nil
 }
 
-func (s *GitRepoScanner) analyzeRepo(repoPath string, depth int) *ScannedRepo {
-	root, err := safefs.OpenRoot(repoPath)
-	if err != nil {
-		return &ScannedRepo{Name: filepath.Base(repoPath), Path: repoPath, Remotes: map[string]string{}, Depth: depth}
-	}
-	defer func() { _ = root.Close() }()
-
-	return s.analyzeRepoAt(root, "", repoPath, depth)
-}
-
 func (s *GitRepoScanner) analyzeRepoAt(root *safefs.Root, rel, repoPath string, depth int) *ScannedRepo {
 	name := filepath.Base(repoPath)
 
@@ -153,16 +143,6 @@ func (s *GitRepoScanner) analyzeRepoAt(root *safefs.Root, rel, repoPath string, 
 		Depth:   depth,
 		Branch:  branch,
 	}
-}
-
-func (s *GitRepoScanner) getRemotes(repoPath string) (map[string]string, error) {
-	root, err := safefs.OpenRoot(repoPath)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = root.Close() }()
-
-	return s.getRemotesAt(root, "")
 }
 
 func (s *GitRepoScanner) getRemotesAt(root *safefs.Root, repoRel string) (map[string]string, error) {
@@ -208,16 +188,6 @@ func (s *GitRepoScanner) getRemotesAt(root *safefs.Root, repoRel string) (map[st
 	return remotes, nil
 }
 
-func (s *GitRepoScanner) getCurrentBranch(repoPath string) string {
-	root, err := safefs.OpenRoot(repoPath)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = root.Close() }()
-
-	return s.getCurrentBranchAt(root, "")
-}
-
 func (s *GitRepoScanner) getCurrentBranchAt(root *safefs.Root, repoRel string) string {
 	headPath := filepath.Join(repoRel, ".git", "HEAD")
 	data, err := root.ReadFile(headPath)
@@ -236,16 +206,6 @@ func (s *GitRepoScanner) getCurrentBranchAt(root *safefs.Root, repoRel string) s
 	}
 
 	return ""
-}
-
-func (s *GitRepoScanner) loadGitIgnorePatterns(root string) []string {
-	fsRoot, err := safefs.OpenRoot(root)
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = fsRoot.Close() }()
-
-	return s.loadGitIgnorePatternsAt(fsRoot)
 }
 
 func (s *GitRepoScanner) loadGitIgnorePatternsAt(root *safefs.Root) []string {

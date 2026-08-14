@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -298,22 +297,6 @@ func parseNumstat(out string) (additions, deletions, files int) {
 	}
 
 	return additions, deletions, files
-}
-
-// countAddedLines returns the number of lines path contributes as insertions.
-//
-// Binary files count as zero, matching git: --numstat reports "-" for them and a
-// commit records no insertions. Content is streamed in fixed-size chunks rather
-// than buffered, because untracked trees are unbounded and a bulk run may walk
-// many of them.
-func countAddedLines(path string) (int, error) {
-	root, err := safefs.OpenRoot(filepath.Dir(path))
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = root.Close() }()
-
-	return countAddedLinesAt(root, filepath.Base(path))
 }
 
 func countAddedLinesAt(root *safefs.Root, path string) (int, error) {

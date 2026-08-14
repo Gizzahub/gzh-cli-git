@@ -808,17 +808,6 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 	return repos, nil
 }
 
-// getGitRemoteURL gets the origin remote URL from a git repository.
-func getGitRemoteURL(repoPath string) string {
-	root, err := safefs.OpenRoot(repoPath)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = root.Close() }()
-
-	return getGitRemoteURLAt(root, "")
-}
-
 func getGitRemoteURLAt(root *safefs.Root, repoRel string) string {
 	configPath := filepath.Join(repoRel, ".git", "config")
 	data, err := root.ReadFile(configPath)

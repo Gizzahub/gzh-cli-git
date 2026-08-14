@@ -259,22 +259,11 @@ var contentSecrets = []struct {
 	{regexp.MustCompile(`AIza[0-9A-Za-z_\-]{35}`), "contains a Google API key"},
 }
 
-// scanContent reports why a file's contents look like a credential, or "".
-func scanContent(full string, size int64) string {
+func scanContentAt(root *safefs.Root, path string, size int64) string {
 	if size == 0 {
 		return ""
 	}
 
-	root, err := safefs.OpenRoot(filepath.Dir(full))
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = root.Close() }()
-
-	return scanContentAt(root, filepath.Base(full), size)
-}
-
-func scanContentAt(root *safefs.Root, path string, size int64) string {
 	file, err := root.Open(path)
 	if err != nil {
 		return ""

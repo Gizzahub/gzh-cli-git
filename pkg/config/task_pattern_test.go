@@ -115,6 +115,23 @@ func TestLoadRepoRootTaskPattern_MissingFileEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadRepoRootTaskPattern_RejectsOutsideConfigSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), ".gz-git.yaml")
+	writeRepoConfig(t, filepath.Dir(outside), "branch:\n  taskPattern: master\n")
+	if err := os.Symlink(outside, filepath.Join(root, ".gz-git.yaml")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	got, err := LoadRepoRootTaskPattern(root)
+	if err == nil {
+		t.Fatal("LoadRepoRootTaskPattern succeeded through outside config symlink")
+	}
+	if len(got.Patterns) != 0 {
+		t.Fatalf("outside taskPattern was loaded: %v", got.Patterns)
+	}
+}
+
 func TestLoadRepoRootTaskPattern_IgnoresParentOfRepo(t *testing.T) {
 	parent := t.TempDir()
 	writeRepoConfig(t, parent, "branch:\n  taskPattern: feat/*\n")

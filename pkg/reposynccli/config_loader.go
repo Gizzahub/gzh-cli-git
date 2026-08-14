@@ -155,6 +155,10 @@ func (l FileSpecLoader) Load(ctx context.Context, path string) (ConfigData, erro
 		return ConfigData{}, fmt.Errorf("read config: %w", err)
 	}
 
+	return l.loadData(ctx, raw, configPath)
+}
+
+func (l FileSpecLoader) loadData(ctx context.Context, raw []byte, configPath string) (ConfigData, error) { //nolint:gocognit,gocyclo // multi-format config loading with parent inheritance — complexity is inherent
 	// Determine config kind: explicit kind field > filename > content detection
 	kind := detectConfigKind(raw, configPath)
 
@@ -739,16 +743,28 @@ func (l FileSpecLoader) loadForgeWorkspace( //nolint:gocyclo // complex provider
 func (l FileSpecLoader) loadConfigWorkspace(ctx context.Context, wsPath string) ([]reposync.RepoSpec, error) {
 	// Try .gz-git.yaml first, then .gz-git.yml
 	candidates := []string{".gz-git.yaml", ".gz-git.yml"}
+	root, err := safefs.OpenRoot(wsPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
 
 	for _, name := range candidates {
-		configPath := filepath.Join(wsPath, name)
-		if _, err := os.Stat(configPath); err == nil {
-			// Recursively load the nested config
-			data, err := l.Load(ctx, configPath)
+		if _, err := root.Stat(name); err == nil {
+			// This config is selected by workspace discovery, so read it through
+			// the workspace root. Explicit l.Load calls retain their existing
+			// caller-selected path contract.
+			raw, err := root.ReadFile(name)
+			if err != nil {
+				return nil, fmt.Errorf("read nested config %s: %w", filepath.Join(wsPath, name), err)
+			}
+			data, err := l.loadData(ctx, raw, filepath.Join(wsPath, name))
 			if err != nil {
 				return nil, err
 			}
 			return data.Plan.Input.Repos, nil
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat nested config %s: %w", filepath.Join(wsPath, name), err)
 		}
 	}
 
@@ -790,12 +806,15 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 
 		repoRel := entry.Name()
 		repoPath := filepath.Join(dir, repoRel)
-		gitDir := filepath.Join(repoRel, ".git")
 
 		// Check if it's a git repository
-		if info, err := root.Stat(gitDir); err == nil && info.IsDir() {
+		repoRoot, err := safefs.OpenRoot(repoPath)
+		if err != nil {
+			continue
+		}
+		if info, err := repoRoot.Stat(".git"); err == nil && info.IsDir() {
 			// Get remote URL if available
-			remoteURL := getGitRemoteURLAt(root, repoRel)
+			remoteURL := getGitRemoteURLAt(repoRoot, ".")
 
 			repos = append(repos, reposync.RepoSpec{
 				Name:       entry.Name(),
@@ -803,6 +822,7 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 				CloneURL:   remoteURL,
 			})
 		}
+		_ = repoRoot.Close()
 	}
 
 	return repos, nil

@@ -138,6 +138,29 @@ func TestGitRepoScanner_ScanRejectsOutsideGitSymlink(t *testing.T) {
 	}
 }
 
+func TestGitRepoScanner_ScanRejectsSiblingGitSymlink(t *testing.T) {
+	root := t.TempDir()
+	repoA := filepath.Join(root, "repo-a")
+	repoB := filepath.Join(root, "repo-b")
+	if err := os.MkdirAll(filepath.Join(repoB, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(repoA, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(repoB, ".git"), filepath.Join(repoA, ".git")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	repos, err := (&GitRepoScanner{RootPath: root, MaxDepth: 1}).Scan(context.Background())
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+	if len(repos) != 1 || repos[0].Name != "repo-b" {
+		t.Fatalf("Scan = %+v, want only repo-b; repo-a must not inherit sibling .git", repos)
+	}
+}
+
 func TestGitRepoScanner_Scan_WithExclusion(t *testing.T) {
 	tmpDir := t.TempDir()
 

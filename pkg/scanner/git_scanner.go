@@ -75,11 +75,13 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, fsRoot *safefs.Root, root,
 
 	// Check if current directory is a git repo
 	current := filepath.Join(root, rel)
-	gitDir := filepath.Join(rel, ".git")
-	if info, err := fsRoot.Stat(gitDir); err == nil && info.IsDir() {
-		// Found a git repository
-		repo := s.analyzeRepoAt(fsRoot, rel, current, depth)
-		*repos = append(*repos, repo)
+	if repoRoot, err := safefs.OpenRoot(current); err == nil {
+		if info, err := repoRoot.Stat(".git"); err == nil && info.IsDir() {
+			// Found a git repository
+			repo := s.analyzeRepoAt(repoRoot, ".", current, depth)
+			*repos = append(*repos, repo)
+		}
+		_ = repoRoot.Close()
 	}
 
 	// Scan subdirectories

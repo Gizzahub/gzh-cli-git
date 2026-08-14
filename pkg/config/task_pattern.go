@@ -6,11 +6,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 	"gopkg.in/yaml.v3"
 )
@@ -44,12 +44,17 @@ func LoadRepoRootTaskPattern(repoRoot string) (TaskPatternDecl, error) {
 	if err != nil {
 		return decl, fmt.Errorf("resolve repo root: %w", err)
 	}
+	fsRoot, err := safefs.OpenRoot(root)
+	if err != nil {
+		return decl, fmt.Errorf("open repo root: %w", err)
+	}
+	defer func() { _ = fsRoot.Close() }()
 
-	if err := reportNonRootTaskPattern(root, &decl); err != nil {
+	if err := reportNonRootTaskPattern(fsRoot, root, &decl); err != nil {
 		return decl, err
 	}
 
-	path, err := statRepoRootConfig(root)
+	path, err := statRepoRootConfig(fsRoot, root)
 	if err != nil {
 		return decl, err
 	}
@@ -58,7 +63,7 @@ func LoadRepoRootTaskPattern(repoRoot string) (TaskPatternDecl, error) {
 		return decl, nil
 	}
 
-	patterns, integration, err := readRootBranchDecl(path)
+	patterns, integration, err := readRootBranchDecl(fsRoot, filepath.Base(path))
 	if err != nil {
 		return decl, err
 	}
@@ -104,26 +109,26 @@ func MatchesAnyTaskPattern(name string, patterns []string) bool {
 	return false
 }
 
-func statRepoRootConfig(root string) (string, error) {
+func statRepoRootConfig(root *safefs.Root, rootPath string) (string, error) {
 	for _, ext := range []string{".yaml", ".yml", ".json"} {
-		path := filepath.Join(root, ProjectConfigFileName+ext)
-		st, err := os.Stat(path)
+		name := ProjectConfigFileName + ext
+		st, err := root.Stat(name)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return "", fmt.Errorf("stat %s: %w", path, err)
+			return "", fmt.Errorf("stat %s: %w", filepath.Join(rootPath, name), err)
 		}
 		if st.IsDir() {
 			continue
 		}
-		return path, nil
+		return filepath.Join(rootPath, name), nil
 	}
 	return "", nil
 }
 
-func readRootBranchDecl(path string) (patterns, integration []string, err error) {
-	data, err := os.ReadFile(path) //nolint:gosec // caller-supplied repo-root config path
+func readRootBranchDecl(root *safefs.Root, path string) (patterns, integration []string, err error) {
+	data, err := root.ReadFile(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read %s: %w", path, err)
 	}
@@ -220,38 +225,42 @@ func literalProtectedNames() []string {
 	return out
 }
 
-func reportNonRootTaskPattern(root string, decl *TaskPatternDecl) error {
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == ".git" || name == "vendor" || name == "node_modules" {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		base := d.Name()
-		if base != ProjectConfigFileName+".yaml" &&
-			base != ProjectConfigFileName+".yml" &&
-			base != ProjectConfigFileName+".json" {
-			return nil
-		}
-		if filepath.Dir(path) == root {
-			return nil
-		}
-		if fileDeclaresTaskPattern(path) {
-			decl.Facts = append(decl.Facts, "ignored non-root taskPattern: "+path)
-		}
-		return nil
-	})
+func reportNonRootTaskPattern(root *safefs.Root, rootPath string, decl *TaskPatternDecl) error {
+	return reportNonRootTaskPatternAt(root, rootPath, ".", decl)
 }
 
-func fileDeclaresTaskPattern(path string) bool {
-	patterns, _, err := readRootBranchDecl(path)
+func reportNonRootTaskPatternAt(root *safefs.Root, rootPath, rel string, decl *TaskPatternDecl) error {
+	entries, err := root.ReadDir(rel)
 	if err != nil {
-		return false
+		return fmt.Errorf("scan %s: %w", filepath.Join(rootPath, rel), err)
 	}
-	return len(patterns) > 0
+
+	for _, entry := range entries {
+		name := entry.Name()
+		entryRel := filepath.Join(rel, name)
+		entryPath := filepath.Join(rootPath, entryRel)
+		if entry.IsDir() {
+			if name == ".git" || name == "vendor" || name == "node_modules" {
+				continue
+			}
+			if err := reportNonRootTaskPatternAt(root, rootPath, entryRel, decl); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if name != ProjectConfigFileName+".yaml" &&
+			name != ProjectConfigFileName+".yml" &&
+			name != ProjectConfigFileName+".json" {
+			continue
+		}
+		if filepath.Dir(entryPath) == rootPath {
+			continue
+		}
+		if patterns, _, err := readRootBranchDecl(root, entryRel); err == nil && len(patterns) > 0 {
+			decl.Facts = append(decl.Facts, "ignored non-root taskPattern: "+entryPath)
+		}
+	}
+
+	return nil
 }

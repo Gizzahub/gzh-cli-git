@@ -188,6 +188,64 @@ func TestScanGitReposRejectsOutsideGitSymlink(t *testing.T) {
 	}
 }
 
+func TestScanGitReposRejectsSiblingGitSymlink(t *testing.T) {
+	workspace := t.TempDir()
+	repoA := filepath.Join(workspace, "repo-a")
+	repoB := filepath.Join(workspace, "repo-b")
+	if err := os.MkdirAll(filepath.Join(repoB, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(repoA, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(repoB, ".git"), filepath.Join(repoA, ".git")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	repos, err := scanGitRepos(workspace)
+	if err != nil {
+		t.Fatalf("scanGitRepos: %v", err)
+	}
+	if len(repos) != 1 || repos[0].Name != "repo-b" {
+		t.Fatalf("scanGitRepos = %+v, want only repo-b", repos)
+	}
+}
+
+func TestLoadConfigWorkspaceRejectsOutsideNestedConfigSymlink(t *testing.T) {
+	workspace := t.TempDir()
+	outside := filepath.Join(t.TempDir(), ".gz-git.yaml")
+	if err := os.WriteFile(outside, []byte("repositories:\n  - url: https://example.invalid/leaked.git\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(workspace, ".gz-git.yaml")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	_, err := (FileSpecLoader{}).loadConfigWorkspace(context.Background(), workspace)
+	if err == nil {
+		t.Fatal("loadConfigWorkspace succeeded through outside config symlink")
+	}
+}
+
+func TestFileSpecLoaderLoadPreservesExplicitConfigPath(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "explicit.yaml")
+	if err := os.WriteFile(outside, []byte("repositories:\n  - url: https://example.invalid/explicit.git\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	selected := filepath.Join(t.TempDir(), "selected.yaml")
+	if err := os.Symlink(outside, selected); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	data, err := (FileSpecLoader{}).Load(context.Background(), selected)
+	if err != nil {
+		t.Fatalf("Load(explicit symlink): %v", err)
+	}
+	if len(data.Plan.Input.Repos) != 1 || data.Plan.Input.Repos[0].CloneURL != "https://example.invalid/explicit.git" {
+		t.Fatalf("loaded repos = %+v, want explicit target", data.Plan.Input.Repos)
+	}
+}
+
 func TestFileSpecLoader_Load_BasicConfig(t *testing.T) {
 	yaml := `
 strategy: reset

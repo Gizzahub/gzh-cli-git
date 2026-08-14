@@ -22,7 +22,7 @@ format-simplify: ## quick basic formatting with gofumpt, goimports, and mdformat
 	@echo "2. Organizing imports..."
 	@goimports -w -local github.com/gizzahub/gzh-cli .
 	@echo "3. Formatting markdown files..."
-	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat || true
+	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat
 	@echo -e "$(GREEN)✅ Quick formatting complete!$(RESET)"
 
 format-md: ## format all markdown files with mdformat
@@ -32,7 +32,7 @@ format-md: ## format all markdown files with mdformat
 
 format-md-check: ## check markdown files that need formatting
 	@echo -e "$(CYAN)📋 Checking markdown formatting...$(RESET)"
-	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat --check || echo -e "$(YELLOW)Some markdown files need formatting$(RESET)"
+	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat --check
 
 format-md-diff: ## format only changed markdown files
 	@echo -e "$(CYAN)🚀 Formatting changed markdown files...$(RESET)"
@@ -224,7 +224,7 @@ security: security-deps security-code ## run all security checks
 
 security-deps: ## check dependencies for vulnerabilities
 	@echo -e "$(CYAN)Checking dependencies for vulnerabilities...$(RESET)"
-	@go run golang.org/x/vuln/cmd/govulncheck@latest ./... || echo -e "$(RED)❌ Vulnerabilities found$(RESET)"
+	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 security-code: ## run security code analysis
 	@echo -e "$(CYAN)Running security code analysis with gosec...$(RESET)"

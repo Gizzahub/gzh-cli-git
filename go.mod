@@ -1,6 +1,7 @@
 module github.com/gizzahub/gzh-cli-gitforge
 
 go 1.26
+toolchain go1.26.6
 
 require (
 	code.gitea.io/sdk/gitea v0.25.1

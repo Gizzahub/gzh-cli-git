@@ -6,17 +6,18 @@ LLM-optimized guidance for gzh-cli-gitforge.
 
 ## Top Commands
 
-| Command              | Purpose             | When                  |
-| -------------------- | ------------------- | --------------------- |
-| `make quality`       | fmt + lint + test   | Pre-commit (CRITICAL) |
-| `make dev-fast`      | format + unit tests | Quick dev cycle       |
-| `make build`         | Build binary        | After changes         |
-| `make pr-check`      | Pre-PR verification | Before PR             |
-| `make test-coverage` | Coverage report     | Check coverage        |
+| Command              | Purpose                                                               | When                  |
+| -------------------- | --------------------------------------------------------------------- | --------------------- |
+| `make quality-check` | Read-only format + unlimited lint + security + build + unit/E2E tests | Pre-commit (CRITICAL) |
+| `make quality`       | Alias for `quality-check`                                             | Pre-commit (CRITICAL) |
+| `make dev-fast`      | format + unit tests                                                   | Quick dev cycle       |
+| `make build`         | Build binary                                                          | After changes         |
+| `make pr-check`      | Pre-PR verification                                                   | Before PR             |
+| `make test-coverage` | Coverage report                                                       | Check coverage        |
 
 ## Absolute Rules
 
-**DO**: Use `gzh-cli-core` for utilities · Read `cmd/AGENTS_COMMON.md` before modifying · Run `make quality` before every commit · Sanitize all git inputs · 80%+ test coverage for core logic
+**DO**: Use `gzh-cli-core` for utilities · Read `cmd/AGENTS_COMMON.md` before modifying · Run `make quality-check` before every commit · Sanitize all git inputs · 80%+ test coverage for core logic
 
 **DON'T**: Use `sh -c` (command injection) · Concatenate user input into commands · Log credentials · Commit without security tests
 
@@ -43,35 +44,36 @@ docs/.claude-context/ # Context docs
 
 ## Main Commands
 
-| Command                | Description                                            |
-| ---------------------- | ------------------------------------------------------ |
-| **`sync` / `s`**       | **Smart sync: auto-init + sync (most used)**           |
-| `clone`                | Parallel clone (--url, --file, -c config)              |
-| `status`               | Health check (fetch + divergence + recommend)          |
-| `fetch` / `pull`       | Fetch/pull all repos                                   |
-| `push`                 | Push all repos (refspec: `develop:master`)             |
-| `commit`               | Commit all dirty repos (**ALWAYS use `--json`**)       |
-| `handoff check`        | Can I walk away? Reports work that exists only here    |
-| `handoff end`          | Commit + push all movable work (screens for secrets)   |
-| `handoff start`        | Pull --rebase + prune all repos on arrival             |
-| `branch name`          | Build a task's branch name for this device/agent       |
-| `cleanup branch`       | Clean merged/stale/gone branches                       |
-| `forge from`           | Sync from GitHub/GitLab/Gitea org                      |
-| `forge config generate`| Generate config from Forge API                         |
-| `workspace init`       | Scan directory → generate config                       |
-| `workspace sync`       | Clone/update from config (detailed preview)            |
-| `config profile`       | Profile management (create/use/list)                   |
-| `config recommended`   | Audit/apply git settings for multi-device work (`--apply`) |
-| `doctor`               | Diagnose system, config, auth, forge health            |
+| Command                 | Description                                                |
+| ----------------------- | ---------------------------------------------------------- |
+| **`sync` / `s`**        | **Smart sync: auto-init + sync (most used)**               |
+| `clone`                 | Parallel clone (--url, --file, -c config)                  |
+| `status`                | Health check (fetch + divergence + recommend)              |
+| `fetch` / `pull`        | Fetch/pull all repos                                       |
+| `push`                  | Push all repos (refspec: `develop:master`)                 |
+| `commit`                | Commit all dirty repos (**ALWAYS use `--json`**)           |
+| `handoff check`         | Can I walk away? Reports work that exists only here        |
+| `handoff end`           | Commit + push all movable work (screens for secrets)       |
+| `handoff start`         | Pull --rebase + prune all repos on arrival                 |
+| `branch name`           | Build a task's branch name for this device/agent           |
+| `cleanup branch`        | Clean merged/stale/gone branches                           |
+| `forge from`            | Sync from GitHub/GitLab/Gitea org                          |
+| `forge config generate` | Generate config from Forge API                             |
+| `workspace init`        | Scan directory → generate config                           |
+| `workspace sync`        | Clone/update from config (detailed preview)                |
+| `config profile`        | Profile management (create/use/list)                       |
+| `config recommended`    | Audit/apply git settings for multi-device work (`--apply`) |
+| `doctor`                | Diagnose system, config, auth, forge health                |
 
 ## Configuration System
 
 **5-Layer Precedence** (highest → lowest):
+
 1. Command flags (`--provider gitlab`)
-2. Project config (`.gz-git.yaml`)
-3. Active profile (`~/.config/gz-git/profiles/{active}.yaml`)
-4. Global config (`~/.config/gz-git/config.yaml`)
-5. Built-in defaults
+1. Project config (`.gz-git.yaml`)
+1. Active profile (`~/.config/gz-git/profiles/{active}.yaml`)
+1. Global config (`~/.config/gz-git/config.yaml`)
+1. Built-in defaults
 
 **Two formats**: `repositories` array (simple) or `workspaces` map (hierarchical)
 
@@ -251,19 +253,19 @@ import (
 
 ## Context Docs
 
-| Guide | Purpose |
-| ----- | ------- |
-| [config-guide.md](docs/.claude-context/config-guide.md) | Profiles, hierarchical config |
-| [common-tasks.md](docs/.claude-context/common-tasks.md) | Adding commands, testing |
-| [security-guide.md](docs/.claude-context/security-guide.md) | Input sanitization |
+| Guide                                                       | Purpose                       |
+| ----------------------------------------------------------- | ----------------------------- |
+| [config-guide.md](docs/.claude-context/config-guide.md)     | Profiles, hierarchical config |
+| [common-tasks.md](docs/.claude-context/common-tasks.md)     | Adding commands, testing      |
+| [security-guide.md](docs/.claude-context/security-guide.md) | Input sanitization            |
 
 **Read before modifying**: `cmd/AGENTS_COMMON.md` · `cmd/gz-git/AGENTS.md`
 
 ## Common Mistakes
 
 1. **Not sanitizing git inputs** → Use `internal/gitcmd`
-2. **Shell execution** → Use `exec.Command("git", args...)`
-3. **Logging credentials** → Strip URLs before logging
+1. **Shell execution** → Use `exec.Command("git", args...)`
+1. **Logging credentials** → Strip URLs before logging
 
 ## Git Commit Format
 

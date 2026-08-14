@@ -5,31 +5,46 @@
 # Tool Configuration
 # ==============================================================================
 
+# Keep quality tooling reproducible. Override these variables deliberately when
+# testing a newer tool instead of silently following a moving latest tag.
+GOFUMPT_VERSION ?= v0.10.0
+GOIMPORTS_VERSION ?= v0.38.0
+GCI_VERSION ?= v0.14.0
+GOSEC_VERSION ?= v2.22.10
+GOVULNCHECK_VERSION ?= v1.1.4
+MDFORMAT_VERSION ?= 0.7.22
+MDFORMAT_GFM_VERSION ?= 0.4.1
+MDFORMAT_TABLES_VERSION ?= 1.0.0
+
 # ==============================================================================
 # Core Tool Installation
 # ==============================================================================
 
-.PHONY: install-tools install-format-tools install-analysis-tools install-goreleaser
+.PHONY: install-tools install-quality-tools install-format-tools install-analysis-tools install-goreleaser
 .PHONY: install-golangci-lint install-pre-commit-tools install-docs-tools
 
-install-tools: install-format-tools install-analysis-tools install-golangci-lint install-goreleaser ## install all development tools
+install-quality-tools: install-format-tools install-golangci-lint install-security-tools install-vuln-tools ## install the pinned tools required by quality-check
+	@echo -e "$(GREEN)✅ Quality tools installed!$(RESET)"
+
+install-tools: install-quality-tools install-analysis-tools install-goreleaser ## install all development tools
 	@echo -e "$(GREEN)✅ All development tools installed!$(RESET)"
 
 install-format-tools: ## install advanced formatting tools
 	@echo -e "$(CYAN)Installing formatting tools...$(RESET)"
-	@which gofumpt > /dev/null || (echo "Installing gofumpt..." && go install mvdan.cc/gofumpt@latest)
-	@which gci > /dev/null || (echo "Installing gci..." && go install github.com/daixiang0/gci@latest)
+	@which gofumpt > /dev/null || (echo "Installing gofumpt $(GOFUMPT_VERSION)..." && go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION))
+	@which goimports > /dev/null || (echo "Installing goimports $(GOIMPORTS_VERSION)..." && go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION))
+	@which gci > /dev/null || (echo "Installing gci $(GCI_VERSION)..." && go install github.com/daixiang0/gci@$(GCI_VERSION))
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required to install mdformat" >&2; exit 1; }
-	@command -v mdformat >/dev/null 2>&1 || (echo "Installing mdformat..." && uv tool install --with mdformat-gfm --with mdformat-tables mdformat)
+	@command -v mdformat >/dev/null 2>&1 || (echo "Installing mdformat $(MDFORMAT_VERSION)..." && uv tool install --with mdformat-gfm==$(MDFORMAT_GFM_VERSION) --with mdformat-tables==$(MDFORMAT_TABLES_VERSION) mdformat==$(MDFORMAT_VERSION))
 	@echo -e "$(GREEN)✅ All formatting tools installed!$(RESET)"
 
 install-analysis-tools: ## install code analysis tools
 	@echo -e "$(CYAN)Installing code analysis tools...$(RESET)"
-	@command -v gocyclo >/dev/null 2>&1 || { echo "Installing gocyclo..." && go install github.com/fzipp/gocyclo/cmd/gocyclo@latest; }
-	@command -v ineffassign >/dev/null 2>&1 || { echo "Installing ineffassign..." && go install github.com/gordonklaus/ineffassign@latest; }
-	@command -v dupl >/dev/null 2>&1 || { echo "Installing dupl..." && go install github.com/mibk/dupl@latest; }
-	@command -v staticcheck >/dev/null 2>&1 || { echo "Installing staticcheck..." && go install honnef.co/go/tools/cmd/staticcheck@latest; }
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
+	@command -v gocyclo >/dev/null 2>&1 || { echo "Installing gocyclo v0.6.0..." && go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0; }
+	@command -v ineffassign >/dev/null 2>&1 || { echo "Installing ineffassign v0.1.0..." && go install github.com/gordonklaus/ineffassign@v0.1.0; }
+	@command -v dupl >/dev/null 2>&1 || { echo "Installing dupl v0.3.0..." && go install github.com/mibk/dupl@v0.3.0; }
+	@command -v staticcheck >/dev/null 2>&1 || { echo "Installing staticcheck 2025.1.1..." && go install honnef.co/go/tools/cmd/staticcheck@2025.1.1; }
+	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
 	@echo -e "$(GREEN)✅ All analysis tools installed!$(RESET)"
 
 # Pin to a v2 release. A v1 binary on PATH rejects this repo's version: "2"
@@ -40,18 +55,17 @@ GOLANGCI_LINT_VERSION ?= v2.12.2
 
 install-golangci-lint: ## install golangci-lint v2 (skip when PATH already has v2)
 	@echo -e "$(CYAN)Ensuring golangci-lint $(GOLANGCI_LINT_VERSION)...$(RESET)"
-	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -qE 'version (v)?2\.'; then \
+	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -q "$(GOLANGCI_LINT_VERSION)"; then \
 		echo -e "$(GREEN)✅ golangci-lint v2 already on PATH: $$(command -v golangci-lint)$(RESET)"; \
 	else \
 		echo -e "$(YELLOW)Installing golangci-lint $(GOLANGCI_LINT_VERSION) into $$(go env GOPATH)/bin$(RESET)"; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); \
+		GOBIN=$$(go env GOPATH)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 		echo -e "$(GREEN)✅ golangci-lint $(GOLANGCI_LINT_VERSION) installed$(RESET)"; \
-		echo -e "$(YELLOW)If 'make lint' still fails with v1 config errors, remove leftover v1 binaries ahead of GOPATH/bin (e.g. ~/go/bin/golangci-lint) or put mise shims first in PATH.$(RESET)"; \
 	fi
 
 install-goreleaser: ## install goreleaser
 	@echo -e "$(CYAN)Installing goreleaser...$(RESET)"
-	@go install github.com/goreleaser/goreleaser@latest
+	@go install github.com/goreleaser/goreleaser@v2.10.2
 	@echo -e "$(GREEN)✅ goreleaser installed$(RESET)"
 
 # ==============================================================================
@@ -62,7 +76,7 @@ install-goreleaser: ## install goreleaser
 
 install-mock-tools: ## install mock generation tools
 	@echo -e "$(CYAN)Installing mock generation tools...$(RESET)"
-	@command -v mockgen >/dev/null 2>&1 || { echo "Installing mockgen..." && go install go.uber.org/mock/mockgen@latest; }
+	@command -v mockgen >/dev/null 2>&1 || { echo "Installing mockgen v0.6.0..." && go install go.uber.org/mock/mockgen@v0.6.0; }
 	@echo -e "$(GREEN)✅ Mock generation tools installed!$(RESET)"
 
 generate-mocks: install-mock-tools ## generate all mock files using gomock
@@ -141,7 +155,7 @@ install-docs-tools: ## install documentation tools
 
 install-security-tools: ## install security analysis tools
 	@echo -e "$(CYAN)Installing security tools...$(RESET)"
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
+	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
 	@echo -e "$(GREEN)✅ Security tools installed!$(RESET)"
 
 # ==============================================================================
@@ -152,7 +166,7 @@ install-security-tools: ## install security analysis tools
 
 install-vuln-tools: ## install vulnerability scanning tools
 	@echo -e "$(CYAN)Installing vulnerability scanning tools...$(RESET)"
-	@echo "govulncheck is available as: go run golang.org/x/vuln/cmd/govulncheck@latest"
+	@command -v govulncheck >/dev/null 2>&1 || { echo "Installing govulncheck $(GOVULNCHECK_VERSION)..." && go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION); }
 	@echo -e "$(GREEN)✅ Vulnerability tools ready!$(RESET)"
 
 # ==============================================================================

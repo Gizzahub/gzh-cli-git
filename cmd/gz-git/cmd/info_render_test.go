@@ -483,6 +483,31 @@ func TestRemoteOnlyBranchesCell_QualifiesAmbiguousSlashRemoteBranches(t *testing
 	}
 }
 
+func TestRemoteOnlyBranchesCell_ExpandsCollidingElisions(t *testing.T) {
+	withColors(t, false)
+
+	first := "very-long-remote-alpha-middle-identical-tail/develop"
+	second := "very-long-remote-bravo-middle-identical-tail/develop"
+	if elideMiddle(first, maxBranchWidth) != elideMiddle(second, maxBranchWidth) {
+		t.Fatalf("fixture must collide after elision")
+	}
+	repo := &repository.RepositoryStatusResult{
+		Remotes:        map[string]string{strings.TrimSuffix(first, "/develop"): "", strings.TrimSuffix(second, "/develop"): ""},
+		RemoteBranches: []string{first, second},
+	}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
+	if !strings.Contains(got, first) || !strings.Contains(got, second) {
+		t.Errorf("colliding labels must retain full refs, got %q", got)
+	}
+}
+
+func TestRemoteTrackingBranch_OverlappingRemoteNamespacesUseLongestPrefix(t *testing.T) {
+	remote, branch, ok := remoteTrackingBranch("team/foo/bar", map[string]string{"team": "", "team/foo": ""})
+	if !ok || remote != "team/foo" || branch != "bar" {
+		t.Errorf("remoteTrackingBranch() = (%q, %q, %v), want (team/foo, bar, true)", remote, branch, ok)
+	}
+}
+
 func TestInfoOutputsExposeRemoteOnlyBranches(t *testing.T) {
 	result := bulkResult(repository.RepositoryStatusResult{
 		Path: "/w/r", RelativePath: "r", Branch: "master", Status: "clean",

@@ -285,13 +285,27 @@ func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnr
 		shown = branches[:maxOtherShown]
 		suffix = fmt.Sprintf(" +%d", len(branches)-maxOtherShown)
 	}
-	labels := make([]string, 0, len(shown))
+	rawLabels := make([]string, 0, len(shown))
+	elidedCounts := make(map[string]int, len(shown))
 	for _, branch := range shown {
 		label := branch.branch
 		if counts[branch.branch] > 1 {
 			label = branch.full
 		}
-		labels = append(labels, elideMiddle(label, maxBranchWidth))
+		rawLabels = append(rawLabels, label)
+		elidedCounts[elideMiddle(label, maxBranchWidth)]++
+	}
+	labels := make([]string, 0, len(rawLabels))
+	for _, label := range rawLabels {
+		elided := elideMiddle(label, maxBranchWidth)
+		if elidedCounts[elided] > 1 {
+			// REMOTE ONLY is the unpadded trailing column, so preserving the
+			// complete ref is preferable to rendering two indistinguishable
+			// abbreviations and losing the remote disambiguation contract.
+			labels = append(labels, label)
+			continue
+		}
+		labels = append(labels, elided)
 	}
 	return infoCell{text: strings.Join(labels, ", ") + suffix, color: cliutil.ColorGray}
 }
@@ -339,8 +353,10 @@ func remoteOnlyTrackingBranches(repo *repository.RepositoryStatusResult, enr inf
 
 // remoteTrackingBranch resolves a remote-tracking ref using configured remote
 // names instead of guessing where the remote name ends. Git permits slash in a
-// remote name (for example team/foo), so the longest matching <remote>/ prefix
-// is the only unambiguous split.
+// remote name (for example team/foo), so use the longest matching <remote>/
+// prefix. If configured remote namespaces overlap (team and team/foo), the ref
+// text itself is ambiguous; longest-prefix is the documented deterministic
+// policy rather than an attempt to infer Git's original destination.
 func remoteTrackingBranch(ref string, remotes map[string]string) (remote, branch string, ok bool) {
 	for name := range remotes {
 		prefix := name + "/"

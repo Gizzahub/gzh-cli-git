@@ -209,9 +209,7 @@ func TestRenderBulkResults_AllModes(t *testing.T) {
 	if !isIssueStatus(cfg, "error") {
 		t.Error("error should be issue")
 	}
-	if isRefspecError(errors.New("refspec does not match")) {
-		// may match depending on impl
-	}
+	_ = isRefspecError(errors.New("refspec does not match"))
 	_ = isRefspecError(errors.New("other"))
 	_ = isRefspecError(nil)
 }

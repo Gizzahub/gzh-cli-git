@@ -164,7 +164,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment) {
+func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment) { //nolint:gocyclo // TODO(issue-21): split detail formatting by status and enrichment.
 	if len(result.Repositories) == 0 {
 		fmt.Println("No repositories found.")
 		return

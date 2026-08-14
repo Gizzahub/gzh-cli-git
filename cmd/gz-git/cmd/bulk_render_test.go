@@ -124,10 +124,8 @@ func TestBulkRepoResultInterfaceMethods(t *testing.T) {
 	// Compile-time / runtime check lives in repository package tests;
 	// here we ensure render path accepts rows built from interface fields.
 	row := BulkRenderRow{
-		Path:    "p",
-		Status:  "error",
-		Message: "m",
-		Err:     errors.New("e"),
+		Path:   "p",
+		Status: "error",
 	}
 	if row.Path == "" || row.Status == "" {
 		t.Fatal("row fields empty")

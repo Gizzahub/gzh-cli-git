@@ -516,7 +516,7 @@ func printConfigTree(cfg *config.Config, path string, configFile string, depth i
 	// Print workspaces
 	for name, ws := range cfg.Workspaces {
 		wsIndent := strings.Repeat("  ", depth+1)
-		wsPath, _ := resolveChildPath(path, ws.Path)
+		wsPath := resolveChildPath(path, ws.Path)
 
 		effectiveType := ws.Type.Resolve(ws.Source != nil)
 
@@ -559,15 +559,18 @@ func printConfigTree(cfg *config.Config, path string, configFile string, depth i
 }
 
 // resolveChildPath resolves child path relative to parent.
-func resolveChildPath(parentPath, childPath string) (string, error) {
+func resolveChildPath(parentPath, childPath string) string {
 	if strings.HasPrefix(childPath, "~/") {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, childPath[2:]), nil
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return filepath.Join(parentPath, childPath)
+		}
+		return filepath.Join(home, childPath[2:])
 	}
 	if filepath.IsAbs(childPath) {
-		return childPath, nil
+		return childPath
 	}
-	return filepath.Join(parentPath, childPath), nil
+	return filepath.Join(parentPath, childPath)
 }
 
 // printConfigValue prints a config value with its source.

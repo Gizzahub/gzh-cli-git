@@ -45,7 +45,7 @@ type Setting struct {
 	// Why explains, in one line, the failure mode the setting prevents.
 	Why string `json:"why"`
 	// MinGit is the minimum git version required, empty when any version works.
-	MinGit string `json:"minGit,omitempty"`
+	MinGit string `json:"minGit,omitempty"` //nolint:tagliatelle // wire name is part of the existing JSON schema.
 }
 
 // Status pairs a recommended setting with the value found on this machine.
@@ -66,7 +66,7 @@ func (s Status) NeedsChange() bool {
 // Report is the outcome of inspecting a scope.
 type Report struct {
 	Scope      Scope    `json:"scope"`
-	GitVersion string   `json:"gitVersion"`
+	GitVersion string   `json:"gitVersion"` //nolint:tagliatelle // wire name is part of the existing JSON schema.
 	Statuses   []Status `json:"statuses"`
 }
 

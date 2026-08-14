@@ -110,9 +110,6 @@ func TestRunStatus_SkipFetchWithTempRepos(t *testing.T) {
 	out := captureStdout(t, func() {
 		if err := runStatus(statusCmd, []string{parent}); err != nil {
 			// partial failure ok if exit code 2
-			if cliExit := err; cliExit != nil && !strings.Contains(err.Error(), "failed") {
-				// allow partial
-			}
 			_ = err
 		}
 	})

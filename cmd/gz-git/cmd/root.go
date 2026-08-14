@@ -135,9 +135,6 @@ func printCommandRecursive(cmd *cobra.Command, level int) {
 				for _, line := range exampleLines {
 					fmt.Println(line)
 				}
-			} else if !inQuickStart && len(lines) < 5 {
-				// Fallback description embedded if short
-				// Don't print long descriptions to save tokens
 			}
 		}
 

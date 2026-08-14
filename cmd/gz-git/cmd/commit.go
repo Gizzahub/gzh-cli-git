@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,8 +30,8 @@ var (
 	commitAllowConflicted bool // --allow-conflicted: commit repos with unmerged paths
 )
 
-// commitCmd represents the commit command
-var commitCmd = &cobra.Command{
+// commitCmd represents the commit command.
+var commitCmd = &cobra.Command{ //nolint:gocyclo // TODO(issue-21): split commit input, execution, and rendering paths.
 	Use:   "commit [directory]",
 	Short: "Commit changes across multiple repositories",
 	Long: cliutil.QuickStartHelp(`  # Commit with per-repository messages (most common usage)
@@ -73,7 +74,7 @@ func init() {
 	commitCmd.Flags().BoolVar(&commitAllowConflicted, "allow-conflicted", false, "commit repositories that still have unmerged paths (writes conflict markers into history)")
 }
 
-func runCommit(cmd *cobra.Command, args []string) error {
+func runCommit(cmd *cobra.Command, args []string) error { //nolint:gocyclo // TODO(issue-21): split commit input, execution, and rendering paths.
 	// SIGINT/SIGTERM cancels the shared context so in-flight commits stop
 	// gracefully (extracted into bulk_common's withInterruptCancel).
 	ctx, cancel := withInterruptCancel(context.Background())
@@ -276,7 +277,7 @@ func runCommit(cmd *cobra.Command, args []string) error {
 	)
 }
 
-// parseRepoMessage parses "repo:message" format
+// parseRepoMessage parses "repo:message" format.
 func parseRepoMessage(input string) (repo, message string, err error) {
 	before, after, ok := strings.Cut(input, ":")
 	if !ok {
@@ -290,7 +291,7 @@ func parseRepoMessage(input string) (repo, message string, err error) {
 	return repo, message, nil
 }
 
-// parseJSONMessages parses inline JSON string to message map
+// parseJSONMessages parses inline JSON string to message map.
 func parseJSONMessages(jsonStr string) (map[string]string, error) {
 	var messages map[string]string
 	if err := json.Unmarshal([]byte(jsonStr), &messages); err != nil {
@@ -299,7 +300,7 @@ func parseJSONMessages(jsonStr string) (map[string]string, error) {
 	return messages, nil
 }
 
-// parseYAMLMessages parses inline YAML string to message map
+// parseYAMLMessages parses inline YAML string to message map.
 func parseYAMLMessages(yamlStr string) (map[string]string, error) {
 	var messages map[string]string
 	if err := yaml.Unmarshal([]byte(yamlStr), &messages); err != nil {
@@ -308,7 +309,7 @@ func parseYAMLMessages(yamlStr string) (map[string]string, error) {
 	return messages, nil
 }
 
-// parseJSONOrYAMLMessages tries parsing JSON first, then YAML
+// parseJSONOrYAMLMessages tries parsing JSON first, then YAML.
 func parseJSONOrYAMLMessages(data string) (map[string]string, error) {
 	var messages map[string]string
 	if err := json.Unmarshal([]byte(data), &messages); err == nil {
@@ -320,7 +321,7 @@ func parseJSONOrYAMLMessages(data string) (map[string]string, error) {
 	return nil, fmt.Errorf("data is not valid payload (expected JSON or YAML)")
 }
 
-// applyCustomMessages applies custom messages to repository results
+// applyCustomMessages applies custom messages to repository results.
 func applyCustomMessages(result *repository.BulkCommitResult, messages map[string]string) {
 	for i := range result.Repositories {
 		repo := &result.Repositories[i]
@@ -335,8 +336,8 @@ func applyCustomMessages(result *repository.BulkCommitResult, messages map[strin
 	}
 }
 
-// editMessagesInEditor opens an editor for bulk message editing
-// Returns nil if the user canceled (empty file)
+// editMessagesInEditor opens an editor for bulk message editing.
+// Returns nil if the user canceled (empty file).
 func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]string, error) {
 	// Create temp file
 	tmpFile, err := os.CreateTemp("", "gz-git-commit-*.txt")
@@ -396,7 +397,7 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	// Open editor
-	cmd := exec.Command(editorPath, tmpPath)
+	cmd := exec.CommandContext(context.Background(), editorPath, tmpPath)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -444,7 +445,7 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	if !hasContent {
-		return nil, nil // Canceled
+		return nil, nil //nolint:nilnil // cancellation is represented by an empty result and no error.
 	}
 
 	return messages, nil
@@ -594,7 +595,7 @@ func getCommitStatusIcon(status string) string {
 	}
 }
 
-// CommitJSONOutput represents the JSON output structure for commit command
+// CommitJSONOutput represents the JSON output structure for commit command.
 type CommitJSONOutput struct {
 	TotalScanned    int                          `json:"total_scanned"`
 	TotalDirty      int                          `json:"total_dirty"`
@@ -607,7 +608,7 @@ type CommitJSONOutput struct {
 	Repositories    []CommitRepositoryJSONOutput `json:"repositories"`
 }
 
-// CommitRepositoryJSONOutput represents a single repository in JSON output
+// CommitRepositoryJSONOutput represents a single repository in JSON output.
 type CommitRepositoryJSONOutput struct {
 	Path                  string   `json:"path"`
 	Branch                string   `json:"branch,omitempty"`

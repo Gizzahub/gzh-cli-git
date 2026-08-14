@@ -380,7 +380,7 @@ func displayCloneResultsStructured(result *repository.BulkCloneResult, format st
 // ============================================================================
 
 // cloneSingleRepository clones a single repository with custom settings.
-func cloneSingleRepository(
+func cloneSingleRepository( //nolint:gocyclo // TODO(issue-21): split clone validation, execution, and reporting paths.
 	ctx context.Context,
 	client repository.Client,
 	spec CloneRepoSpec,

@@ -149,7 +149,7 @@ func TestStashPopApplyDry(t *testing.T) {
 
 func TestConfigHierarchyValidateCompact(t *testing.T) {
 	resetConfigFlags(t)
-	_ = isolateConfigHome(t)
+	isolateConfigHome(t)
 	configGlobal = true
 	_ = runConfigInit(configInitCmd, nil)
 	// project init

@@ -307,7 +307,7 @@ func displaySwitchResultsStructured(result *repository.BulkSwitchResult, format 
 	// Convert summary keys to strings
 	summary := make(map[string]int)
 	for k, v := range result.Summary {
-		summary[string(k)] = v
+		summary[k] = v
 	}
 
 	output := SwitchJSONOutput{
@@ -322,7 +322,7 @@ func displaySwitchResultsStructured(result *repository.BulkSwitchResult, format 
 	for _, repo := range result.Repositories {
 		repoOutput := SwitchRepositoryJSONOutput{
 			Path:           repo.RelativePath,
-			Status:         string(repo.Status),
+			Status:         repo.Status,
 			PreviousBranch: repo.PreviousBranch,
 			CurrentBranch:  repo.CurrentBranch,
 			Message:        repo.Message,

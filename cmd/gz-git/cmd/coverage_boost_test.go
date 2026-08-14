@@ -228,7 +228,7 @@ func TestRunCleanDryRunAndTagCreateList(t *testing.T) {
 
 func TestLoadEffectiveConfigAndPrintSources(t *testing.T) {
 	resetConfigFlags(t)
-	_ = isolateConfigHome(t)
+	isolateConfigHome(t)
 	configGlobal = true
 	_ = runConfigInit(configInitCmd, nil)
 	eff, err := LoadEffectiveConfig(rootCmd, nil)

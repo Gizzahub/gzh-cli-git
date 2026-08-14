@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func isolateConfigHome(t *testing.T) string {
+func isolateConfigHome(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -25,7 +25,6 @@ func isolateConfigHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
-	return proj
 }
 
 func resetConfigFlags(t *testing.T) {
@@ -60,7 +59,7 @@ func resetConfigFlags(t *testing.T) {
 
 func TestConfigInitLocalAndShow(t *testing.T) {
 	resetConfigFlags(t)
-	_ = isolateConfigHome(t)
+	isolateConfigHome(t)
 
 	configGlobal = false
 	out := captureStdout(t, func() {
@@ -97,7 +96,7 @@ func TestConfigInitLocalAndShow(t *testing.T) {
 
 func TestConfigInitGlobalAndProfiles(t *testing.T) {
 	resetConfigFlags(t)
-	_ = isolateConfigHome(t)
+	isolateConfigHome(t)
 
 	configGlobal = true
 	out := captureStdout(t, func() {
@@ -178,18 +177,12 @@ func TestPrintConfigValueAndResolveChildPath(t *testing.T) {
 		t.Errorf("printConfigValue: %q", out)
 	}
 
-	got, err := resolveChildPath("/parent", "child")
-	if err != nil {
-		t.Fatalf("resolveChildPath: %v", err)
-	}
+	got := resolveChildPath("/parent", "child")
 	if !strings.Contains(got, "child") {
 		t.Errorf("path: %q", got)
 	}
 	// absolute child
-	got, err = resolveChildPath("/parent", "/abs/child")
-	if err != nil {
-		t.Fatalf("abs resolve: %v", err)
-	}
+	got = resolveChildPath("/parent", "/abs/child")
 	if got != "/abs/child" {
 		t.Errorf("abs path = %q", got)
 	}

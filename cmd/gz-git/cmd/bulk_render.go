@@ -77,11 +77,12 @@ func RenderBulkResults(w io.Writer, cfg BulkRenderConfig, in BulkRenderInput) {
 		return
 	}
 
-	if cfg.Format == "compact" {
+	switch {
+	case cfg.Format == "compact":
 		renderBulkCompact(w, cfg, in)
-	} else if cfg.Verbose {
+	case cfg.Verbose:
 		renderBulkVerbose(w, cfg, in)
-	} else {
+	default:
 		renderBulkDefault(w, cfg, in)
 	}
 

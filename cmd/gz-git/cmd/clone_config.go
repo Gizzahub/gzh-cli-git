@@ -151,9 +151,7 @@ func parseCloneConfig(configPath string, useStdin bool) (*CloneConfig, error) {
 	} else {
 		// Grouped format: parse global settings and groups separately
 		// Note: This part still relies on map[string]interface{} and is format-agnostic
-		if err := parseGroupedCloneConfig(data, rawMap, config); err != nil {
-			return nil, err
-		}
+		parseGroupedCloneConfig(rawMap, config)
 	}
 
 	// Validate
@@ -165,7 +163,7 @@ func parseCloneConfig(configPath string, useStdin bool) (*CloneConfig, error) {
 }
 
 // parseGroupedCloneConfig parses grouped format where keys are group names.
-func parseGroupedCloneConfig(data []byte, rawMap map[string]any, config *CloneConfig) error {
+func parseGroupedCloneConfig(rawMap map[string]any, config *CloneConfig) {
 	// Known global keys (not groups)
 	globalKeys := map[string]bool{
 		"parallel": true, "strategy": true, "structure": true,
@@ -259,8 +257,6 @@ func parseGroupedCloneConfig(data []byte, rawMap map[string]any, config *CloneCo
 			config.Groups[key] = group
 		}
 	}
-
-	return nil
 }
 
 // validateCloneConfig validates the parsed YAML config.
@@ -417,7 +413,7 @@ func buildCloneOptionsFromConfig(
 		parallel = config.Parallel
 	}
 	if parallel == 0 {
-		parallel = repository.DefaultBulkParallel
+		parallel = repository.DefaultLocalParallel
 	}
 
 	structureVal := structure
@@ -455,7 +451,7 @@ func buildCloneOptionsFromConfig(
 
 // resolveCloneStrategy resolves the effective strategy with precedence:
 // CLI --update-strategy > YAML strategy > default (skip).
-func resolveCloneStrategy(cliStrategy string, yamlStrategy string) repository.UpdateStrategy {
+func resolveCloneStrategy(cliStrategy, yamlStrategy string) repository.UpdateStrategy {
 	// CLI --update-strategy takes highest precedence
 	if cliStrategy != "" {
 		return repository.UpdateStrategy(cliStrategy)
@@ -624,7 +620,7 @@ func buildGroupCloneOptions(config *CloneConfig, group *CloneGroup, targetDir st
 		parallel = config.Parallel
 	}
 	if parallel == 0 {
-		parallel = repository.DefaultBulkParallel
+		parallel = repository.DefaultLocalParallel
 	}
 
 	// Resolve strategy: CLI > group > global > default

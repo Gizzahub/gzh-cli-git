@@ -74,9 +74,9 @@ type BulkFlagOptions struct {
 // addBulkFlagsWithOpts registers common bulk operation flags to a command, skipping those specified in opts.
 func addBulkFlagsWithOpts(cmd *cobra.Command, flags *BulkCommandFlags, opts BulkFlagOptions) {
 	if !opts.SkipScanDepth {
-		cmd.Flags().IntVarP(&flags.Depth, "scan-depth", "d", repository.DefaultBulkMaxDepth, "directory depth to scan for repositories")
+		cmd.Flags().IntVarP(&flags.Depth, "scan-depth", "d", repository.DefaultLocalScanDepth, "directory depth to scan for repositories")
 	}
-	cmd.Flags().IntVarP(&flags.Parallel, "parallel", "j", repository.DefaultBulkParallel, "number of parallel operations")
+	cmd.Flags().IntVarP(&flags.Parallel, "parallel", "j", repository.DefaultLocalParallel, "number of parallel operations")
 	if !opts.SkipRecursive {
 		cmd.Flags().BoolVarP(&flags.IncludeSubmodules, "recursive", "r", false, "recursively include nested repositories and submodules")
 	}
@@ -143,7 +143,7 @@ func errPartialFailure(failed, total int) error {
 	return nil
 }
 
-// Core formats (supported by all commands).
+// CoreFormats contains formats supported by all commands.
 var CoreFormats = cliutil.CoreFormats
 
 // ValidBulkFormats contains valid output formats for bulk operations

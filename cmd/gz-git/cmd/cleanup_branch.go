@@ -185,10 +185,8 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 				fmt.Errorf("%d of %d branches failed to delete",
 					len(result.Failed), len(result.Deleted)+len(result.Failed)))
 		}
-	} else {
-		if !quiet {
-			fmt.Println("\nDry-run mode: use --force to actually delete branches")
-		}
+	} else if !quiet {
+		fmt.Println("\nDry-run mode: use --force to actually delete branches")
 	}
 
 	return nil

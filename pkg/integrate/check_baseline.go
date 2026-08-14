@@ -36,7 +36,7 @@ type BaselineResult struct {
 
 // locationLine matches the "file:line" prefix that go vet, golangci-lint,
 // tsc, eslint, ruff, and pytest all emit at the start of a diagnostic line.
-var locationLine = regexp.MustCompile(`^[^ \t:]+\.[A-Za-z0-9_]+:[0-9]+`)
+var locationLine = regexp.MustCompile(`^[^ \t:]+\.[A-Za-z0-9_]+:\d+`)
 
 // EvaluateBaseline is the non-worsening gate.
 //

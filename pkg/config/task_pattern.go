@@ -241,22 +241,17 @@ func reportNonRootTaskPattern(root string, decl *TaskPatternDecl) error {
 		if filepath.Dir(path) == root {
 			return nil
 		}
-		has, err := fileDeclaresTaskPattern(path)
-		if err != nil {
-			return err
-		}
-		if has {
+		if fileDeclaresTaskPattern(path) {
 			decl.Facts = append(decl.Facts, "ignored non-root taskPattern: "+path)
 		}
 		return nil
 	})
 }
 
-func fileDeclaresTaskPattern(path string) (bool, error) {
+func fileDeclaresTaskPattern(path string) bool {
 	patterns, _, err := readRootBranchDecl(path)
 	if err != nil {
-		// Unreadable nested files are reported, not applied.
-		return false, nil
+		return false
 	}
-	return len(patterns) > 0, nil
+	return len(patterns) > 0
 }

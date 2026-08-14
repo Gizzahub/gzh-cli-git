@@ -69,7 +69,8 @@ func (g gitRepo) refNames(ctx context.Context) ([]string, error) {
 }
 
 func (g gitRepo) shortRefs(ctx context.Context, prefixes ...string) ([]string, error) {
-	args := []string{"for-each-ref", "--format=%(refname:short)"}
+	args := make([]string, 0, 2+len(prefixes))
+	args = append(args, "for-each-ref", "--format=%(refname:short)")
 	args = append(args, prefixes...)
 	res, err := g.run(ctx, args...)
 	if err != nil {
@@ -81,7 +82,7 @@ func (g gitRepo) shortRefs(ctx context.Context, prefixes ...string) ([]string, e
 	return splitNonEmpty(res.Stdout), nil
 }
 
-func (g gitRepo) revParse(ctx context.Context, rev string) (string, bool, error) {
+func (g gitRepo) revParse(ctx context.Context, rev string) (sha string, ok bool, err error) {
 	res, err := g.run(ctx, "rev-parse", "--verify", "--quiet", rev+"^{commit}")
 	if err != nil {
 		return "", false, err
@@ -89,11 +90,11 @@ func (g gitRepo) revParse(ctx context.Context, rev string) (string, bool, error)
 	if res.ExitCode != 0 {
 		return "", false, nil
 	}
-	sha := strings.TrimSpace(res.Stdout)
+	sha = strings.TrimSpace(res.Stdout)
 	return sha, sha != "", nil
 }
 
-func (g gitRepo) symbolicRef(ctx context.Context, name string) (string, bool, error) {
+func (g gitRepo) symbolicRef(ctx context.Context, name string) (ref string, ok bool, err error) {
 	res, err := g.run(ctx, "symbolic-ref", "--quiet", "--short", name)
 	if err != nil {
 		return "", false, err
@@ -179,7 +180,7 @@ func (g gitRepo) porcelain(ctx context.Context) (string, error) {
 	return res.Stdout, nil
 }
 
-func (g gitRepo) upstreamSHA(ctx context.Context, branch string) (string, bool, error) {
+func (g gitRepo) upstreamSHA(ctx context.Context, branch string) (sha string, ok bool, err error) {
 	return g.revParse(ctx, branch+"@{upstream}")
 }
 

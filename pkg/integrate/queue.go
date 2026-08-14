@@ -139,6 +139,10 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 		return report, nil
 	}
 
+	return fillQueueEntries(ctx, g, report, refs, baseSHA, expiry, now, opts.Quiet)
+}
+
+func fillQueueEntries(ctx context.Context, g gitRepo, report *QueueReport, refs []string, baseSHA string, expiry int, now time.Time, quiet bool) (*QueueReport, error) {
 	for _, ref := range refs {
 		entry, skip, err := inspectQueueRef(ctx, g, ref, baseSHA, expiry, now)
 		if err != nil {
@@ -147,7 +151,7 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 		if skip {
 			continue
 		}
-		if opts.Quiet && entry.Note == "" {
+		if quiet && entry.Note == "" {
 			continue
 		}
 		report.Entries = append(report.Entries, entry)
@@ -201,38 +205,9 @@ func collectQueueRefs(ctx context.Context, g gitRepo, remote, base string, integ
 		return nil, err
 	}
 
-	exclude := map[string]struct{}{
-		base: {},
-	}
-	remotes := []string(nil)
-	if remote != "" {
-		remotes = []string{remote}
-	}
-	if bare := NormalizeName(base, remotes); bare != "" && bare != base {
-		exclude[bare] = struct{}{}
-		if remote != "" {
-			exclude[remote+"/"+bare] = struct{}{}
-		}
-	}
-	if remote != "" {
-		exclude[remote] = struct{}{}
-		exclude[remote+"/HEAD"] = struct{}{}
-	}
-	if integ.Participates && integ.Name != "" {
-		exclude[integ.Name] = struct{}{}
-		if remote != "" {
-			exclude[remote+"/"+integ.Name] = struct{}{}
-		}
-		allRemotes, err := g.shortRefs(ctx, "refs/remotes")
-		if err != nil {
-			return nil, err
-		}
-		suffix := "/" + integ.Name
-		for _, r := range allRemotes {
-			if strings.HasSuffix(r, suffix) {
-				exclude[r] = struct{}{}
-			}
-		}
+	exclude, err := queueExcludeSet(ctx, g, remote, base, integ)
+	if err != nil {
+		return nil, err
 	}
 
 	var out []string
@@ -265,8 +240,48 @@ func collectQueueRefs(ctx context.Context, g gitRepo, remote, base string, integ
 	return out, nil
 }
 
+func queueExcludeSet(ctx context.Context, g gitRepo, remote, base string, integ Resolution) (map[string]struct{}, error) {
+	exclude := map[string]struct{}{base: {}}
+	remotes := []string(nil)
+	if remote != "" {
+		remotes = []string{remote}
+	}
+	if bare := NormalizeName(base, remotes); bare != "" && bare != base {
+		exclude[bare] = struct{}{}
+		if remote != "" {
+			exclude[remote+"/"+bare] = struct{}{}
+		}
+	}
+	if remote != "" {
+		exclude[remote] = struct{}{}
+		exclude[remote+"/HEAD"] = struct{}{}
+	}
+	if !integ.Participates || integ.Name == "" {
+		return exclude, nil
+	}
+	exclude[integ.Name] = struct{}{}
+	if remote != "" {
+		exclude[remote+"/"+integ.Name] = struct{}{}
+	}
+	allRemotes, err := g.shortRefs(ctx, "refs/remotes")
+	if err != nil {
+		return nil, err
+	}
+	suffix := "/" + integ.Name
+	for _, r := range allRemotes {
+		if strings.HasSuffix(r, suffix) {
+			exclude[r] = struct{}{}
+		}
+	}
+	return exclude, nil
+}
+
+func queueRefAllowed(ref string) bool {
+	return gitcmd.SanitizeBranchName(ref) == nil
+}
+
 func inspectQueueRef(ctx context.Context, g gitRepo, ref, baseSHA string, expiryDays int, now time.Time) (QueueEntry, bool, error) {
-	if err := gitcmd.SanitizeBranchName(ref); err != nil {
+	if !queueRefAllowed(ref) {
 		return QueueEntry{}, true, nil
 	}
 	_, ok, err := g.revParse(ctx, ref)
@@ -302,8 +317,8 @@ func inspectQueueRef(ctx context.Context, g gitRepo, ref, baseSHA string, expiry
 		entry.BaseState = fmt.Sprintf("stale(%d)", n)
 	}
 
-	switch {
-	case ahead == 0:
+	switch ahead {
+	case 0:
 		entry.MergeState = "-"
 	default:
 		clean, err := g.mergeTreeClean(ctx, baseSHA, ref)

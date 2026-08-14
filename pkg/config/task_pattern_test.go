@@ -12,7 +12,7 @@ import (
 
 func TestLoadRepoRootTaskPattern_HotfixLoads(t *testing.T) {
 	root := t.TempDir()
-	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern: hotfix/*\n")
+	writeRepoConfig(t, root, "branch:\n  taskPattern: hotfix/*\n")
 
 	got, err := LoadRepoRootTaskPattern(root)
 	if err != nil {
@@ -48,7 +48,7 @@ func TestMatchTaskPattern_DevTripleStar(t *testing.T) {
 
 func TestLoadRepoRootTaskPattern_StarRejected(t *testing.T) {
 	root := t.TempDir()
-	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern: '*'\n")
+	writeRepoConfig(t, root, "branch:\n  taskPattern: '*'\n")
 	if _, err := LoadRepoRootTaskPattern(root); err == nil {
 		t.Fatal("expected reject of match-everything taskPattern")
 	}
@@ -56,7 +56,7 @@ func TestLoadRepoRootTaskPattern_StarRejected(t *testing.T) {
 
 func TestLoadRepoRootTaskPattern_MasterRejected(t *testing.T) {
 	root := t.TempDir()
-	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern: master\n")
+	writeRepoConfig(t, root, "branch:\n  taskPattern: master\n")
 
 	_, err := LoadRepoRootTaskPattern(root)
 	if err == nil {
@@ -69,13 +69,13 @@ func TestLoadRepoRootTaskPattern_MasterRejected(t *testing.T) {
 
 func TestLoadRepoRootTaskPattern_NonRootIgnoredAndReported(t *testing.T) {
 	root := t.TempDir()
-	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  defaultBranch: develop\n")
+	writeRepoConfig(t, root, "branch:\n  defaultBranch: develop\n")
 	nested := filepath.Join(root, "nested")
 	if err := os.MkdirAll(nested, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	nestedPath := filepath.Join(nested, ".gz-git.yaml")
-	writeRepoConfig(t, nested, ".gz-git.yaml", "branch:\n  taskPattern: feat/*\n")
+	writeRepoConfig(t, nested, "branch:\n  taskPattern: feat/*\n")
 
 	got, err := LoadRepoRootTaskPattern(root)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestLoadRepoRootTaskPattern_MissingFileEmpty(t *testing.T) {
 
 func TestLoadRepoRootTaskPattern_IgnoresParentOfRepo(t *testing.T) {
 	parent := t.TempDir()
-	writeRepoConfig(t, parent, ".gz-git.yaml", "branch:\n  taskPattern: feat/*\n")
+	writeRepoConfig(t, parent, "branch:\n  taskPattern: feat/*\n")
 	root := filepath.Join(parent, "repo")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
@@ -134,12 +134,12 @@ func TestLoadRepoRootTaskPattern_IgnoresParentOfRepo(t *testing.T) {
 
 func TestLoadRepoRootTaskPattern_DevelopRejectedReleaseAllowed(t *testing.T) {
 	root := t.TempDir()
-	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern:\n    - release/*\n    - develop\n")
+	writeRepoConfig(t, root, "branch:\n  taskPattern:\n    - release/*\n    - develop\n")
 	if _, err := LoadRepoRootTaskPattern(root); err == nil {
 		t.Fatal("expected reject when develop is declared")
 	}
 
-	writeRepoConfig(t, root, ".gz-git.yaml", "branch:\n  taskPattern: [dev/*/*/* , release/*]\n")
+	writeRepoConfig(t, root, "branch:\n  taskPattern: [dev/*/*/* , release/*]\n")
 	got, err := LoadRepoRootTaskPattern(root)
 	if err != nil {
 		t.Fatalf("release/* must load: %v", err)
@@ -149,10 +149,10 @@ func TestLoadRepoRootTaskPattern_DevelopRejectedReleaseAllowed(t *testing.T) {
 	}
 }
 
-func writeRepoConfig(t *testing.T, dir, name, body string) {
+func writeRepoConfig(t *testing.T, dir, body string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-		t.Fatalf("write %s: %v", name, err)
+	if err := os.WriteFile(filepath.Join(dir, ".gz-git.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
 }
 

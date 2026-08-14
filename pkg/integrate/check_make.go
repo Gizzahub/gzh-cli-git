@@ -25,7 +25,7 @@ type makeProbe struct {
 }
 
 func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
-	cmd := exec.CommandContext(ctx, "make", target)
+	cmd := exec.CommandContext(ctx, "make", target) //nolint:gosec // target is check or lint
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "MAKELEVEL=0", "MAKEFLAGS=", "LC_ALL=C")
 	var buf bytes.Buffer

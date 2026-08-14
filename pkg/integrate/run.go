@@ -95,21 +95,38 @@ func Run(ctx context.Context, exec *gitcmd.Executor, opts RunOptions) (*RunRepor
 		return report, fmt.Errorf("%s is not an ancestor of %s; rebase and re-check", check.Plan.Target, check.Plan.Branch)
 	}
 
-	if check.Plan.Remote == "" {
-		return report, fmt.Errorf("no remote; cannot push the fast-forward")
-	}
-	refspec := sourceSHA + ":refs/heads/" + targetName
-	push, err := g.run(ctx, "push", check.Plan.Remote, refspec)
-	if err != nil {
+	if err := pushFastForward(ctx, g, check.Plan.Remote, sourceSHA, targetName); err != nil {
 		return report, err
 	}
-	if push.ExitCode != 0 {
-		return report, fmt.Errorf("git push %s %s failed: %s", check.Plan.Remote, refspec, strings.TrimSpace(push.Stderr))
+	if err := ffTargetWorktrees(ctx, exec, g, targetName, sourceSHA); err != nil {
+		return report, err
 	}
 
+	report.Integrated = true
+	report.SHA = sourceSHA
+	report.Printed = append(report.Printed, fmt.Sprintf("INTEGRATED %s (%s) -> %s/%s", check.Plan.Branch, sourceSHA, check.Plan.Remote, targetName))
+	return finishRunReclaim(ctx, exec, g, root, targetName, report)
+}
+
+func pushFastForward(ctx context.Context, g gitRepo, remote, sourceSHA, targetName string) error {
+	if remote == "" {
+		return fmt.Errorf("no remote; cannot push the fast-forward")
+	}
+	refspec := sourceSHA + ":refs/heads/" + targetName
+	push, err := g.run(ctx, "push", remote, refspec)
+	if err != nil {
+		return err
+	}
+	if push.ExitCode != 0 {
+		return fmt.Errorf("git push %s %s failed: %s", remote, refspec, strings.TrimSpace(push.Stderr))
+	}
+	return nil
+}
+
+func ffTargetWorktrees(ctx context.Context, exec *gitcmd.Executor, g gitRepo, targetName, sourceSHA string) error {
 	trees, err := g.listWorktrees(ctx)
 	if err != nil {
-		return report, fmt.Errorf("integrated but listing worktrees failed: %w", err)
+		return fmt.Errorf("integrated but listing worktrees failed: %w", err)
 	}
 	for _, wt := range trees {
 		if wt.Branch != targetName {
@@ -125,39 +142,37 @@ func Run(ctx context.Context, exec *gitcmd.Executor, opts RunOptions) (*RunRepor
 			if err != nil && detail == "" {
 				detail = err.Error()
 			}
-			return report, fmt.Errorf("remote integrated but local target worktree failed: %s: %s", wt.Path, detail)
+			return fmt.Errorf("remote integrated but local target worktree failed: %s: %s", wt.Path, detail)
 		}
 		break
 	}
+	return nil
+}
 
-	report.Integrated = true
-	report.SHA = sourceSHA
-	report.Printed = append(report.Printed, fmt.Sprintf("INTEGRATED %s (%s) -> %s/%s", check.Plan.Branch, sourceSHA, check.Plan.Remote, targetName))
-
-	decl, err := config.LoadRepoRootTaskPattern(root)
-	if err != nil {
-		report.Reclaim.Skipped = "reclaim nothing: " + err.Error()
+func finishRunReclaim(ctx context.Context, exec *gitcmd.Executor, g gitRepo, root, targetName string, report *RunReport) (*RunReport, error) {
+	decl, loadErr := config.LoadRepoRootTaskPattern(root)
+	if loadErr != nil {
+		report.Reclaim.Skipped = "reclaim nothing: " + loadErr.Error()
 		report.Printed = append(report.Printed, "RECLAIM skipped: "+report.Reclaim.Skipped)
-		return report, nil
-	}
-
-	report.Reclaim = reclaimAfter(ctx, exec, g, reclaimOpts{
-		Branch:       check.Plan.Branch,
-		TargetBranch: targetName,
-		DefaultName:  defaultBranchName(check.Plan.DefaultRef, check.Plan.Remote),
-		Integration:  check.Plan.Integration.Name,
-		Remote:       check.Plan.Remote,
-		Patterns:     decl.Patterns,
-		Facts:        decl.Facts,
-	})
-	if report.Reclaim.Skipped != "" {
-		report.Printed = append(report.Printed, "RECLAIM skipped: "+report.Reclaim.Skipped)
-	}
-	if len(report.Reclaim.Done) > 0 {
-		report.Printed = append(report.Printed, "RECLAIMED "+check.Plan.Branch+" — "+strings.Join(report.Reclaim.Done, " "))
-	}
-	if report.Reclaim.Incomplete() {
-		report.Printed = append(report.Printed, "RECLAIM incomplete: "+strings.Join(report.Reclaim.Failed, "; "))
+	} else {
+		report.Reclaim = reclaimAfter(ctx, exec, g, reclaimOpts{
+			Branch:       report.Check.Plan.Branch,
+			TargetBranch: targetName,
+			DefaultName:  defaultBranchName(report.Check.Plan.DefaultRef, report.Check.Plan.Remote),
+			Integration:  report.Check.Plan.Integration.Name,
+			Remote:       report.Check.Plan.Remote,
+			Patterns:     decl.Patterns,
+			Facts:        decl.Facts,
+		})
+		if report.Reclaim.Skipped != "" {
+			report.Printed = append(report.Printed, "RECLAIM skipped: "+report.Reclaim.Skipped)
+		}
+		if len(report.Reclaim.Done) > 0 {
+			report.Printed = append(report.Printed, "RECLAIMED "+report.Check.Plan.Branch+" — "+strings.Join(report.Reclaim.Done, " "))
+		}
+		if report.Reclaim.Incomplete() {
+			report.Printed = append(report.Printed, "RECLAIM incomplete: "+strings.Join(report.Reclaim.Failed, "; "))
+		}
 	}
 	return report, nil
 }

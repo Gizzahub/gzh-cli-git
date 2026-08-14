@@ -163,10 +163,12 @@ func checkOtherBranches(ctx context.Context, g gitRepo, plan TargetPlan) []Check
 		if err != nil || !ok || sha == plan.BranchSHA {
 			continue
 		}
-		if anc, _ := g.isAncestor(ctx, sha, plan.BranchSHA); anc {
+		anc, ancErr := g.isAncestor(ctx, sha, plan.BranchSHA)
+		if ancErr != nil || anc {
 			continue
 		}
-		if anc, _ := g.isAncestor(ctx, plan.BranchSHA, sha); anc {
+		anc, ancErr = g.isAncestor(ctx, plan.BranchSHA, sha)
+		if ancErr != nil || anc {
 			continue
 		}
 		others++

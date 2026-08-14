@@ -63,18 +63,8 @@ func resolveTarget(ctx context.Context, g gitRepo, exec *gitcmd.Executor, opts C
 	}
 	plan.Remote = remote
 
-	if remote != "" {
-		if err := g.fetchPrune(ctx, remote); err != nil {
-			return plan, err
-		}
-		def, ok, err := g.symbolicRef(ctx, "refs/remotes/"+remote+"/HEAD")
-		if err != nil {
-			return plan, err
-		}
-		if !ok {
-			return plan, fmt.Errorf("%s/HEAD is missing; cannot detect the default branch", remote)
-		}
-		plan.DefaultRef = def
+	if err := planFetchDefault(ctx, g, remote, &plan); err != nil {
+		return plan, err
 	}
 
 	integ, err := ResolveIntegrationBranch(ctx, exec, g.dir, opts.IntegrationConfig)
@@ -115,6 +105,24 @@ func resolveTarget(ctx context.Context, g gitRepo, exec *gitcmd.Executor, opts C
 	plan.Target = target
 	plan.TargetSHA = tsha
 	return plan, nil
+}
+
+func planFetchDefault(ctx context.Context, g gitRepo, remote string, plan *TargetPlan) error {
+	if remote == "" {
+		return nil
+	}
+	if err := g.fetchPrune(ctx, remote); err != nil {
+		return err
+	}
+	def, ok, err := g.symbolicRef(ctx, "refs/remotes/"+remote+"/HEAD")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%s/HEAD is missing; cannot detect the default branch", remote)
+	}
+	plan.DefaultRef = def
+	return nil
 }
 
 func detectRemote(ctx context.Context, g gitRepo, branch string) (string, error) {

@@ -23,6 +23,7 @@ type ReclaimResult struct {
 	Failed  []string
 }
 
+// Incomplete reports a successful integrate whose reclaim did not finish.
 func (r ReclaimResult) Incomplete() bool {
 	return len(r.Failed) > 0
 }
@@ -64,19 +65,7 @@ func reclaimAfter(ctx context.Context, exec *gitcmd.Executor, g gitRepo, opts re
 		out.Failed = append(out.Failed, "list worktrees: "+err.Error())
 		return out
 	}
-	var taskTrees []listedWorktree
-	var targetWT, mainWT string
-	for i, wt := range trees {
-		if i == 0 {
-			mainWT = wt.Path
-		}
-		if wt.Branch == opts.Branch {
-			taskTrees = append(taskTrees, wt)
-		}
-		if wt.Branch == opts.TargetBranch && targetWT == "" {
-			targetWT = wt.Path
-		}
-	}
+	taskTrees, targetWT, mainWT := classifyReclaimTrees(trees, opts.Branch, opts.TargetBranch)
 	if len(taskTrees) > 1 {
 		paths := make([]string, 0, len(taskTrees))
 		for _, wt := range taskTrees {
@@ -103,79 +92,122 @@ func reclaimAfter(ctx context.Context, exec *gitcmd.Executor, g gitRepo, opts re
 		return out
 	}
 	sg := newGitRepo(exec, stand)
-
-	if taskWT != "" {
-		if nested := nestedIgnoredRepos(ctx, sg, taskWT); len(nested) > 0 {
-			out.Failed = append(out.Failed, "ignored nested git repo in worktree: "+strings.Join(nested, " "))
-			return out
-		}
-		res, err := sg.run(ctx, "worktree", "remove", taskWT)
-		if err != nil || (res != nil && res.ExitCode != 0) {
-			detail := ""
-			if res != nil {
-				detail = strings.TrimSpace(res.Stderr)
-			}
-			if err != nil && detail == "" {
-				detail = err.Error()
-			}
-			out.Failed = append(out.Failed, "worktree remove "+taskWT+": "+detail)
-			return out
-		}
-		out.Done = append(out.Done, "worktree("+taskWT+")")
-	}
-
-	res, err := sg.run(ctx, "branch", "-d", opts.Branch)
-	if err != nil || (res != nil && res.ExitCode != 0) {
-		detail := ""
-		if res != nil {
-			detail = strings.TrimSpace(res.Stderr)
-		}
-		if err != nil && detail == "" {
-			detail = err.Error()
-		}
-		out.Failed = append(out.Failed, "branch -d "+opts.Branch+": "+detail)
+	if !removeTaskWorktree(ctx, sg, taskWT, &out) {
 		return out
 	}
-	out.Done = append(out.Done, "local-branch")
-
-	if opts.Remote != "" {
-		if _, ok, err := sg.revParse(ctx, "refs/remotes/"+opts.Remote+"/"+opts.Branch); err != nil {
-			out.Failed = append(out.Failed, err.Error())
-			return out
-		} else if ok {
-			del, err := sg.run(ctx, "push", opts.Remote, "--delete", opts.Branch)
-			if err != nil || (del != nil && del.ExitCode != 0) {
-				heads, lsErr := sg.output(ctx, "ls-remote", "--heads", opts.Remote, opts.Branch)
-				if lsErr != nil || strings.TrimSpace(heads) != "" {
-					detail := ""
-					if del != nil {
-						detail = strings.TrimSpace(del.Stderr)
-					}
-					out.Failed = append(out.Failed, "push --delete "+opts.Remote+"/"+opts.Branch+": "+detail)
-					return out
-				}
-				out.Done = append(out.Done, "remote-branch(already-deleted)")
-			} else {
-				out.Done = append(out.Done, "remote-branch")
-			}
-		}
+	if !deleteLocalTaskBranch(ctx, sg, opts.Branch, &out) {
+		return out
 	}
 
-	if taskWT != "" {
-		parent := filepath.Dir(taskWT)
-		home, _ := os.UserHomeDir()
-		worktreesRoot := filepath.Join(home, "worktrees")
-		if parent != worktreesRoot {
-			if empty, err := dirEmpty(parent); err == nil && empty {
-				if err := os.Remove(parent); err != nil {
-					out.Failed = append(out.Failed, "rmdir "+parent+": "+err.Error())
-					return out
-				}
-				out.Done = append(out.Done, "parent-dir("+parent+")")
-			}
-		}
+	if !reclaimRemoteBranch(ctx, sg, opts, &out) {
+		return out
 	}
+	reclaimEmptyParent(taskWT, &out)
 	return out
+}
+
+func gitCmdDetail(res *gitcmd.Result, err error) string {
+	detail := ""
+	if res != nil {
+		detail = strings.TrimSpace(res.Stderr)
+	}
+	if err != nil && detail == "" {
+		detail = err.Error()
+	}
+	return detail
+}
+
+func removeTaskWorktree(ctx context.Context, sg gitRepo, taskWT string, out *ReclaimResult) bool {
+	if taskWT == "" {
+		return true
+	}
+	if nested := nestedIgnoredRepos(ctx, sg, taskWT); len(nested) > 0 {
+		out.Failed = append(out.Failed, "ignored nested git repo in worktree: "+strings.Join(nested, " "))
+		return false
+	}
+	res, err := sg.run(ctx, "worktree", "remove", taskWT)
+	if err != nil || (res != nil && res.ExitCode != 0) {
+		out.Failed = append(out.Failed, "worktree remove "+taskWT+": "+gitCmdDetail(res, err))
+		return false
+	}
+	out.Done = append(out.Done, "worktree("+taskWT+")")
+	return true
+}
+
+func deleteLocalTaskBranch(ctx context.Context, sg gitRepo, branch string, out *ReclaimResult) bool {
+	res, err := sg.run(ctx, "branch", "-d", branch)
+	if err != nil || (res != nil && res.ExitCode != 0) {
+		out.Failed = append(out.Failed, "branch -d "+branch+": "+gitCmdDetail(res, err))
+		return false
+	}
+	out.Done = append(out.Done, "local-branch")
+	return true
+}
+
+func classifyReclaimTrees(trees []listedWorktree, branch, target string) (taskTrees []listedWorktree, targetWT, mainWT string) {
+	for i, wt := range trees {
+		if i == 0 {
+			mainWT = wt.Path
+		}
+		if wt.Branch == branch {
+			taskTrees = append(taskTrees, wt)
+		}
+		if wt.Branch == target && targetWT == "" {
+			targetWT = wt.Path
+		}
+	}
+	return taskTrees, targetWT, mainWT
+}
+
+func reclaimRemoteBranch(ctx context.Context, sg gitRepo, opts reclaimOpts, out *ReclaimResult) bool {
+	if opts.Remote == "" {
+		return true
+	}
+	if _, ok, err := sg.revParse(ctx, "refs/remotes/"+opts.Remote+"/"+opts.Branch); err != nil {
+		out.Failed = append(out.Failed, err.Error())
+		return false
+	} else if !ok {
+		return true
+	}
+	del, err := sg.run(ctx, "push", opts.Remote, "--delete", opts.Branch)
+	if err == nil && (del == nil || del.ExitCode == 0) {
+		out.Done = append(out.Done, "remote-branch")
+		return true
+	}
+	heads, lsErr := sg.output(ctx, "ls-remote", "--heads", opts.Remote, opts.Branch)
+	if lsErr != nil || strings.TrimSpace(heads) != "" {
+		detail := ""
+		if del != nil {
+			detail = strings.TrimSpace(del.Stderr)
+		}
+		out.Failed = append(out.Failed, "push --delete "+opts.Remote+"/"+opts.Branch+": "+detail)
+		return false
+	}
+	out.Done = append(out.Done, "remote-branch(already-deleted)")
+	return true
+}
+
+func reclaimEmptyParent(taskWT string, out *ReclaimResult) {
+	if taskWT == "" {
+		return
+	}
+	parent := filepath.Dir(taskWT)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	if parent == filepath.Join(home, "worktrees") {
+		return
+	}
+	empty, err := dirEmpty(parent)
+	if err != nil || !empty {
+		return
+	}
+	if err := os.Remove(parent); err != nil {
+		out.Failed = append(out.Failed, "rmdir "+parent+": "+err.Error())
+		return
+	}
+	out.Done = append(out.Done, "parent-dir("+parent+")")
 }
 
 type listedWorktree struct {

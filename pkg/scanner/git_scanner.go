@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 )
 
@@ -38,16 +39,21 @@ func (s *GitRepoScanner) Scan(ctx context.Context) ([]*ScannedRepo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve root path: %w", err)
 	}
+	root, err := safefs.OpenRoot(absRoot)
+	if err != nil {
+		return nil, fmt.Errorf("open scan root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
 
 	var repos []*ScannedRepo
 
 	// Load .gitignore patterns if needed
 	var gitignorePatterns []string
 	if s.RespectGitIgnore {
-		gitignorePatterns = s.loadGitIgnorePatterns(absRoot)
+		gitignorePatterns = s.loadGitIgnorePatternsAt(root)
 	}
 
-	err = s.scanDir(ctx, absRoot, absRoot, 0, gitignorePatterns, &repos)
+	err = s.scanDir(ctx, root, absRoot, "", 0, gitignorePatterns, &repos)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +61,7 @@ func (s *GitRepoScanner) Scan(ctx context.Context) ([]*ScannedRepo, error) {
 	return repos, nil
 }
 
-func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, depth int, gitignorePatterns []string, repos *[]*ScannedRepo) error {
+func (s *GitRepoScanner) scanDir(ctx context.Context, fsRoot *safefs.Root, root, rel string, depth int, gitignorePatterns []string, repos *[]*ScannedRepo) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -68,15 +74,16 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 	}
 
 	// Check if current directory is a git repo
-	gitDir := filepath.Join(current, ".git")
-	if isDir(gitDir) {
+	current := filepath.Join(root, rel)
+	gitDir := filepath.Join(rel, ".git")
+	if info, err := fsRoot.Stat(gitDir); err == nil && info.IsDir() {
 		// Found a git repository
-		repo := s.analyzeRepo(current, depth)
+		repo := s.analyzeRepoAt(fsRoot, rel, current, depth)
 		*repos = append(*repos, repo)
 	}
 
 	// Scan subdirectories
-	entries, err := os.ReadDir(current)
+	entries, err := fsRoot.ReadDir(rel)
 	if err != nil {
 		return fmt.Errorf("read directory %s: %w", current, err)
 	}
@@ -87,7 +94,8 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 		}
 
 		name := entry.Name()
-		subPath := filepath.Join(current, name)
+		subRel := filepath.Join(rel, name)
+		subPath := filepath.Join(root, subRel)
 
 		// Skip .git directories
 		if name == ".git" {
@@ -107,7 +115,7 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 		}
 
 		// Recursively scan subdirectory
-		err = s.scanDir(ctx, root, subPath, depth+1, gitignorePatterns, repos)
+		err = s.scanDir(ctx, fsRoot, root, subRel, depth+1, gitignorePatterns, repos)
 		if err != nil {
 			return err
 		}
@@ -117,16 +125,26 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 }
 
 func (s *GitRepoScanner) analyzeRepo(repoPath string, depth int) *ScannedRepo {
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return &ScannedRepo{Name: filepath.Base(repoPath), Path: repoPath, Remotes: map[string]string{}, Depth: depth}
+	}
+	defer func() { _ = root.Close() }()
+
+	return s.analyzeRepoAt(root, "", repoPath, depth)
+}
+
+func (s *GitRepoScanner) analyzeRepoAt(root *safefs.Root, rel, repoPath string, depth int) *ScannedRepo {
 	name := filepath.Base(repoPath)
 
 	// Get remotes (name -> URL map)
-	remotes, err := s.getRemotes(repoPath)
+	remotes, err := s.getRemotesAt(root, rel)
 	if err != nil {
 		// Don't fail, just use empty remotes
 		remotes = make(map[string]string)
 	}
 
-	branch := s.getCurrentBranch(repoPath)
+	branch := s.getCurrentBranchAt(root, rel)
 
 	return &ScannedRepo{
 		Name:    name,
@@ -138,9 +156,19 @@ func (s *GitRepoScanner) analyzeRepo(repoPath string, depth int) *ScannedRepo {
 }
 
 func (s *GitRepoScanner) getRemotes(repoPath string) (map[string]string, error) {
-	gitConfig := filepath.Join(repoPath, ".git", "config")
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
 
-	file, err := os.Open(gitConfig) // #nosec G304 -- gitConfig is the .git/config file under the scanned repository.
+	return s.getRemotesAt(root, "")
+}
+
+func (s *GitRepoScanner) getRemotesAt(root *safefs.Root, repoRel string) (map[string]string, error) {
+	gitConfig := filepath.Join(repoRel, ".git", "config")
+
+	file, err := root.Open(gitConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +209,18 @@ func (s *GitRepoScanner) getRemotes(repoPath string) (map[string]string, error) 
 }
 
 func (s *GitRepoScanner) getCurrentBranch(repoPath string) string {
-	headPath := filepath.Join(repoPath, ".git", "HEAD")
-	data, err := os.ReadFile(headPath) // #nosec G304 -- headPath is the HEAD file under the scanned repository.
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = root.Close() }()
+
+	return s.getCurrentBranchAt(root, "")
+}
+
+func (s *GitRepoScanner) getCurrentBranchAt(root *safefs.Root, repoRel string) string {
+	headPath := filepath.Join(repoRel, ".git", "HEAD")
+	data, err := root.ReadFile(headPath)
 	if err != nil {
 		return ""
 	}
@@ -201,9 +239,19 @@ func (s *GitRepoScanner) getCurrentBranch(repoPath string) string {
 }
 
 func (s *GitRepoScanner) loadGitIgnorePatterns(root string) []string {
-	gitignorePath := filepath.Join(root, ".gitignore")
+	fsRoot, err := safefs.OpenRoot(root)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = fsRoot.Close() }()
 
-	file, err := os.Open(gitignorePath) // #nosec G304 -- gitignorePath is the .gitignore file under the scanned root.
+	return s.loadGitIgnorePatternsAt(fsRoot)
+}
+
+func (s *GitRepoScanner) loadGitIgnorePatternsAt(root *safefs.Root) []string {
+	gitignorePath := ".gitignore"
+
+	file, err := root.Open(gitignorePath)
 	if err != nil {
 		return nil
 	}

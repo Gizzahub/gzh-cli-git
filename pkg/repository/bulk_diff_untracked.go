@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 )
 
 // Reasons recorded in OmittedFile.Reason.
@@ -47,6 +49,14 @@ var errNotRegular = errors.New("not a regular file")
 // budget first and read through a limited reader.
 func (c *client) appendUntrackedDiffs(repoPath string, result *RepositoryDiffResult, opts BulkDiffOptions) {
 	var body strings.Builder
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		for _, file := range result.UntrackedFiles {
+			result.OmittedFiles = append(result.OmittedFiles, OmittedFile{Path: file, Reason: omitReasonReadError})
+		}
+		return
+	}
+	defer func() { _ = root.Close() }()
 
 	omit := func(path, reason string) {
 		result.OmittedFiles = append(result.OmittedFiles, OmittedFile{Path: path, Reason: reason})
@@ -60,9 +70,7 @@ func (c *client) appendUntrackedDiffs(repoPath string, result *RepositoryDiffRes
 			continue
 		}
 
-		abs := filepath.Join(repoPath, file)
-
-		info, err := os.Lstat(abs)
+		info, err := root.Lstat(file)
 		if err != nil {
 			omit(file, omitReasonReadError)
 			continue
@@ -73,7 +81,7 @@ func (c *client) appendUntrackedDiffs(repoPath string, result *RepositoryDiffRes
 		// never read, which is what previously leaked files such as /etc/hosts
 		// or ~/.aws/credentials into diff output and LLM prompts.
 		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(abs)
+			target, err := root.Readlink(file)
 			if err != nil {
 				omit(file, omitReasonReadError)
 				continue
@@ -93,7 +101,7 @@ func (c *client) appendUntrackedDiffs(repoPath string, result *RepositoryDiffRes
 			continue
 		}
 
-		content, err := readRegularFile(abs, int64(remaining))
+		content, err := readRegularFileAt(root, file, int64(remaining))
 		if err != nil {
 			omit(file, omitReasonReadError)
 			continue
@@ -122,7 +130,17 @@ func (c *client) appendUntrackedDiffs(repoPath string, result *RepositoryDiffRes
 // the earlier Lstat: that closes the window where a regular file is swapped for
 // a symlink between the two calls.
 func readRegularFile(path string, limit int64) ([]byte, error) {
-	f, err := os.Open(path) // #nosec G304 -- path comes from git ls-files inside the scanned repository.
+	root, err := safefs.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	return readRegularFileAt(root, filepath.Base(path), limit)
+}
+
+func readRegularFileAt(root *safefs.Root, path string, limit int64) ([]byte, error) {
+	f, err := root.Open(path)
 	if err != nil {
 		return nil, err
 	}

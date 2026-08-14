@@ -114,6 +114,30 @@ func TestGitRepoScanner_Scan(t *testing.T) {
 	}
 }
 
+func TestGitRepoScanner_ScanRejectsOutsideGitSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), ".git")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := filepath.Join(root, "repo")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, ".git")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	repos, err := (&GitRepoScanner{RootPath: root, MaxDepth: 1}).Scan(context.Background())
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+	if len(repos) != 0 {
+		t.Fatalf("Scan found %d repos through outside .git symlink, want 0: %+v", len(repos), repos)
+	}
+}
+
 func TestGitRepoScanner_Scan_WithExclusion(t *testing.T) {
 	tmpDir := t.TempDir()
 

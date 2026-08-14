@@ -7,12 +7,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 )
 
 const (
@@ -40,7 +40,14 @@ func Guard(ctx context.Context, exec *gitcmd.Executor, repoPath string) ([]Findi
 	if err != nil {
 		return nil, err
 	}
-	return inspectFiles(repoPath, pending), nil
+
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("open repository root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	return inspectFilesAt(root, pending), nil
 }
 
 // pendingFile is one path that "git add -A" would stage.
@@ -102,12 +109,20 @@ func parsePorcelainZ(out string) []pendingFile {
 // file list rather than running git itself, so the classification rules can be
 // tested against files on disk without a repository.
 func inspectFiles(repoPath string, pending []pendingFile) []Finding {
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = root.Close() }()
+
+	return inspectFilesAt(root, pending)
+}
+
+func inspectFilesAt(root *safefs.Root, pending []pendingFile) []Finding {
 	var findings []Finding
 
 	for _, file := range pending {
-		full := filepath.Join(repoPath, file.path)
-
-		info, err := os.Stat(full)
+		info, err := root.Stat(file.path)
 		if err != nil || info.IsDir() {
 			// Gone, unreadable, or a directory record: nothing to weigh.
 			continue
@@ -134,7 +149,7 @@ func inspectFiles(repoPath string, pending []pendingFile) []Finding {
 			}
 		}
 
-		if detail := scanContent(full, info.Size()); detail != "" {
+		if detail := scanContentAt(root, file.path, info.Size()); detail != "" {
 			findings = append(findings, Finding{Kind: FindingSecret, File: file.path, Detail: detail})
 		}
 	}
@@ -250,7 +265,17 @@ func scanContent(full string, size int64) string {
 		return ""
 	}
 
-	file, err := os.Open(full) // #nosec G304 -- full is a repository-relative path obtained from git status.
+	root, err := safefs.OpenRoot(filepath.Dir(full))
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = root.Close() }()
+
+	return scanContentAt(root, filepath.Base(full), size)
+}
+
+func scanContentAt(root *safefs.Root, path string, size int64) string {
+	file, err := root.Open(path)
 	if err != nil {
 		return ""
 	}

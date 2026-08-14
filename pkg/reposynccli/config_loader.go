@@ -14,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/reposync"
@@ -766,7 +767,13 @@ func expandEnvVar(s string) string {
 
 // scanGitRepos scans a directory for git repositories (depth 1).
 func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
-	entries, err := os.ReadDir(dir)
+	root, err := safefs.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	entries, err := root.ReadDir(".")
 	if err != nil {
 		return nil, err
 	}
@@ -781,13 +788,14 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 			continue
 		}
 
-		repoPath := filepath.Join(dir, entry.Name())
-		gitDir := filepath.Join(repoPath, ".git")
+		repoRel := entry.Name()
+		repoPath := filepath.Join(dir, repoRel)
+		gitDir := filepath.Join(repoRel, ".git")
 
 		// Check if it's a git repository
-		if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
+		if info, err := root.Stat(gitDir); err == nil && info.IsDir() {
 			// Get remote URL if available
-			remoteURL := getGitRemoteURL(repoPath)
+			remoteURL := getGitRemoteURLAt(root, repoRel)
 
 			repos = append(repos, reposync.RepoSpec{
 				Name:       entry.Name(),
@@ -802,8 +810,18 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 
 // getGitRemoteURL gets the origin remote URL from a git repository.
 func getGitRemoteURL(repoPath string) string {
-	configPath := filepath.Join(repoPath, ".git", "config")
-	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is the repository's own .git/config path.
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = root.Close() }()
+
+	return getGitRemoteURLAt(root, "")
+}
+
+func getGitRemoteURLAt(root *safefs.Root, repoRel string) string {
+	configPath := filepath.Join(repoRel, ".git", "config")
+	data, err := root.ReadFile(configPath)
 	if err != nil {
 		return ""
 	}

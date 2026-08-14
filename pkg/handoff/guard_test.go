@@ -160,6 +160,22 @@ func TestInspectFilesIgnoresMissingPaths(t *testing.T) {
 	}
 }
 
+func TestInspectFilesDoesNotFollowOutsideSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.env")
+	if err := os.WriteFile(outside, []byte("AWS_SECRET_ACCESS_KEY=must-not-be-read\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked.txt")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	findings := inspectFiles(root, []pendingFile{{path: "linked.txt", untracked: true}})
+	if len(findings) != 0 {
+		t.Fatalf("findings = %+v, want no finding for outside symlink", findings)
+	}
+}
+
 func TestParsePorcelainZ(t *testing.T) {
 	// Modified tracked file, untracked file, staged deletion.
 	out := " M pkg/app.go\x00?? .env\x00D  old.go\x00"

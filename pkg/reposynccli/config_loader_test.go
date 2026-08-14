@@ -164,6 +164,30 @@ repositories:
 	}
 }
 
+func TestScanGitReposRejectsOutsideGitSymlink(t *testing.T) {
+	workspace := t.TempDir()
+	outside := filepath.Join(t.TempDir(), ".git")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := filepath.Join(workspace, "repo")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, ".git")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	repos, err := scanGitRepos(workspace)
+	if err != nil {
+		t.Fatalf("scanGitRepos: %v", err)
+	}
+	if len(repos) != 0 {
+		t.Fatalf("scanGitRepos found %d repository through outside .git symlink, want 0: %+v", len(repos), repos)
+	}
+}
+
 func TestFileSpecLoader_Load_BasicConfig(t *testing.T) {
 	yaml := `
 strategy: reset

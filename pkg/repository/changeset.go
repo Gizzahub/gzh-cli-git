@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/porcelain"
+	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 )
 
 // ChangeScope names the two-endpoint comparison that defines a change set.
@@ -306,7 +307,17 @@ func parseNumstat(out string) (additions, deletions, files int) {
 // than buffered, because untracked trees are unbounded and a bulk run may walk
 // many of them.
 func countAddedLines(path string) (int, error) {
-	f, err := os.Open(path) // #nosec G304 -- path comes from git status inside the scanned repository.
+	root, err := safefs.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = root.Close() }()
+
+	return countAddedLinesAt(root, filepath.Base(path))
+}
+
+func countAddedLinesAt(root *safefs.Root, path string) (int, error) {
+	f, err := root.Open(path)
 	if err != nil {
 		return 0, err
 	}
@@ -375,14 +386,18 @@ func countAddedLines(path string) (int, error) {
 // Symlinks are counted as the single line git stores (the target path) without
 // being opened, so the link target's size and contents stay irrelevant.
 func addUntrackedAdditions(repoPath string, cs *ChangeSet) {
+	root, err := safefs.OpenRoot(repoPath)
+	if err != nil {
+		return
+	}
+	defer func() { _ = root.Close() }()
+
 	for _, entry := range cs.Entries {
 		if !entry.Untracked {
 			continue
 		}
 
-		abs := filepath.Join(repoPath, entry.Path)
-
-		info, err := os.Lstat(abs)
+		info, err := root.Lstat(entry.Path)
 		if err != nil {
 			continue
 		}
@@ -394,7 +409,7 @@ func addUntrackedAdditions(repoPath string, cs *ChangeSet) {
 			continue
 		}
 
-		n, err := countAddedLines(abs)
+		n, err := countAddedLinesAt(root, entry.Path)
 		if err != nil {
 			continue
 		}

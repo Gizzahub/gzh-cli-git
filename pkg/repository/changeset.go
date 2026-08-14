@@ -306,7 +306,7 @@ func parseNumstat(out string) (additions, deletions, files int) {
 // than buffered, because untracked trees are unbounded and a bulk run may walk
 // many of them.
 func countAddedLines(path string) (int, error) {
-	f, err := os.Open(path) //nolint:gosec // path comes from git status inside the scanned repository
+	f, err := os.Open(path) // #nosec G304 -- path comes from git status inside the scanned repository.
 	if err != nil {
 		return 0, err
 	}

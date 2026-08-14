@@ -28,7 +28,7 @@ type Row struct {
 
 // LoadFile reads a TSV corpus from path.
 func LoadFile(path string) ([]Row, error) {
-	f, err := os.Open(path) //nolint:gosec // test corpus path supplied by the caller
+	f, err := os.Open(path) // #nosec G304 -- test corpus path is explicitly supplied by the test caller.
 	if err != nil {
 		return nil, err
 	}

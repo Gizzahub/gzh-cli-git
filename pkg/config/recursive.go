@@ -64,7 +64,7 @@ func loadConfigRecursiveWithVisited(path, configFile string, visited map[string]
 	}
 	visited[absConfigPath] = true
 
-	data, err := os.ReadFile(absConfigPath)
+	data, err := os.ReadFile(absConfigPath) // #nosec G304 -- absConfigPath is resolved from the configured workspace root.
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config %s: %w", absConfigPath, err)
 	}

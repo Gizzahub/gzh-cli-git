@@ -122,7 +122,7 @@ func (f CommandFactory) newValidateCmd() *cobra.Command {
 
 // validateConfigFile performs comprehensive validation on a config file.
 func validateConfigFile(path string) (*ValidationResult, error) {
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) // #nosec G304 -- path is the explicit config file selected for validation.
 	if err != nil {
 		return nil, err
 	}

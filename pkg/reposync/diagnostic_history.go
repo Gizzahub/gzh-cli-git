@@ -89,7 +89,7 @@ func (s *FileHistoryStore) Load(ctx context.Context, limit int) ([]HistorySnapsh
 		}
 
 		entryPath := filepath.Join(s.BaseDir, entry.Name())
-		data, err := os.ReadFile(entryPath)
+		data, err := os.ReadFile(entryPath) // #nosec G304 -- entryPath is constrained to the diagnostic history base directory.
 		if err != nil {
 			continue // Skip unreadable files
 		}

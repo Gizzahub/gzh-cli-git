@@ -192,7 +192,7 @@ func (c *client) processExecRepository(ctx context.Context, rootDir, repoPath st
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(runCtx, opts.Command, opts.Args...) //nolint:gosec // intentional user-supplied argv, no shell
+	cmd := exec.CommandContext(runCtx, opts.Command, opts.Args...) // #nosec G204 -- this API intentionally executes the caller's argv directly, without a shell.
 	cmd.Dir = repoPath
 	cmd.Env = append(
 		os.Environ(),

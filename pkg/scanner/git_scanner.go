@@ -56,6 +56,12 @@ func (s *GitRepoScanner) Scan(ctx context.Context) ([]*ScannedRepo, error) {
 }
 
 func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, depth int, gitignorePatterns []string, repos *[]*ScannedRepo) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// Check depth limit
 	if depth > s.MaxDepth {
 		return nil
@@ -65,13 +71,8 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 	gitDir := filepath.Join(current, ".git")
 	if isDir(gitDir) {
 		// Found a git repository
-		repo, err := s.analyzeRepo(root, current, depth)
-		if err != nil {
-			// Log error but continue scanning
-			fmt.Fprintf(os.Stderr, "Warning: failed to analyze repo at %s: %v\n", current, err)
-		} else {
-			*repos = append(*repos, repo)
-		}
+		repo := s.analyzeRepo(current, depth)
+		*repos = append(*repos, repo)
 	}
 
 	// Scan subdirectories
@@ -115,7 +116,7 @@ func (s *GitRepoScanner) scanDir(ctx context.Context, root, current string, dept
 	return nil
 }
 
-func (s *GitRepoScanner) analyzeRepo(root, repoPath string, depth int) (*ScannedRepo, error) {
+func (s *GitRepoScanner) analyzeRepo(repoPath string, depth int) *ScannedRepo {
 	name := filepath.Base(repoPath)
 
 	// Get remotes (name -> URL map)
@@ -133,13 +134,13 @@ func (s *GitRepoScanner) analyzeRepo(root, repoPath string, depth int) (*Scanned
 		Remotes: remotes,
 		Depth:   depth,
 		Branch:  branch,
-	}, nil
+	}
 }
 
 func (s *GitRepoScanner) getRemotes(repoPath string) (map[string]string, error) {
 	gitConfig := filepath.Join(repoPath, ".git", "config")
 
-	file, err := os.Open(gitConfig)
+	file, err := os.Open(gitConfig) // #nosec G304 -- gitConfig is the .git/config file under the scanned repository.
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +182,7 @@ func (s *GitRepoScanner) getRemotes(repoPath string) (map[string]string, error) 
 
 func (s *GitRepoScanner) getCurrentBranch(repoPath string) string {
 	headPath := filepath.Join(repoPath, ".git", "HEAD")
-	data, err := os.ReadFile(headPath)
+	data, err := os.ReadFile(headPath) // #nosec G304 -- headPath is the HEAD file under the scanned repository.
 	if err != nil {
 		return ""
 	}
@@ -202,7 +203,7 @@ func (s *GitRepoScanner) getCurrentBranch(repoPath string) string {
 func (s *GitRepoScanner) loadGitIgnorePatterns(root string) []string {
 	gitignorePath := filepath.Join(root, ".gitignore")
 
-	file, err := os.Open(gitignorePath)
+	file, err := os.Open(gitignorePath) // #nosec G304 -- gitignorePath is the .gitignore file under the scanned root.
 	if err != nil {
 		return nil
 	}

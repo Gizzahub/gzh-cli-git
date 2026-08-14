@@ -6,7 +6,7 @@
 # ==============================================================================
 
 .PHONY: fmt format format-all format-check format-diff format-imports format-simplify format-ci format-strict format-list format-file format-install-tools format-md format-md-check format-md-diff
-.PHONY: pre-commit-install dev dev-fast verify ci-local pr-check lint-help fmt-diff lint-diff quality-fast quality-push
+.PHONY: pre-commit-install dev dev-fast verify ci-local pr-check lint-help fmt-diff lint-diff quality-fast quality-push quality-build quality-check
 
 # ==============================================================================
 # Code Formatting Targets
@@ -14,6 +14,30 @@
 
 format: format-simplify ## quick and simple formatting (default)
 fmt: format-simplify
+
+# This target is deliberately source-non-mutating. It is the formatting leg of
+# the canonical quality gate; use format/format-simplify when files should change.
+format-check: ## check Go and changed Markdown formatting without modifying files
+	@command -v gofumpt >/dev/null 2>&1 || { echo "gofumpt is required (run: make install-format-tools)" >&2; exit 1; }
+	@command -v goimports >/dev/null 2>&1 || { echo "goimports is required (run: make install-format-tools)" >&2; exit 1; }
+	@command -v mdformat >/dev/null 2>&1 || { echo "mdformat is required (run: make install-format-tools)" >&2; exit 1; }
+	@echo -e "$(CYAN)Checking Go formatting...$(RESET)"
+	@GO_FILES=$$(gofumpt -l .); \
+	if [ -n "$$GO_FILES" ]; then \
+		echo "Go files requiring gofumpt:"; echo "$$GO_FILES"; exit 1; \
+	fi
+	@GOIMPORT_FILES=$$(goimports -l .); \
+	if [ -n "$$GOIMPORT_FILES" ]; then \
+		echo "Go files requiring import formatting:"; echo "$$GOIMPORT_FILES"; exit 1; \
+	fi
+	@echo -e "$(CYAN)Checking changed Markdown formatting...$(RESET)"
+	@BASE_REF=$$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master); \
+	BASE=$$(git merge-base HEAD "$$BASE_REF" 2>/dev/null || echo HEAD); \
+	FILES=$$({ git diff --name-only --diff-filter=ACMR "$$BASE"...HEAD 2>/dev/null; git diff --name-only --diff-filter=ACMR HEAD; } | sed -n '/\.md$$/p' | sort -u); \
+	if [ -n "$$FILES" ]; then \
+		mdformat --check $$FILES; \
+	fi
+	@echo -e "$(GREEN)✅ Formatting checks passed!$(RESET)"
 
 format-simplify: format-install-tools ## quick basic formatting with gofumpt, goimports, and mdformat
 	@echo -e "$(CYAN)🚀 Quick formatting...$(RESET)"
@@ -33,8 +57,9 @@ format-md: ## format all markdown files with mdformat
 	@find . -name "*.md" -type f -not -path "./vendor/*" -not -path "./.git/*" | xargs -r mdformat
 	@echo -e "$(GREEN)✅ Markdown formatting complete!$(RESET)"
 
-format-md-check: format-install-tools ## check markdown files that need formatting
+format-md-check: ## check markdown files that need formatting (read-only)
 	@echo -e "$(CYAN)📋 Checking markdown formatting...$(RESET)"
+	@command -v mdformat >/dev/null 2>&1 || { echo "mdformat is required (run: make install-format-tools)" >&2; exit 1; }
 	@BASE_REF=$$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master); \
 		BASE=$$(git merge-base HEAD "$$BASE_REF" 2>/dev/null || echo HEAD); \
 		FILES=$$({ git diff --name-only --diff-filter=ACMR "$$BASE"...HEAD; git diff --name-only --diff-filter=ACMR HEAD; } | grep '\.md$$' | sort -u || true); \
@@ -83,14 +108,7 @@ format-diff: ## show formatting differences
 		echo -e "$(GREEN)✅ No formatting differences found!$(RESET)"; \
 	fi
 
-format-install-tools: ## install advanced formatting tools
-	@echo -e "$(CYAN)Installing formatting tools...$(RESET)"
-	@which goimports > /dev/null || (echo "Installing goimports..." && go install golang.org/x/tools/cmd/goimports@latest)
-	@which gofumpt > /dev/null || (echo "Installing gofumpt..." && go install mvdan.cc/gofumpt@latest)
-	@which gci > /dev/null || (echo "Installing gci..." && go install github.com/daixiang0/gci@latest)
-	@command -v uv >/dev/null 2>&1 || { echo "uv is required to install mdformat" >&2; exit 1; }
-	@command -v mdformat >/dev/null 2>&1 || (echo "Installing mdformat..." && uv tool install --with mdformat-gfm --with mdformat-tables mdformat)
-	@echo -e "$(GREEN)✅ All formatting tools installed!$(RESET)"
+format-install-tools: install-format-tools ## install advanced formatting tools
 
 format-file: ## format specific files with gofumpt and goimports (usage: make format-file file1.go file2.go ...)
 	@if [ -z "$(MAKECMDGOALS)" ] || [ "$(words $(MAKECMDGOALS))" -eq 1 ]; then \
@@ -141,9 +159,10 @@ fmt-diff: ## format only changed files (fast, for pre-commit)
 
 .PHONY: lint format lint-check lint-fix lint-new lint-ci lint-count lint-summary lint-stats lint-status lint-json
 
-lint-check: install-golangci-lint ## check lint issues without fixing (exit code reflects status)
+lint-check: ## check all lint issues without fixing (exit code reflects status)
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint is required (run: make install-golangci-lint)" >&2; exit 1; }
 	@echo -e "$(CYAN)Running golangci-lint...$(RESET)"
-	GOWORK=off golangci-lint run -c .golangci.yml
+	GOWORK=off golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0
 
 lint: lint-check ## alias for lint-check
 
@@ -229,21 +248,24 @@ lint-json: install-golangci-lint ## export lint results to JSON for further anal
 security: security-deps security-code ## run all security checks
 	@echo -e "$(GREEN)✅ Security checks completed!$(RESET)"
 
-security-deps: ## check dependencies for vulnerabilities
+security-deps: ## check dependencies for vulnerabilities (read-only, fail-closed)
 	@echo -e "$(CYAN)Checking dependencies for vulnerabilities...$(RESET)"
-	@go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@command -v govulncheck >/dev/null 2>&1 || { echo "govulncheck is required (run: make install-vuln-tools)" >&2; exit 1; }
+	@GOWORK=off govulncheck ./...
 
-security-code: ## run security code analysis
+security-code: ## run direct security code analysis (read-only, fail-closed)
 	@echo -e "$(CYAN)Running security code analysis with gosec...$(RESET)"
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
-	@GOWORK=off gosec -exclude=G104,G204,G304 ./...
+	@command -v gosec >/dev/null 2>&1 || { echo "gosec is required (run: make install-security-tools)" >&2; exit 1; }
+	@GOWORK=off gosec ./...
 
-security-json: ## run security analysis and output JSON/SARIF report
+security-json: ## run security analysis and output JSON/SARIF report (fail-closed)
 	@echo -e "$(CYAN)Running security analysis with JSON/SARIF output...$(RESET)"
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
-	@gosec -fmt=sarif -out=gosec-report.json -config=.gosec.yaml ./... 2>/dev/null || \
-		gosec -fmt=sarif -out=gosec-report.json ./... 2>/dev/null || \
-		(echo -e "$(YELLOW)⚠️  Security scan completed with warnings$(RESET)" && touch gosec-report.json)
+	@command -v gosec >/dev/null 2>&1 || { echo "gosec is required (run: make install-security-tools)" >&2; exit 1; }
+	@if [ -f .gosec.yaml ]; then \
+		GOWORK=off gosec -fmt=sarif -out=gosec-report.json -config=.gosec.yaml ./...; \
+	else \
+		GOWORK=off gosec -fmt=sarif -out=gosec-report.json ./...; \
+	fi
 	@echo -e "$(GREEN)✅ Security report generated: gosec-report.json$(RESET)"
 
 # ==============================================================================
@@ -257,17 +279,17 @@ analyze: analyze-complexity analyze-unused analyze-dupl ## run comprehensive cod
 
 analyze-complexity: ## analyze code complexity
 	@echo -e "$(CYAN)Analyzing code complexity...$(RESET)"
-	@command -v gocyclo >/dev/null 2>&1 || { echo "Installing gocyclo..." && go install github.com/fzipp/gocyclo/cmd/gocyclo@latest; }
+	@command -v gocyclo >/dev/null 2>&1 || { echo "Installing gocyclo v0.6.0..." && go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0; }
 	@gocyclo -over 10 -avg .
 
 analyze-unused: ## find unused code
 	@echo -e "$(CYAN)Finding unused code...$(RESET)"
-	@command -v staticcheck >/dev/null 2>&1 || { echo "Installing staticcheck..." && go install honnef.co/go/tools/cmd/staticcheck@latest; }
+	@command -v staticcheck >/dev/null 2>&1 || { echo "Installing staticcheck 2025.1.1..." && go install honnef.co/go/tools/cmd/staticcheck@2025.1.1; }
 	@staticcheck -checks U1000 ./...
 
 analyze-dupl: ## find duplicate code
 	@echo -e "$(CYAN)Checking for duplicate code...$(RESET)"
-	@command -v dupl >/dev/null 2>&1 || { echo "Installing dupl..." && go install github.com/mibk/dupl@latest; }
+	@command -v dupl >/dev/null 2>&1 || { echo "Installing dupl v0.3.0..." && go install github.com/mibk/dupl@v0.3.0; }
 	@dupl -threshold 50 .
 
 # ==============================================================================
@@ -316,16 +338,44 @@ pre-commit-update: ## update pre-commit hooks to latest versions
 # Quality Assurance Workflows
 # ==============================================================================
 
-.PHONY: quality quality-fix lint-all
+.PHONY: quality quality-strict quality-fix quality-build quality-check-validate lint-all
 
-# lint-check is intentionally omitted from the default quality gate: full-repo
-# golangci-lint is slow for pre-commit, and CLAUDE.md's "make quality" path is
-# the everyday gate. Use quality-strict (or make lint) when lint is required.
-quality: fmt security ## run comprehensive quality checks (without lint-check)
-	@echo -e "$(GREEN)✅ All quality checks passed!$(RESET)"
+# quality-check is the one canonical source-non-mutating gate. Keep build/tests
+# here instead of in each workflow wrapper so security and test work is never
+# silently skipped or repeated. Build/test artifacts are kept outside the
+# repository and removed when each target exits.
+quality-build: ## build the application in a private temporary directory
+	@set -eu; \
+	export GOWORK=off; \
+	quality_tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/gzh-cli-quality-build.XXXXXX"); \
+	trap 'rm -rf "$$quality_tmp"' EXIT HUP INT TERM; \
+	echo -e "$(CYAN)Building $(BINARY) in a temporary directory...$(RESET)"; \
+	go build -ldflags "-X main.version=$(VERSION)" -o "$$quality_tmp/$(BINARY)" ./cmd/gz-git; \
+	test -x "$$quality_tmp/$(BINARY)"
 
-quality-strict: fmt lint-check security ## run strict quality checks with linting
-	@echo -e "$(GREEN)✅ All strict quality checks passed!$(RESET)"
+quality-check: export GOWORK := off
+quality-check: format-check lint-check security-code security-deps quality-build test-unit-quality test-integration-quality test-e2e-only ## run the canonical source-non-mutating quality gate
+	@echo -e "$(GREEN)✅ Canonical quality gate passed!$(RESET)"
+
+quality: quality-check ## compatibility alias for the canonical quality gate
+
+quality-strict: quality-check ## compatibility alias for the canonical quality gate
+
+quality-check-validate: ## validate quality workflow delegation and fail-closed commands
+	@set -eu; \
+	for target in verify pr-check full ci-local; do \
+		graph=$$($(MAKE) --no-print-directory -n "$$target"); \
+		printf '%s\n' "$$graph" | grep -Fq 'Canonical quality gate passed!'; \
+		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'GOWORK=off gosec ./...' || true)" -eq 1 ]; \
+		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'GOWORK=off govulncheck ./...' || true)" -eq 1 ]; \
+		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'go test -short --cover' || true)" -eq 1 ]; \
+		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'go test -short -count=1 -v ./tests/integration/...' || true)" -eq 1 ]; \
+		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'go test -tags=e2e' || true)" -eq 1 ]; \
+	done
+	@if sed -n '/^security-deps:/,/^# ====/p' .make/quality.mk | grep -Eq '\|\|[[:space:]]*(true|touch)'; then \
+		echo "security target is fail-open" >&2; exit 1; \
+	fi
+	@echo -e "$(GREEN)✅ Quality workflow validation passed!$(RESET)"
 
 quality-fix: fmt lint-fix ## apply automatic quality fixes
 	@echo -e "$(GREEN)✅ Code quality fixes applied!$(RESET)"
@@ -352,6 +402,7 @@ quality-info: ## show code quality information and targets
 	@echo "╚══════════════════════════════════════════════════════════════════════════════╝"
 	@echo -e "$(RESET)"
 	@echo -e "$(GREEN)🎨 Formatting Tools:$(RESET)"
+	@echo -e "  • $(CYAN)format-check$(RESET)          Read-only Go + changed Markdown formatting check"
 	@echo -e "  • $(CYAN)format$(RESET)                기본 포맷팅 (Go + Markdown)"
 	@echo -e "  • $(CYAN)format-simplify$(RESET)       신속한 기본 포맷팅 (Go + Markdown)"
 	@echo -e "  • $(CYAN)format-strict$(RESET)         엄격한 포맷팅 (모든 Go 도구 사용)"
@@ -374,7 +425,9 @@ quality-info: ## show code quality information and targets
 	@echo -e "  • $(CYAN)security-code$(RESET)         Static security analysis with gosec"
 	@echo ""
 	@echo -e "$(GREEN)🔄 Quality Workflows:$(RESET)"
-	@echo -e "  • $(CYAN)quality$(RESET)               Comprehensive quality pipeline"
+	@echo -e "  • $(CYAN)quality-check$(RESET)         Canonical source-non-mutating quality pipeline"
+	@echo -e "  • $(CYAN)quality-check-validate$(RESET) Validate workflow dependency graph"
+	@echo -e "  • $(CYAN)quality$(RESET)               Alias for quality-check"
 	@echo -e "  • $(CYAN)quality-fix$(RESET)           Apply all automatic fixes"
 	@echo -e "  • $(CYAN)lint-all$(RESET)              Complete linting workflow"
 

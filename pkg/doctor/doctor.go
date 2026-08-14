@@ -130,7 +130,15 @@ func checkTempDir() []CheckResult {
 			Detail:   err.Error(),
 		}}
 	}
-	os.Remove(testFile)
+	if err := os.Remove(testFile); err != nil {
+		return []CheckResult{{
+			Name:     "temp-dir",
+			Category: CategorySystem,
+			Status:   StatusError,
+			Message:  fmt.Sprintf("cannot clean up temp directory test file: %s", tmpDir),
+			Detail:   err.Error(),
+		}}
+	}
 
 	return []CheckResult{{
 		Name:     "temp-dir",

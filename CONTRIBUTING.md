@@ -102,7 +102,11 @@ git checkout -b fix/your-bug-fix
 Before committing, ensure all quality checks pass:
 
 ```bash
-# Run all quality checks (formatting, linting, tests)
+# Run the canonical, source-non-mutating quality gate (Go + changed Markdown format,
+# unlimited lint, gosec, govulncheck, build, unit tests, and self-contained E2E)
+make quality-check
+
+# `make quality` remains a compatibility alias for quality-check.
 make quality
 
 # Or run individually:
@@ -577,7 +581,7 @@ ______________________________________________________________________
 1. **Run quality checks:**
 
    ```bash
-   make quality
+   make quality-check
    ```
 
 1. **Update documentation** if needed

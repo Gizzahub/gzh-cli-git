@@ -4,6 +4,7 @@
 package reposync
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -188,7 +189,7 @@ func prepareSSHAuth(result *AuthResult, auth AuthConfig) error {
 		keyPath = tempPath
 		result.TempKeyPath = tempPath
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("Temporary SSH key created at: %s (consider removing after use)", tempPath))
+			fmt.Sprintf("Temporary SSH key created at: %s (will be removed after the git operation)", tempPath))
 	}
 
 	// If no key configured, fallback to system default
@@ -207,7 +208,9 @@ func prepareSSHAuth(result *AuthResult, auth AuthConfig) error {
 func buildSSHCommand(keyPath string, sshPort int) string {
 	// Base command with key and IdentitiesOnly
 	// IdentitiesOnly=yes prevents ssh from trying other keys
-	cmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", keyPath)
+	// GIT_SSH_COMMAND is evaluated by a command shell. Quote the key path as
+	// one argument so spaces and shell metacharacters cannot alter the command.
+	cmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", quoteShellArg(keyPath))
 
 	// Add custom port if specified
 	if sshPort > 0 && sshPort != 22 {
@@ -215,6 +218,16 @@ func buildSSHCommand(keyPath string, sshPort int) string {
 	}
 
 	return cmd
+}
+
+// quoteShellArg quotes one argument in the POSIX shell command language used
+// to execute GIT_SSH_COMMAND. Git for Windows also evaluates this variable
+// through its bundled sh, so using one contract on every platform avoids
+// leaving Windows paths vulnerable to shell metacharacters.
+func quoteShellArg(arg string) string {
+	// A single-quoted POSIX argument treats every byte literally. The only
+	// character that needs escaping is a single quote itself.
+	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
 }
 
 // createTempSSHKey creates a temporary file containing the SSH key content.
@@ -231,29 +244,47 @@ func createTempSSHKey(content string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer tempFile.Close()
+	cleanupOnError := func(cause error) (string, error) {
+		if closeErr := tempFile.Close(); closeErr != nil {
+			cause = errors.Join(cause, fmt.Errorf("close temporary SSH key: %w", closeErr))
+		}
+		if removeErr := os.Remove(tempFile.Name()); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			cause = errors.Join(cause, fmt.Errorf("remove temporary SSH key: %w", removeErr))
+		}
+		return "", cause
+	}
 
 	// Set restrictive permissions (required by SSH)
 	if err := os.Chmod(tempFile.Name(), 0o600); err != nil {
-		os.Remove(tempFile.Name())
-		return "", fmt.Errorf("failed to set file permissions: %w", err)
+		return cleanupOnError(fmt.Errorf("failed to set file permissions: %w", err))
 	}
 
 	// Write key content
 	if _, err := tempFile.WriteString(content); err != nil {
-		os.Remove(tempFile.Name())
-		return "", fmt.Errorf("failed to write key content: %w", err)
+		return cleanupOnError(fmt.Errorf("failed to write key content: %w", err))
 	}
 
 	// Ensure content ends with newline (required by SSH)
 	if !strings.HasSuffix(content, "\n") {
 		if _, err := tempFile.WriteString("\n"); err != nil {
-			os.Remove(tempFile.Name())
-			return "", fmt.Errorf("failed to write newline: %w", err)
+			return cleanupOnError(fmt.Errorf("failed to write newline: %w", err))
 		}
+	}
+	if err := tempFile.Close(); err != nil {
+		return cleanupOnError(fmt.Errorf("failed to close temporary SSH key: %w", err))
 	}
 
 	return tempFile.Name(), nil
+}
+
+func removeTempSSHKey(path string) error {
+	if path == "" {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove temporary SSH key %s: %w", path, err)
+	}
+	return nil
 }
 
 // expandHomePath expands ~ to home directory.

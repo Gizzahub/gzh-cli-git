@@ -249,7 +249,7 @@ func (e GitExecutor) runCloneOrUpdate(ctx context.Context, client repo.Client, l
 		return res, err
 	}
 
-	// Log warnings (e.g., temp SSH key cleanup reminder)
+	// Log warnings (e.g., temporary key creation)
 	for _, warning := range authResult.Warnings {
 		logger.Warn(warning)
 	}
@@ -283,6 +283,11 @@ func (e GitExecutor) runCloneOrUpdate(ctx context.Context, client repo.Client, l
 			delay := time.Duration(i+1) * 300 * time.Millisecond
 			sink.OnProgress(action, fmt.Sprintf("retrying (%d/%d): %v", i+1, attempts-1, err), 0)
 			time.Sleep(delay)
+		}
+	}
+	if authResult.TempKeyPath != "" {
+		if cleanupErr := removeTempSSHKey(authResult.TempKeyPath); cleanupErr != nil {
+			err = errors.Join(err, cleanupErr)
 		}
 	}
 
@@ -352,13 +357,13 @@ func collectPostSyncStatus(ctx context.Context, repoPath string) *PostSyncStatus
 	ps := &PostSyncStatus{}
 
 	// Branch name
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "branch", "--show-current")
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "branch", "--show-current") // #nosec G204 -- repoPath is the validated repository selected by the sync plan; arguments are fixed.
 	if out, err := cmd.Output(); err == nil {
 		ps.Branch = strings.TrimSpace(string(out))
 	}
 
 	// Ahead/behind upstream
-	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "rev-list", "--left-right", "--count", "HEAD...@{upstream}") // #nosec G204 -- fixed git status query in the selected repository.
 	if out, err := cmd.Output(); err == nil {
 		parts := strings.Fields(strings.TrimSpace(string(out)))
 		if len(parts) == 2 {
@@ -378,7 +383,7 @@ func collectPostSyncStatus(ctx context.Context, repoPath string) *PostSyncStatus
 	// but IsDirty and HasConflicts both default to false, which is exactly what a
 	// clean, conflict-free repository looks like. A user who reads "no conflict"
 	// off the screen and proceeds with the next sync is acting on a git error.
-	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain", "-z")
+	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain", "-z") // #nosec G204 -- fixed git status query in the selected repository.
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -511,11 +516,14 @@ func checkoutBranch(ctx context.Context, repoPath, branch string, logger repo.Lo
 			logger.Debug("branch name rejected, trying next: %s -> %s: %v", repoPath, b, lastErr)
 			continue
 		}
+		if b == "HEAD" {
+			return "kept current HEAD", nil
+		}
 
 		// Check if branch exists (local or remote)
 		if branchExists(ctx, repoPath, b) {
 			// Use exec.CommandContext to respect context cancellation/timeout
-			cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "checkout", b)
+			cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "checkout", b) // #nosec G204 -- b passed here is validated by SanitizeBranchName; no shell is used.
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				lastErr = fmt.Errorf("git checkout %s failed: %w (output: %s)", b, err, string(output))
@@ -538,13 +546,13 @@ func checkoutBranch(ctx context.Context, repoPath, branch string, logger repo.Lo
 // branchExists checks if a branch exists locally or as a remote tracking branch.
 func branchExists(ctx context.Context, repoPath, branch string) bool {
 	// Check local branch
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", branch)
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", branch) // #nosec G204 -- branch is validated before this helper is called.
 	if cmd.Run() == nil {
 		return true
 	}
 
 	// Check remote tracking branch (origin/branch)
-	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", "origin/"+branch)
+	cmd = exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", "origin/"+branch) // #nosec G204 -- branch is validated before this helper is called.
 	return cmd.Run() == nil
 }
 
@@ -556,17 +564,25 @@ func addAdditionalRemotes(ctx context.Context, repoPath string, remotes map[stri
 	}
 
 	var addedRemotes []string
+	for remoteName, remoteURL := range remotes {
+		if err := gitcmd.SanitizeRemoteName(remoteName); err != nil {
+			return "", fmt.Errorf("invalid additional remote name %q: %w", remoteName, err)
+		}
+		if err := gitcmd.SanitizeURL(remoteURL); err != nil {
+			return "", fmt.Errorf("invalid URL for additional remote %q: %w", remoteName, err)
+		}
+	}
 
 	for remoteName, remoteURL := range remotes {
 		// Check if remote already exists
-		checkCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "get-url", remoteName)
+		checkCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "get-url", remoteName) // #nosec G204 -- remoteName is validated and no shell is used.
 		existingURL, err := checkCmd.Output()
 
 		if err == nil && len(existingURL) > 0 {
 			// Remote exists - update URL if different
 			currentURL := string(existingURL)
 			if currentURL != remoteURL+"\n" {
-				updateCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "set-url", remoteName, remoteURL)
+				updateCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "set-url", remoteName, remoteURL) // #nosec G204 -- validated remote name and URL are passed as separate argv values.
 				if output, err := updateCmd.CombinedOutput(); err != nil {
 					return "", fmt.Errorf("git remote set-url %s failed: %w (output: %s)", remoteName, err, string(output))
 				}
@@ -575,7 +591,7 @@ func addAdditionalRemotes(ctx context.Context, repoPath string, remotes map[stri
 			}
 		} else {
 			// Remote doesn't exist - add it
-			addCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "add", remoteName, remoteURL)
+			addCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "add", remoteName, remoteURL) // #nosec G204 -- validated remote name and URL are passed as separate argv values.
 			if output, err := addCmd.CombinedOutput(); err != nil {
 				return "", fmt.Errorf("git remote add %s failed: %w (output: %s)", remoteName, err, string(output))
 			}

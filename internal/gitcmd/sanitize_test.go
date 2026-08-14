@@ -148,6 +148,19 @@ func TestSanitizeArgs(t *testing.T) {
 	}
 }
 
+func TestSanitizeRemoteName(t *testing.T) {
+	for _, name := range []string{"origin", "backup-1", "mirror_2", "team/backup"} {
+		if err := SanitizeRemoteName(name); err != nil {
+			t.Errorf("SanitizeRemoteName(%q) = %v, want nil", name, err)
+		}
+	}
+	for _, name := range []string{"", "--upload-pack=/tmp/evil", "backup//name", ".hidden", "team/.hidden", "a..b", "a.lock", "team/backup.lock", "team/backup\x00"} {
+		if err := SanitizeRemoteName(name); err == nil {
+			t.Errorf("SanitizeRemoteName(%q) = nil, want error", name)
+		}
+	}
+}
+
 // TestSanitizePath tests path sanitization.
 func TestSanitizePath(t *testing.T) {
 	tests := []struct {
@@ -275,6 +288,21 @@ func TestSanitizeURL(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "parent relative path",
+			url:     "../shared/repo.git",
+			wantErr: false,
+		},
+		{
+			name:    "query with ampersand",
+			url:     "https://github.com/user/repo.git?ref=main&depth=1",
+			wantErr: false,
+		},
+		{
+			name:    "SCP URL with non-git username",
+			url:     "deploy@github.com:user/repo.git",
+			wantErr: false,
+		},
+		{
 			name:    "empty URL",
 			url:     "",
 			wantErr: true,
@@ -297,6 +325,11 @@ func TestSanitizeURL(t *testing.T) {
 		{
 			name:    "null byte in URL",
 			url:     "https://github.com\x00/user/repo.git",
+			wantErr: true,
+		},
+		{
+			name:    "leading option in URL",
+			url:     "--upload-pack=/tmp/evil",
 			wantErr: true,
 		},
 		{
@@ -410,6 +443,11 @@ func TestSanitizeBranchName(t *testing.T) {
 		{
 			name:       "branch with hyphens",
 			branchName: "feature/my-new-feature",
+			wantErr:    false,
+		},
+		{
+			name:       "branch with argv-safe punctuation",
+			branchName: "feature/fix;query&token$1",
 			wantErr:    false,
 		},
 		{

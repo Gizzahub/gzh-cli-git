@@ -205,7 +205,7 @@ func appendRepoEntry(config map[string]any, name, url, path string) error {
 }
 
 func loadOrCreateConfig(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the explicit workspace config selected by the caller.
 	if os.IsNotExist(err) {
 		// Create default config structure
 		return map[string]any{

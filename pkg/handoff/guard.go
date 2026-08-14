@@ -250,7 +250,7 @@ func scanContent(full string, size int64) string {
 		return ""
 	}
 
-	file, err := os.Open(full)
+	file, err := os.Open(full) // #nosec G304 -- full is a repository-relative path obtained from git status.
 	if err != nil {
 		return ""
 	}

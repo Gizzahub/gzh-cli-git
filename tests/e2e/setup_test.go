@@ -2,12 +2,15 @@ package e2e
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+var e2eBinaryPath string
 
 // E2ERepo represents an E2E test repository.
 type E2ERepo struct {
@@ -17,8 +20,59 @@ type E2ERepo struct {
 	binaryPath string
 }
 
+// TestMain builds one binary for this package in a private temporary
+// directory. The E2E tests all share this immutable binary.
+func TestMain(m *testing.M) {
+	testDir, err := os.MkdirTemp("", "gzh-cli-gitforge-e2e-tests-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create E2E test directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	goExe, err := goExecutableSuffix()
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine executable suffix: %v\n", err)
+		os.Exit(1)
+	}
+
+	e2eBinaryPath = filepath.Join(testDir, "gz-git"+goExe)
+	moduleRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine module root: %v\n", err)
+		os.Exit(1)
+	}
+
+	buildCmd := exec.Command("go", "build", "-o", e2eBinaryPath, "./cmd/gz-git") //nolint:noctx // package setup
+	buildCmd.Dir = moduleRoot
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to build gz-git: %v\n%s", err, output)
+		os.Exit(1)
+	}
+
+	code := m.Run()
+	if err := os.RemoveAll(testDir); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to remove E2E test directory: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
+
 // NewE2ERepo creates a new E2E test repository.
 func NewE2ERepo(t *testing.T) *E2ERepo {
+	t.Helper()
+
+	return newE2ERepoAt(t, t.TempDir())
+}
+
+// newE2ERepoAt creates an E2E repository at a caller-selected path. It is
+// useful for tests that need more than one independent repository under a
+// single workspace scan root.
+func newE2ERepoAt(t *testing.T, repoDir string) *E2ERepo {
 	t.Helper()
 
 	// Get current working directory
@@ -27,8 +81,9 @@ func NewE2ERepo(t *testing.T) *E2ERepo {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
 
-	// Create temp directory for test repo
-	repoDir := t.TempDir()
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("Failed to create repository directory %s: %v", repoDir, err)
+	}
 
 	// Find or build gz-git binary
 	binaryPath := findOrBuildBinary(t)
@@ -48,27 +103,23 @@ func NewE2ERepo(t *testing.T) *E2ERepo {
 	return repo
 }
 
-// findOrBuildBinary locates the gz-git binary or builds it if necessary.
+// findOrBuildBinary returns the package-scoped binary prepared by TestMain.
 func findOrBuildBinary(t *testing.T) string {
 	t.Helper()
 
-	// Try to find existing binary
-	if _, err := os.Stat("../../gz-git"); err == nil {
-		abs, _ := filepath.Abs("../../gz-git")
-		return abs
+	if e2eBinaryPath == "" {
+		t.Fatal("gz-git E2E test binary was not initialized")
 	}
+	return e2eBinaryPath
+}
 
-	// Build the binary
-	t.Log("Building gz-git binary for E2E tests...")
-	cmd := exec.Command("go", "build", "-o", "gz-git", "./cmd/gz-git") //nolint:noctx // build step, no context needed
-	cmd.Dir = "../../"
-	output, err := cmd.CombinedOutput()
+func goExecutableSuffix() (string, error) {
+	cmd := exec.Command("go", "env", "GOEXE") //nolint:noctx // package setup
+	output, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("Failed to build gz-git: %v\nOutput: %s", err, output)
+		return "", err
 	}
-
-	abs, _ := filepath.Abs("../../gz-git")
-	return abs
+	return strings.TrimSpace(string(output)), nil
 }
 
 // runCommand runs a command in the specified directory.
@@ -91,14 +142,44 @@ func (r *E2ERepo) runCommand(dir, name string, args ...string) string {
 func (r *E2ERepo) RunGzhGit(args ...string) string {
 	r.t.Helper()
 
-	cmd := exec.Command(r.binaryPath, args...) //nolint:noctx // test helper, no context needed
-	cmd.Dir = r.repoDir
-	output, err := cmd.CombinedOutput()
+	output, err := r.RunGzhGitResult(args...)
 	if err != nil {
 		r.t.Fatalf("gz-git command failed: %v %v\nError: %v\nOutput: %s",
 			r.binaryPath, args, err, output)
 	}
-	return string(output)
+	return output
+}
+
+// RunGzhGitResult runs gz-git and returns its output and process error. Unlike
+// RunGzhGitExpectError, callers can assert the exact exit status.
+func (r *E2ERepo) RunGzhGitResult(args ...string) (string, error) {
+	r.t.Helper()
+
+	return r.RunGzhGitAtResult(r.repoDir, args...)
+}
+
+// RunGzhGitAt runs gz-git from a caller-selected workspace directory and
+// expects success.
+func (r *E2ERepo) RunGzhGitAt(directory string, args ...string) string {
+	r.t.Helper()
+
+	output, err := r.RunGzhGitAtResult(directory, args...)
+	if err != nil {
+		r.t.Fatalf("gz-git command failed: %v %v\nError: %v\nOutput: %s",
+			r.binaryPath, args, err, output)
+	}
+	return output
+}
+
+// RunGzhGitAtResult runs gz-git from a caller-selected workspace directory
+// and returns its output and process error.
+func (r *E2ERepo) RunGzhGitAtResult(directory string, args ...string) (string, error) {
+	r.t.Helper()
+
+	cmd := exec.Command(r.binaryPath, args...) //nolint:noctx // test helper, no context needed
+	cmd.Dir = directory
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }
 
 // RunGzhGitExpectError runs gz-git command and expects failure.
@@ -125,7 +206,14 @@ func (r *E2ERepo) Git(args ...string) string {
 func (r *E2ERepo) WriteFile(path, content string) {
 	r.t.Helper()
 
-	fullPath := filepath.Join(r.repoDir, path)
+	r.WriteFileAt(r.repoDir, path, content)
+}
+
+// WriteFileAt writes content below a caller-selected directory.
+func (r *E2ERepo) WriteFileAt(directory, path, content string) {
+	r.t.Helper()
+
+	fullPath := filepath.Join(directory, path)
 	dir := filepath.Dir(fullPath)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -206,12 +294,30 @@ func AssertNotContains(t *testing.T, output, expected string) {
 func AssertExitCode(t *testing.T, err error, expectedCode int) {
 	t.Helper()
 
+	actualCode, hasExitCode := commandExitCode(err)
+	if !hasExitCode {
+		t.Errorf("Expected process exit code %d, got non-exit error: %v", expectedCode, err)
+		return
+	}
+	if actualCode != expectedCode {
+		t.Errorf("Expected exit code %d, got %d", expectedCode, actualCode)
+	}
+}
+
+func commandExitCode(err error) (int, bool) {
+	if err == nil {
+		return 0, true
+	}
+
 	exitErr := &exec.ExitError{}
 	if errors.As(err, &exitErr) {
-		if exitErr.ExitCode() != expectedCode {
-			t.Errorf("Expected exit code %d, got %d", expectedCode, exitErr.ExitCode())
-		}
-	} else if err == nil && expectedCode != 0 {
-		t.Errorf("Expected exit code %d, got 0 (success)", expectedCode)
+		return exitErr.ExitCode(), true
+	}
+	return 0, false
+}
+
+func TestCommandExitCodeRejectsNonExitError(t *testing.T) {
+	if _, ok := commandExitCode(errors.New("process could not start")); ok {
+		t.Fatal("commandExitCode accepted a non-exit error")
 	}
 }

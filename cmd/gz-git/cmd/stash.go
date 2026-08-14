@@ -339,7 +339,7 @@ type StashRepositoryJSONOutput struct {
 	Message string `json:"message,omitempty"`
 }
 
-func displayStashResultsStructured(result *repository.BulkStashResult, operation string, format string) {
+func displayStashResultsStructured(result *repository.BulkStashResult, operation, format string) {
 	output := StashJSONOutput{
 		Operation:      operation,
 		TotalScanned:   result.TotalScanned,

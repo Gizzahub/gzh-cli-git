@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"testing"
 )
+
+var integrationBinaryPath string
 
 // TestRepo represents a temporary test repository.
 type TestRepo struct {
@@ -196,39 +197,14 @@ func AssertNotContains(t *testing.T, output, unexpected string) {
 	}
 }
 
-// findGzhGitBinary locates the gz-git binary.
+// findGzhGitBinary returns the package-scoped binary prepared by TestMain.
 func findGzhGitBinary(t *testing.T) string {
 	t.Helper()
 
-	// Check if binary exists in various locations
-	candidates := []string{
-		"../../gz-git",       // Root directory (where make build creates it)
-		"../../build/gz-git", // Build directory (alternative location)
-		"../../tmp/gz-git",   // Tmp directory (alternative location)
-		"gz-git",             // In PATH
+	if integrationBinaryPath == "" {
+		t.Fatal("gz-git integration test binary was not initialized")
 	}
-
-	for _, candidate := range candidates {
-		// For relative paths, use os.Stat
-		if _, err := os.Stat(candidate); err == nil {
-			abs, _ := filepath.Abs(candidate)
-			return abs
-		}
-		// For PATH lookup, use exec.LookPath
-		if _, err := exec.LookPath(candidate); err == nil {
-			return candidate
-		}
-	}
-
-	// Build if not found
-	t.Log("Binary not found, building...")
-	buildCmd := exec.Command("make", "build") //nolint:noctx // build step, no context needed
-	buildCmd.Dir = "../.."
-	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build gz-git: %v", err)
-	}
-
-	return "../../gz-git"
+	return integrationBinaryPath
 }
 
 // SkipIfNoBinary skips test if gz-git binary is not available.
@@ -246,16 +222,50 @@ func SkipIfNoBinary(t *testing.T) {
 
 // TestMain ensures binary is built before running tests.
 func TestMain(m *testing.M) {
-	// Build the binary before running tests
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "make", "build")
-	cmd.Dir = "../.."
-	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to build gz-git: %v\n", err)
+	testDir, err := os.MkdirTemp("", "gzh-cli-gitforge-integration-tests-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create integration test directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Run tests
+	goExe, err := goExecutableSuffix()
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine executable suffix: %v\n", err)
+		os.Exit(1)
+	}
+
+	integrationBinaryPath = filepath.Join(testDir, "gz-git"+goExe)
+	moduleRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to determine module root: %v\n", err)
+		os.Exit(1)
+	}
+
+	buildCmd := exec.Command("go", "build", "-o", integrationBinaryPath, "./cmd/gz-git") //nolint:noctx // package setup
+	buildCmd.Dir = moduleRoot
+	if output, err := buildCmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(testDir)
+		fmt.Fprintf(os.Stderr, "failed to build gz-git: %v\n%s", err, output)
+		os.Exit(1)
+	}
+
 	code := m.Run()
+	if err := os.RemoveAll(testDir); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to remove integration test directory: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	os.Exit(code)
+}
+
+func goExecutableSuffix() (string, error) {
+	cmd := exec.Command("go", "env", "GOEXE") //nolint:noctx // package setup
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }

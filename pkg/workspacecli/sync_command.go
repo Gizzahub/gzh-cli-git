@@ -20,6 +20,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/hooks"
@@ -1370,7 +1371,7 @@ func executeSelfSync(ctx context.Context, cfg *config.Config, configDir string, 
 // error, so an unreadable repository is not silently answered "clean" — every
 // caller must decide what to do with that error rather than inherit a false.
 func isWorkingTreeDirty(ctx context.Context, repoPath string) (bool, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain")
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "status", "--porcelain") // #nosec G204 -- fixed git status query in the selected repository.
 	output, err := cmd.Output()
 	if err != nil {
 		return false, err
@@ -1380,7 +1381,7 @@ func isWorkingTreeDirty(ctx context.Context, repoPath string) (bool, error) {
 
 // gitFetch runs git fetch --all in the specified directory.
 func gitFetch(ctx context.Context, repoPath string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "fetch", "--all", "--prune")
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "fetch", "--all", "--prune") // #nosec G204 -- fixed git fetch query in the selected repository.
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run()
@@ -1388,7 +1389,7 @@ func gitFetch(ctx context.Context, repoPath string) error {
 
 // gitPull runs git pull in the specified directory.
 func gitPull(ctx context.Context, repoPath string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "pull")
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "pull") // #nosec G204 -- fixed git pull query in the selected repository.
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run()
@@ -1503,7 +1504,7 @@ func analyzeRepoChanges(ctx context.Context, action reposync.Action) (*RepoChang
 			baseBranch = "HEAD"
 		}
 
-		fileDiff, err := getFileDiff(action.Repo.TargetPath, baseBranch)
+		fileDiff, err := getFileDiff(ctx, action.Repo.TargetPath, baseBranch)
 		if err != nil {
 			changes.Warnings = append(changes.Warnings, fmt.Sprintf("Failed to get diff: %v", err))
 		} else {
@@ -1511,7 +1512,7 @@ func analyzeRepoChanges(ctx context.Context, action reposync.Action) (*RepoChang
 		}
 
 		// Check for diverged branches
-		diverged, err := checkDivergence(action.Repo.TargetPath, baseBranch)
+		diverged, err := checkDivergence(ctx, action.Repo.TargetPath, baseBranch)
 		if err != nil {
 			changes.Warnings = append(changes.Warnings, fmt.Sprintf("Failed to check divergence: %v", err))
 		} else if diverged {
@@ -1529,13 +1530,26 @@ func analyzeRepoChanges(ctx context.Context, action reposync.Action) (*RepoChang
 	return changes, nil
 }
 
+func validateComparisonBranch(branch string) error {
+	if branch == "HEAD" {
+		return nil
+	}
+	if err := gitcmd.SanitizeBranchName(branch); err != nil {
+		return fmt.Errorf("invalid comparison branch %q: %w", branch, err)
+	}
+	return nil
+}
+
 // getFileDiff analyzes file changes between local HEAD and remote.
 // Returns empty summary if fetch hasn't been done yet.
-func getFileDiff(repoPath, baseBranch string) (FileChangeSummary, error) { //nolint:unparam // error is always nil; kept for consistent error-return interface
+func getFileDiff(ctx context.Context, repoPath, baseBranch string) (FileChangeSummary, error) { //nolint:unparam // error is always nil; kept for consistent error-return interface
 	summary := FileChangeSummary{
 		Added:    []string{},
 		Modified: []string{},
 		Deleted:  []string{},
+	}
+	if err := validateComparisonBranch(baseBranch); err != nil {
+		return summary, err
 	}
 
 	// Construct remote tracking branch name.
@@ -1549,7 +1563,7 @@ func getFileDiff(repoPath, baseBranch string) (FileChangeSummary, error) { //nol
 	}
 
 	// Run git diff --name-status HEAD..origin/branch
-	cmd := exec.Command("git", "diff", "--name-status", fmt.Sprintf("HEAD..%s", remoteBranch)) //nolint:noctx // preview helper runs without context; errors return empty summary
+	cmd := exec.CommandContext(ctx, "git", "diff", "--name-status", fmt.Sprintf("HEAD..%s", remoteBranch)) // #nosec G204 -- baseBranch is validated and the command has no shell.
 	cmd.Dir = repoPath
 	output, err := cmd.Output()
 	if err != nil {
@@ -1586,14 +1600,17 @@ func getFileDiff(repoPath, baseBranch string) (FileChangeSummary, error) { //nol
 
 // checkDivergence checks if local branch has diverged from remote.
 // Returns true if local has commits not in remote AND remote has commits not in local.
-func checkDivergence(repoPath, baseBranch string) (bool, error) { //nolint:unparam // error is always nil; kept for consistent error-return interface
+func checkDivergence(ctx context.Context, repoPath, baseBranch string) (bool, error) { //nolint:unparam // error is always nil; kept for consistent error-return interface
+	if err := validateComparisonBranch(baseBranch); err != nil {
+		return false, err
+	}
 	remoteBranch := fmt.Sprintf("origin/%s", baseBranch)
 	if baseBranch == "HEAD" {
 		remoteBranch = "origin/HEAD"
 	}
 
 	// Check commits in local not in remote
-	cmd := exec.Command("git", "rev-list", "--count", fmt.Sprintf("%s..HEAD", remoteBranch)) //nolint:noctx // preview helper runs without context; errors return false
+	cmd := exec.CommandContext(ctx, "git", "rev-list", "--count", fmt.Sprintf("%s..HEAD", remoteBranch)) // #nosec G204 -- baseBranch is validated and the command has no shell.
 	cmd.Dir = repoPath
 	output, err := cmd.Output()
 	if err != nil {
@@ -1602,7 +1619,7 @@ func checkDivergence(repoPath, baseBranch string) (bool, error) { //nolint:unpar
 	localAhead := strings.TrimSpace(string(output))
 
 	// Check commits in remote not in local
-	cmd = exec.Command("git", "rev-list", "--count", fmt.Sprintf("HEAD..%s", remoteBranch)) //nolint:noctx // preview helper runs without context; errors return false
+	cmd = exec.CommandContext(ctx, "git", "rev-list", "--count", fmt.Sprintf("HEAD..%s", remoteBranch)) // #nosec G204 -- baseBranch is validated and the command has no shell.
 	cmd.Dir = repoPath
 	output, err = cmd.Output()
 	if err != nil {
@@ -2324,15 +2341,21 @@ func executePushForSyncedRepos(ctx context.Context, targets []string, parallel i
 
 func pushOneRepo(ctx context.Context, repoPath string) pushResult {
 	// Get current branch
-	branchCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD") // #nosec G204 -- fixed git query in the selected repository.
 	branchOut, err := branchCmd.Output()
 	if err != nil {
 		return pushResult{Path: repoPath, Error: fmt.Errorf("failed to get current branch: %w", err)}
 	}
 	branch := strings.TrimSpace(string(branchOut))
+	if branch == "HEAD" {
+		return pushResult{Path: repoPath, Pushed: false, Message: "detached HEAD; skipping push"}
+	}
+	if err := gitcmd.SanitizeBranchName(branch); err != nil {
+		return pushResult{Path: repoPath, Error: fmt.Errorf("invalid current branch %q: %w", branch, err)}
+	}
 
 	// Count commits ahead of remote
-	countCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-list", "--count", fmt.Sprintf("origin/%s..HEAD", branch))
+	countCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-list", "--count", fmt.Sprintf("origin/%s..HEAD", branch)) // #nosec G204 -- branch is validated and the command has no shell.
 	countOut, err := countCmd.Output()
 	if err != nil {
 		// Remote tracking branch may not exist (e.g. freshly cloned)
@@ -2347,7 +2370,7 @@ func pushOneRepo(ctx context.Context, repoPath string) pushResult {
 	}
 
 	// Push
-	pushCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "push", "origin", branch)
+	pushCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "push", "origin", branch) // #nosec G204 -- branch is validated and passed as a separate argv value.
 	pushOutput, err := pushCmd.CombinedOutput()
 	if err != nil {
 		return pushResult{

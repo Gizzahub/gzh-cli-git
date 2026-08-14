@@ -5,10 +5,32 @@ package workspacecli
 
 import (
 	"bytes"
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/reposync"
 )
+
+func TestValidateComparisonBranchUsesGitRefRules(t *testing.T) {
+	for _, branch := range []string{"--upload-pack=/tmp/evil", "feature..bad"} {
+		if err := validateComparisonBranch(branch); err == nil {
+			t.Errorf("validateComparisonBranch(%q) = nil, want error", branch)
+		}
+	}
+	for _, branch := range []string{"HEAD", "feature;touch", "team/topic$1"} {
+		if err := validateComparisonBranch(branch); err != nil {
+			t.Errorf("validateComparisonBranch(%q) = %v, want nil", branch, err)
+		}
+	}
+}
+
+func TestGetFileDiffRejectsInvalidBranchBeforeGit(t *testing.T) {
+	_, err := getFileDiff(context.Background(), t.TempDir(), "--upload-pack=/tmp/evil")
+	if err == nil || !strings.Contains(err.Error(), "invalid comparison branch") {
+		t.Fatalf("getFileDiff invalid branch error = %v", err)
+	}
+}
 
 func TestBuildSyncSummary(t *testing.T) {
 	tests := []struct {

@@ -23,14 +23,14 @@ func TestAddAdditionalRemotes(t *testing.T) {
 		t.Fatalf("failed to create repo dir: %v", err)
 	}
 
-	cmd := exec.Command("git", "init")
+	cmd := exec.CommandContext(t.Context(), "git", "init")
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("failed to init git repo: %v", err)
 	}
 
 	// Add origin remote (simulates cloned repo)
-	cmd = exec.Command("git", "remote", "add", "origin", "https://github.com/test/repo.git")
+	cmd = exec.CommandContext(t.Context(), "git", "remote", "add", "origin", "https://github.com/test/repo.git")
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("failed to add origin remote: %v", err)
@@ -54,7 +54,7 @@ func TestAddAdditionalRemotes(t *testing.T) {
 		}
 
 		// Verify remote was added
-		cmd := exec.Command("git", "remote", "get-url", "backup")
+		cmd := exec.CommandContext(t.Context(), "git", "remote", "get-url", "backup")
 		cmd.Dir = repoPath
 		output, err := cmd.Output()
 		if err != nil {
@@ -84,7 +84,7 @@ func TestAddAdditionalRemotes(t *testing.T) {
 
 		// Verify both remotes were added
 		for name, expectedURL := range remotes {
-			cmd := exec.Command("git", "remote", "get-url", name)
+			cmd := exec.CommandContext(t.Context(), "git", "remote", "get-url", name)
 			cmd.Dir = repoPath
 			output, err := cmd.Output()
 			if err != nil {
@@ -98,9 +98,37 @@ func TestAddAdditionalRemotes(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts hierarchical names and valid URL data", func(t *testing.T) {
+		remotes := map[string]string{
+			"team/backup":  "../shared/repo.git",
+			"mirror/query": "https://example.com/repo.git?ref=main&depth=1",
+			"deploy/scp":   "deploy@example.com:team/repo.git",
+		}
+
+		msg, err := addAdditionalRemotes(ctx, repoPath, remotes, logger)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if msg != "configured 3 remote(s)" {
+			t.Errorf("got message %q, want %q", msg, "configured 3 remote(s)")
+		}
+		for name, expectedURL := range remotes {
+			cmd := exec.CommandContext(t.Context(), "git", "remote", "get-url", name)
+			cmd.Dir = repoPath
+			output, err := cmd.Output()
+			if err != nil {
+				t.Errorf("failed to get remote url for %s: %v", name, err)
+				continue
+			}
+			if string(output) != expectedURL+"\n" {
+				t.Errorf("remote %s: got URL %q, want %q", name, string(output), expectedURL)
+			}
+		}
+	})
+
 	t.Run("update existing remote", func(t *testing.T) {
 		// Add a remote first
-		cmd := exec.Command("git", "remote", "add", "test-remote", "https://old-url.com/repo.git")
+		cmd := exec.CommandContext(t.Context(), "git", "remote", "add", "test-remote", "https://old-url.com/repo.git")
 		cmd.Dir = repoPath
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("failed to add test remote: %v", err)
@@ -121,7 +149,7 @@ func TestAddAdditionalRemotes(t *testing.T) {
 		}
 
 		// Verify URL was updated
-		cmd = exec.Command("git", "remote", "get-url", "test-remote")
+		cmd = exec.CommandContext(t.Context(), "git", "remote", "get-url", "test-remote")
 		cmd.Dir = repoPath
 		output, err := cmd.Output()
 		if err != nil {
@@ -225,7 +253,7 @@ func TestCollectPostSyncStatus(t *testing.T) {
 		{"git", "checkout", "-b", "main"},
 	}
 	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
+		cmd := exec.CommandContext(t.Context(), args[0], args[1:]...)
 		cmd.Dir = repoPath
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("command %v failed: %v\n%s", args, err, out)
@@ -240,7 +268,7 @@ func TestCollectPostSyncStatus(t *testing.T) {
 		{"git", "add", "README.md"},
 		{"git", "commit", "-m", "initial commit"},
 	} {
-		cmd := exec.Command(args[0], args[1:]...)
+		cmd := exec.CommandContext(t.Context(), args[0], args[1:]...)
 		cmd.Dir = repoPath
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("command %v failed: %v\n%s", args, err, out)

@@ -177,7 +177,7 @@ func createBulkLogger(verbose bool) repository.Logger {
 
 // createProgressCallback creates a progress callback function for bulk operations
 // The callback is used to display progress during bulk operations.
-func createProgressCallback(operationName string, format string, quiet bool) func(int, int, string) {
+func createProgressCallback(operationName, format string, quiet bool) func(int, int, string) {
 	return func(current, total int, repo string) {
 		if !quiet && format != "compact" && !cliutil.IsMachineFormat(format) {
 			fmt.Printf("[%d/%d] %s %s...\n", current, total, operationName, repo)

@@ -122,7 +122,7 @@ func (c *client) appendUntrackedDiffs(repoPath string, result *RepositoryDiffRes
 // the earlier Lstat: that closes the window where a regular file is swapped for
 // a symlink between the two calls.
 func readRegularFile(path string, limit int64) ([]byte, error) {
-	f, err := os.Open(path) //nolint:gosec // path comes from `git ls-files` inside the scanned repository
+	f, err := os.Open(path) // #nosec G304 -- path comes from git ls-files inside the scanned repository.
 	if err != nil {
 		return nil, err
 	}

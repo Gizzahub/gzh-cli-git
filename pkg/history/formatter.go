@@ -44,7 +44,7 @@ func (f *formatter) FormatCommitStats(stats *CommitStats) ([]byte, error) {
 	case FormatJSON:
 		return json.MarshalIndent(stats, "", "  ")
 	case FormatCSV:
-		return f.formatStatsCSV(stats), nil
+		return f.formatStatsCSV(stats)
 	case FormatMarkdown:
 		return f.formatStatsMarkdown(stats), nil
 	case FormatLLM:
@@ -66,7 +66,7 @@ func (f *formatter) FormatContributors(contributors []*Contributor) ([]byte, err
 	case FormatJSON:
 		return json.MarshalIndent(contributors, "", "  ")
 	case FormatCSV:
-		return f.formatContributorsCSV(contributors), nil
+		return f.formatContributorsCSV(contributors)
 	case FormatMarkdown:
 		return f.formatContributorsMarkdown(contributors), nil
 	case FormatLLM:
@@ -88,7 +88,7 @@ func (f *formatter) FormatFileHistory(history []*FileCommit) ([]byte, error) {
 	case FormatJSON:
 		return json.MarshalIndent(history, "", "  ")
 	case FormatCSV:
-		return f.formatFileHistoryCSV(history), nil
+		return f.formatFileHistoryCSV(history)
 	case FormatMarkdown:
 		return f.formatFileHistoryMarkdown(history), nil
 	case FormatLLM:
@@ -118,26 +118,37 @@ func (f *formatter) formatStatsTable(stats *CommitStats) []byte {
 	return []byte(b.String())
 }
 
-func (f *formatter) formatStatsCSV(stats *CommitStats) []byte {
+func writeCSV(rows [][]string) ([]byte, error) {
 	var b strings.Builder
 	w := csv.NewWriter(&b)
-
-	w.Write([]string{"Metric", "Value"})
-	w.Write([]string{"Total Commits", fmt.Sprintf("%d", stats.TotalCommits)})
-	w.Write([]string{"Unique Authors", fmt.Sprintf("%d", stats.UniqueAuthors)})
-	w.Write([]string{"Total Additions", fmt.Sprintf("%d", stats.TotalAdditions)})
-	w.Write([]string{"Total Deletions", fmt.Sprintf("%d", stats.TotalDeletions)})
-	w.Write([]string{"First Commit", formatTime(stats.FirstCommit)})
-	w.Write([]string{"Last Commit", formatTime(stats.LastCommit)})
-	w.Write([]string{"Date Range", formatDuration(stats.DateRange)})
-	w.Write([]string{"Avg Per Day", fmt.Sprintf("%.2f", stats.AvgPerDay)})
-	w.Write([]string{"Avg Per Week", fmt.Sprintf("%.2f", stats.AvgPerWeek)})
-	w.Write([]string{"Avg Per Month", fmt.Sprintf("%.2f", stats.AvgPerMonth)})
-	w.Write([]string{"Peak Day", formatDate(stats.PeakDay)})
-	w.Write([]string{"Peak Count", fmt.Sprintf("%d", stats.PeakCount)})
-
+	for _, row := range rows {
+		if err := w.Write(row); err != nil {
+			return nil, fmt.Errorf("write CSV row: %w", err)
+		}
+	}
 	w.Flush()
-	return []byte(b.String())
+	if err := w.Error(); err != nil {
+		return nil, fmt.Errorf("flush CSV: %w", err)
+	}
+	return []byte(b.String()), nil
+}
+
+func (f *formatter) formatStatsCSV(stats *CommitStats) ([]byte, error) {
+	return writeCSV([][]string{
+		{"Metric", "Value"},
+		{"Total Commits", fmt.Sprintf("%d", stats.TotalCommits)},
+		{"Unique Authors", fmt.Sprintf("%d", stats.UniqueAuthors)},
+		{"Total Additions", fmt.Sprintf("%d", stats.TotalAdditions)},
+		{"Total Deletions", fmt.Sprintf("%d", stats.TotalDeletions)},
+		{"First Commit", formatTime(stats.FirstCommit)},
+		{"Last Commit", formatTime(stats.LastCommit)},
+		{"Date Range", formatDuration(stats.DateRange)},
+		{"Avg Per Day", fmt.Sprintf("%.2f", stats.AvgPerDay)},
+		{"Avg Per Week", fmt.Sprintf("%.2f", stats.AvgPerWeek)},
+		{"Avg Per Month", fmt.Sprintf("%.2f", stats.AvgPerMonth)},
+		{"Peak Day", formatDate(stats.PeakDay)},
+		{"Peak Count", fmt.Sprintf("%d", stats.PeakCount)},
+	})
 }
 
 func (f *formatter) formatStatsMarkdown(stats *CommitStats) []byte {
@@ -182,14 +193,11 @@ func (f *formatter) formatContributorsTable(contributors []*Contributor) []byte 
 	return []byte(b.String())
 }
 
-func (f *formatter) formatContributorsCSV(contributors []*Contributor) []byte {
-	var b strings.Builder
-	w := csv.NewWriter(&b)
-
-	w.Write([]string{"Rank", "Name", "Email", "Commits", "Additions", "Deletions", "Files", "Active Days", "Commits/Week", "First Commit", "Last Commit"})
-
+func (f *formatter) formatContributorsCSV(contributors []*Contributor) ([]byte, error) {
+	rows := make([][]string, 0, len(contributors)+1)
+	rows = append(rows, []string{"Rank", "Name", "Email", "Commits", "Additions", "Deletions", "Files", "Active Days", "Commits/Week", "First Commit", "Last Commit"})
 	for _, c := range contributors {
-		w.Write([]string{
+		rows = append(rows, []string{
 			fmt.Sprintf("%d", c.Rank),
 			c.Name,
 			c.Email,
@@ -203,9 +211,7 @@ func (f *formatter) formatContributorsCSV(contributors []*Contributor) []byte {
 			formatTime(c.LastCommit),
 		})
 	}
-
-	w.Flush()
-	return []byte(b.String())
+	return writeCSV(rows)
 }
 
 func (f *formatter) formatContributorsMarkdown(contributors []*Contributor) []byte {
@@ -252,14 +258,11 @@ func (f *formatter) formatFileHistoryTable(history []*FileCommit) []byte {
 	return []byte(b.String())
 }
 
-func (f *formatter) formatFileHistoryCSV(history []*FileCommit) []byte {
-	var b strings.Builder
-	w := csv.NewWriter(&b)
-
-	w.Write([]string{"Hash", "Author", "Email", "Date", "Message", "Additions", "Deletions", "Binary", "Renamed", "Old Path"})
-
+func (f *formatter) formatFileHistoryCSV(history []*FileCommit) ([]byte, error) {
+	rows := make([][]string, 0, len(history)+1)
+	rows = append(rows, []string{"Hash", "Author", "Email", "Date", "Message", "Additions", "Deletions", "Binary", "Renamed", "Old Path"})
 	for _, commit := range history {
-		w.Write([]string{
+		rows = append(rows, []string{
 			commit.Hash,
 			commit.Author,
 			commit.AuthorEmail,
@@ -272,9 +275,7 @@ func (f *formatter) formatFileHistoryCSV(history []*FileCommit) []byte {
 			commit.OldPath,
 		})
 	}
-
-	w.Flush()
-	return []byte(b.String())
+	return writeCSV(rows)
 }
 
 func (f *formatter) formatFileHistoryMarkdown(history []*FileCommit) []byte {

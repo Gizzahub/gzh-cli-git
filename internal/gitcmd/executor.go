@@ -129,7 +129,7 @@ func (e *Executor) RunWithEnv(ctx context.Context, dir string, extraEnv []string
 	}
 
 	// Build command
-	cmd := exec.CommandContext(cmdCtx, e.gitBinary, sanitizedArgs...)
+	cmd := exec.CommandContext(cmdCtx, e.gitBinary, sanitizedArgs...) // #nosec G204 -- arguments are validated by SanitizeArgs and executed without a shell.
 	cmd.Dir = dir
 
 	// Build environment: inherit system env + executor env + extra env

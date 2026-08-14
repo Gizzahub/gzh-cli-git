@@ -203,8 +203,8 @@ func (f *defaultFormatter) Format(event watch.Event) string {
 
 	// Timestamp and repository
 	timestamp := event.Timestamp.Format("15:04:05")
-	sb.WriteString(fmt.Sprintf("%s[%s]%s ", cliutil.ColorGray, timestamp, cliutil.ColorReset))
-	sb.WriteString(fmt.Sprintf("%s%s%s ", cliutil.ColorCyan, filepath.Base(event.Path), cliutil.ColorReset))
+	fmt.Fprintf(&sb, "%s[%s]%s ", cliutil.ColorGray, timestamp, cliutil.ColorReset)
+	fmt.Fprintf(&sb, "%s%s%s ", cliutil.ColorCyan, filepath.Base(event.Path), cliutil.ColorReset)
 
 	// Event type with color
 	switch event.Type {
@@ -221,12 +221,12 @@ func (f *defaultFormatter) Format(event watch.Event) string {
 	case watch.EventTypeClean:
 		sb.WriteString(cliutil.ColorGreen + "✓ Clean" + cliutil.ColorReset)
 	default:
-		sb.WriteString(fmt.Sprintf("● %s", event.Type))
+		fmt.Fprintf(&sb, "● %s", event.Type)
 	}
 
 	// File count
 	if len(event.Files) > 0 {
-		sb.WriteString(fmt.Sprintf(" (%d file%s)", len(event.Files), pluralize(len(event.Files), "", "s")))
+		fmt.Fprintf(&sb, " (%d file%s)", len(event.Files), pluralize(len(event.Files), "", "s"))
 	}
 
 	sb.WriteString("\n")
@@ -237,10 +237,10 @@ func (f *defaultFormatter) Format(event watch.Event) string {
 		for i, file := range event.Files {
 			if i >= maxFiles {
 				remaining := len(event.Files) - maxFiles
-				sb.WriteString(fmt.Sprintf("    %s... and %d more%s\n", cliutil.ColorGray, remaining, cliutil.ColorReset))
+				fmt.Fprintf(&sb, "    %s... and %d more%s\n", cliutil.ColorGray, remaining, cliutil.ColorReset)
 				break
 			}
-			sb.WriteString(fmt.Sprintf("    %s\n", file))
+			fmt.Fprintf(&sb, "    %s\n", file)
 		}
 	}
 
@@ -300,17 +300,17 @@ func (f *llmFormatter) Format(event watch.Event) string {
 	timestamp := event.Timestamp.Format("2006-01-02 15:04:05")
 	repoName := filepath.Base(event.Path)
 
-	sb.WriteString(fmt.Sprintf("## Repository Change Event\n"))
-	sb.WriteString(fmt.Sprintf("- Time: %s\n", timestamp))
-	sb.WriteString(fmt.Sprintf("- Repository: %s\n", repoName))
-	sb.WriteString(fmt.Sprintf("- Path: %s\n", event.Path))
-	sb.WriteString(fmt.Sprintf("- Event Type: %s\n", event.Type))
+	sb.WriteString("## Repository Change Event\n")
+	fmt.Fprintf(&sb, "- Time: %s\n", timestamp)
+	fmt.Fprintf(&sb, "- Repository: %s\n", repoName)
+	fmt.Fprintf(&sb, "- Path: %s\n", event.Path)
+	fmt.Fprintf(&sb, "- Event Type: %s\n", event.Type)
 
 	if len(event.Files) > 0 {
-		sb.WriteString(fmt.Sprintf("- Files Changed: %d\n", len(event.Files)))
+		fmt.Fprintf(&sb, "- Files Changed: %d\n", len(event.Files))
 		sb.WriteString("- File List:\n")
 		for _, file := range event.Files {
-			sb.WriteString(fmt.Sprintf("  - %s\n", file))
+			fmt.Fprintf(&sb, "  - %s\n", file)
 		}
 	}
 

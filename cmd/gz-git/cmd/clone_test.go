@@ -161,6 +161,7 @@ repositories:
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *CloneConfig) {
+				t.Helper()
 				if len(cfg.Repositories) != 1 {
 					t.Errorf("expected 1 repository, got %d", len(cfg.Repositories))
 				}
@@ -186,6 +187,7 @@ repositories:
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *CloneConfig) {
+				t.Helper()
 				if cfg.Target != "~/projects" {
 					t.Errorf("expected target ~/projects, got %s", cfg.Target)
 				}
@@ -221,6 +223,7 @@ repositories:
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *CloneConfig) {
+				t.Helper()
 				if cfg.Structure != "user" {
 					t.Errorf("expected structure user, got %s", cfg.Structure)
 				}
@@ -413,7 +416,7 @@ repositories:
 
 // Helper function for string contains check.
 func containsString(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) >= len(substr) && s[:len(substr)] == substr || stringContains(s, substr))
+	return s != "" && substr != "" && (s == substr || len(s) >= len(substr) && s[:len(substr)] == substr || stringContains(s, substr))
 }
 
 func stringContains(s, substr string) bool {

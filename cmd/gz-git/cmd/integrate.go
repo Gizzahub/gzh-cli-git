@@ -19,12 +19,12 @@ var integrateCmd = &cobra.Command{
   # Is this branch ready?
   gz-git integrate check
 
-  # Required when no integration branch can be resolved
-  gz-git integrate check --target origin/main --direct-to-default
+  # Fast-forward the target and reclaim the task branch
+  gz-git integrate run
 
-integrate answers a different question than branch list. branch list is a
-bulk inventory. queue lists unfinished task branches; check is the
-read-only readiness gate.`),
+integrate answers a different question than branch list. queue lists
+unfinished task branches, check is the readiness gate, and run
+fast-forwards then reclaims.`),
 	Args: cobra.NoArgs,
 }
 

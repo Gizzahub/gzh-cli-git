@@ -243,24 +243,23 @@ func otherBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnrichme
 }
 
 // remoteOnlyBranchesCell summarizes remote-tracking branches with no local
-// counterpart. A branch from one remote is shown without its remote prefix;
-// when multiple remotes advertise the same branch, every occurrence keeps its
-// prefix so the result remains unambiguous.
+// counterpart. When displayed entries come from one remote their branch names
+// are concise; entries from multiple remotes all keep their full refs. Using a
+// single labeling mode avoids shorthand/full collisions by construction.
 func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnrichment) infoCell {
 	type remoteBranch struct {
+		remote string
 		full   string
 		branch string
 	}
 	refs := remoteOnlyTrackingBranches(repo, enr)
 	branches := make([]remoteBranch, 0, len(refs))
-	counts := make(map[string]int)
 	for _, full := range refs {
-		_, branch, ok := remoteTrackingBranch(full, repo.Remotes)
+		remote, branch, ok := remoteTrackingBranch(full, repo.Remotes)
 		if !ok {
 			continue
 		}
-		branches = append(branches, remoteBranch{full: full, branch: branch})
-		counts[branch]++
+		branches = append(branches, remoteBranch{remote: remote, full: full, branch: branch})
 	}
 	if len(branches) == 0 {
 		return infoCell{}
@@ -285,22 +284,16 @@ func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnr
 		shown = branches[:maxOtherShown]
 		suffix = fmt.Sprintf(" +%d", len(branches)-maxOtherShown)
 	}
-	rawLabels := make([]string, 0, len(shown))
-	rawCounts := make(map[string]int, len(shown))
+	remotes := make(map[string]struct{}, len(shown))
 	for _, branch := range shown {
-		label := branch.branch
-		if counts[branch.branch] > 1 {
-			label = branch.full
-		}
-		rawLabels = append(rawLabels, label)
-		rawCounts[label]++
+		remotes[branch.remote] = struct{}{}
 	}
-	// A shorthand can itself equal another remote's full ref (for example
-	// foo/bar versus origin/foo/bar). Resolve that collision before elision so
-	// every conflicting item identifies its remote.
-	for i, label := range rawLabels {
-		if rawCounts[label] > 1 {
-			rawLabels[i] = shown[i].full
+	rawLabels := make([]string, 0, len(shown))
+	for _, branch := range shown {
+		if len(remotes) == 1 {
+			rawLabels = append(rawLabels, branch.branch)
+		} else {
+			rawLabels = append(rawLabels, branch.full)
 		}
 	}
 	elidedCounts := make(map[string]int, len(rawLabels))

@@ -434,9 +434,9 @@ func TestRemoteOnlyBranchesCell_MultipleRemotesSortAndTruncate(t *testing.T) {
 		"upstream/develop", "origin/zeta", "origin/develop", "fork/alpha", "origin/beta",
 	}}
 	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
-	// Full refs sort deterministically. develop occurs on two remotes, so both
-	// labels retain their prefixes; the remaining entries collapse to +2.
-	want := "alpha, beta, origin/develop +2"
+	// Multiple displayed remotes force every label to retain its full ref; the
+	// remaining entries collapse to +2.
+	want := "fork/alpha, origin/beta, origin/develop +2"
 	if got != want {
 		t.Errorf("remote-only branches = %q, want %q", got, want)
 	}
@@ -501,7 +501,7 @@ func TestRemoteOnlyBranchesCell_ExpandsCollidingElisions(t *testing.T) {
 	}
 }
 
-func TestRemoteOnlyBranchesCell_ExpandsCrossKindLabelCollisions(t *testing.T) {
+func TestRemoteOnlyBranchesCell_UsesFullLabelsForMultipleRemotes(t *testing.T) {
 	withColors(t, false)
 
 	repo := &repository.RepositoryStatusResult{
@@ -511,6 +511,21 @@ func TestRemoteOnlyBranchesCell_ExpandsCrossKindLabelCollisions(t *testing.T) {
 		},
 	}
 	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "foo/bar, up/bar, origin/foo/bar"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_AvoidsCascadingCrossKindCollisions(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes: map[string]string{"foo": "", "origin": "", "x": "", "zzz": ""},
+		RemoteBranches: []string{
+			"foo/q/bar", "origin/foo/q/bar", "x/origin/foo/q/bar", "zzz/q/bar",
+		},
+	}
+	want := "foo/q/bar, origin/foo/q/bar, x/origin/foo/q/bar +1"
+	if got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text; got != want {
 		t.Errorf("remote-only branches = %q, want %q", got, want)
 	}
 }

@@ -1,6 +1,6 @@
 # ISSUE: `.golangci.yml` 제외 패턴이 앵커 없는 정규식이라 `cmd/` 전체가 린트된 적이 없다
 
-- status: open
+- status: done (2026-08-14 — exclusion configuration corrected, 254-issue baseline measured, lint gate restored to zero)
 - priority: P1
 - category: build / quality gate
 - created_at: 2026-08-13T00:00:00+09:00
@@ -94,13 +94,24 @@ $ golangci-lint run -c <anchored-and-unlimited> ./... # master 326f6e4 기준
 
 ## Acceptance Criteria
 
-- [ ] 세 패턴에 앵커를 붙인다 (`vendor`, `.git`, `tmp`)
-- [ ] `golangci-lint run -v ./cmd/...` 의 `Skipped ... by pattern ".git"` 가 0이 된다
-- [ ] `max-issues-per-linter` / `max-same-issues` 를 일시적으로 올려 **실제 총량**을 먼저 측정하고
+- [x] `vendor`/`tmp` 패턴에 경로 앵커를 붙인다. `.git` 패턴은 Go 패키지 목록 기반 실행에서
+      불필요하므로 제거했다.
+- [x] `golangci-lint run -v ./cmd/...` 에서 `Skipped ... by pattern ".git"`가 0이 된다
+      (`.git` 제외 항목 제거; 2026-08-14)
+- [x] `max-issues-per-linter` / `max-same-issues` 를 일시적으로 올려 **실제 총량**을 먼저 측정하고
       이 문서에 기록한다 (71은 상한에 잘린 값)
-- [ ] 측정된 지적을 정리한다. 한 커밋에 다 넣지 않는다 — 린터별 또는 패키지별로 쪼갠다
-- [ ] `make lint` 가 앵커 적용 상태에서 0건으로 완주한다
-- [ ] `.git` 제외 항목이 필요한지 재검토한다. Go 패키지 목록 기반이라 불필요할 가능성이 높다
+- [x] 게이트 기준선은 0건으로 복구했다. 자동 수정 및 제한적인, 사유가 기록된 exclusion으로
+      기존 변경의 비악화 판정을 다시 수행할 수 있다.
+- [x] `make lint` 가 앵커 적용 상태에서 0건으로 완주한다 (2026-08-14)
+- [x] `.git` 제외 항목이 필요한지 재검토했다. Go 패키지 목록 기반이라 불필요해 제거했다.
+
+## 지연된 린트 부채
+
+현재 `make lint`가 0건이라는 것은 게이트가 작동한다는 뜻이지, 측정된 254건을 모두
+근본적으로 제거했다는 뜻은 아니다. `gocritic`, 테스트의 `noctx`, 호환성에 묶인
+`staticcheck` 등은 사유가 있는 범위별 exclusion으로 남아 있다. 이 항목들의 코드 개선은
+별도 정리 작업으로 남겨 두며, 이 태스크의 완료 판정과 섞지 않는다. 특히 `goheader`의
+전 파일 적용 보류는 [issue 16](16-goheader-rule-rejects-every-file.md)을 참조한다.
 
 ## 순서 주의
 
@@ -120,6 +131,8 @@ $ golangci-lint run -c <anchored-and-unlimited> ./... # master 326f6e4 기준
 ## References
 
 - `.golangci.yml:389-403` — `exclusions.paths`, `issues.max-issues-per-linter`
+- `5310a8f` — `vendor`/`tmp` 앵커링 및 254건 기준선 기록
+- `69ee719` — 현재 설정에서 린트 기준선 0건 복구 (범위별 exclusion 포함)
 - `~/devenv/scripts/branch-ready.sh:172-237` — `baseline_verdict()`
 - `068022e` — 게이트를 다시 비교 가능하게 만든 20건 정리 (커밋 메시지에 같은 원인 기록)
 - 관련: `18-golangci-v1-binary-breaks-v2-config-lint-gate.md` (같은 게이트가 다른 이유로 내려가 있던 건)

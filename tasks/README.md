@@ -1,6 +1,6 @@
 # Tasks — gzh-cli-gitforge
 
-> Last Updated: 2026-08-07
+> Last Updated: 2026-08-14
 
 ## 구조
 
@@ -25,11 +25,12 @@ tasks/
 |---|--------|---------|------|
 | — | (none tracked as open in this residual pass) | — | 추가 이슈는 `issue/` 디렉터리 참조 |
 
-### Recently closed (2026-08-07 residual pass)
+### Recently closed (2026-08-14 quality-debt follow-up)
 
 | # | 태스크 | 결과 |
 |---|--------|------|
-| 07 | llm-output-nondeterministic-map-order | drop `sortLLMSummaryBlock`; local go.work uses sorted core; publish core + go.mod bump for `GOWORK=off` CI |
+| 07 | llm-output-nondeterministic-map-order | drop `sortLLMSummaryBlock`; consume published sorted core in `go.mod` (`51aadf0`), including `GOWORK=off` CI |
+| 21 | golangci-exclusion-paths-unanchored | anchor `vendor`/`tmp`, remove unnecessary `.git` exclusion, measure 254 baseline, restore lint-zero gate; [deferred lint debt](issue/21-golangci-exclusion-paths-unanchored.md#지연된-린트-부채) remains explicitly scoped |
 | 08 | conflict-guard residual ExitCode audit | `status` → `runGit`; existence probes documented intentional |
 | 11 | status consumer + fixture gaps | ParseStatus C/unknown-worktree; switch/status fixtures; testutil fatals |
 | 16 | goheader | COMPANY=Gizzahub; linter disabled pending header-add |
@@ -42,4 +43,3 @@ Work items for this library are tracked at the **devbox root**:
 → `gzh-cli-devbox/tasks/` (e.g. todo/40-gz-git-forge-event-stream-product.md)
 
 Local `tasks/issue/20-…` is a **pointer only**.
-

@@ -4,8 +4,8 @@
 - priority: P3
 - category: cross-repo (gzh-cli-core)
 - created_at: 2026-08-05T16:00:00+09:00
-- fixed_at: 2026-08-05T19:40:00+09:00 (gzh-cli-core `84a0f3d`, **미푸시**)
-- closed_at: 2026-08-07 (gitforge: drop `sortLLMSummaryBlock`; local go.work uses sorted core)
+- fixed_at: 2026-08-05T19:40:00+09:00 (gzh-cli-core `84a0f3d`, published)
+- closed_at: 2026-08-14 (gitforge `51aadf0`: bump the standalone-module dependency)
 - affects: v0.7.0 (gz-git `--format llm`)
 - spawned_from: `05-diff-output-untracked-visibility.md` (Follow-up #2)
 
@@ -93,8 +93,9 @@ $ make test                                          # 6개 패키지 전부 ok 
     got:    SUMMARY:\n  skipped: 4\n  ahead: 5\n  behind: 6 ...
 ```
 
-`golangci-lint`는 실행 불가 — 설치본이 go1.25로 빌드되어 있고 모듈이 go1.26을 타깃한다
-(06과 동일한 기존 환경 문제, 이 변경과 무관).
+초기 검증 시점에는 로컬 `golangci-lint` 실행 환경이 준비되지 않았지만, 이는 이 변경의
+정합성이나 회귀 테스트와 무관한 환경 제약이었다. 현재 lint 게이트의 상태와 잔여 정리는
+[issue 21](21-golangci-exclusion-paths-unanchored.md)에 기록한다.
 
 ## Acceptance Criteria
 
@@ -106,7 +107,7 @@ $ make test                                          # 6개 패키지 전부 ok 
 - [x] gzh-cli-gitforge의 `sortLLMSummaryBlock`(`cmd/gz-git/cmd/diff_output_test.go`)
       정규화 헬퍼 제거 — **2026-08-07** 완료 (raw golden assert)
 
-## 완료 노트 (2026-08-07)
+## 완료 노트 (2026-08-14)
 
 `sortLLMSummaryBlock` 제거 완료. `TestDiffLLMFormatShowsUntracked`는 raw output으로
 `assertGolden` 호출. 골든은 이미 사전순(`clean` → `has-changes`).
@@ -114,10 +115,11 @@ $ make test                                          # 6개 패키지 전부 ok 
 | 경로 | core 출처 | 결과 |
 |------|-----------|------|
 | 로컬 / devbox `go.work` | `./gzh-cli-core` (sorted `formatMap`) | `go test ./cmd/gz-git/cmd/ -run Diff\|LLM\|Golden -count=3` ok |
-| CI / 단독 모듈 (`GOWORK=off`) | `go.mod` pinned 구 core | **실패 가능** — published core pseudo-version bump 필요 |
+| CI / 단독 모듈 (`GOWORK=off`) | `go.mod` → `gzh-cli-core@v0.0.0-20260805234833-84a0f3d05f5d` | published core를 소비하도록 bump 완료 (`51aadf0`) |
 
-**후속 (소비자 단독 CI)**: core push → `go get gzh-cli-core@<pseudo>` → `GOWORK=off` 재검증.
-헬퍼 제거 자체는 로컬 go.work 기준으로 닫는다.
+소비자 단독 CI에서 정렬된 core를 사용하도록 `go.mod`/`go.sum`을 갱신했고, 이제
+`GOWORK=off` 경로도 로컬 `go.work`와 같은 formatter 구현을 사용한다. 따라서 이 태스크의
+후속( core publish 및 consumer bump)은 종료되었다.
 
 ## References
 

@@ -4,6 +4,19 @@
 
 ---
 
+## 완료 (2026-08-14 — quality-debt follow-up)
+
+| # | 태스크 | 우선순위 | 요지 |
+|---|--------|---------|------|
+| 07 | [llm-output-nondeterministic-map-order](issue/07-llm-output-nondeterministic-map-order.md) | P3 | published core `84a0f3d`를 `go.mod`/`go.sum`에 반영해 `GOWORK=off` 단독 CI도 정렬 formatter를 사용 ✅ |
+| 21 | [golangci-exclusion-paths-unanchored](issue/21-golangci-exclusion-paths-unanchored.md) | P1 | exclusion 경로 교정·254건 기준선 측정·lint-zero 게이트 복구; 범위별 suppression 부채는 문서에 지연 항목으로 명시 ✅ |
+
+검증·범위 메모: handoff의 untracked-only 실제 CLI 경로와 artifact guard는
+`tests/e2e/handoff_test.go`에 추가했다. 린트 0건은 게이트 복구를 뜻하며, 모든 기존
+lint 지적을 근본 해결했다는 의미는 아니다. 남은 항목은 [issue 21의 지연된 린트 부채](issue/21-golangci-exclusion-paths-unanchored.md#지연된-린트-부채)에 링크한다.
+
+---
+
 ## 완료 (2026-08-07)
 
 | # | 태스크 | 우선순위 | 요지 |

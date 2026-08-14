@@ -5,10 +5,65 @@ package gitea
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 )
+
+func TestProvider_ValidateToken_ClassifiesFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		headerName string
+		headerVal  string
+		wantErr    error
+	}{
+		{name: "ordinary forbidden", status: http.StatusForbidden, wantErr: provider.ErrTokenForbidden},
+		{name: "exhausted forbidden", status: http.StatusForbidden, headerName: "X-RateLimit-Remaining", headerVal: "0", wantErr: provider.ErrTokenValidationRateLimited},
+		{name: "too many requests", status: http.StatusTooManyRequests, wantErr: provider.ErrTokenValidationRateLimited},
+		{name: "server error", status: http.StatusBadGateway, wantErr: provider.ErrTokenValidationAPI},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/user" {
+					t.Errorf("request path = %q, want /api/v1/user", r.URL.Path)
+				}
+				if tt.headerName != "" {
+					w.Header().Set(tt.headerName, tt.headerVal)
+				}
+				w.WriteHeader(tt.status)
+			}))
+			defer server.Close()
+
+			p, err := NewProvider("test-token", server.URL)
+			if err != nil {
+				t.Fatalf("NewProvider: %v", err)
+			}
+			valid, err := p.ValidateToken(context.Background())
+			if valid || !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ValidateToken = (%v, %v), want false and errors.Is(..., %v)", valid, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestProvider_ValidateToken_TransportFailureIsUnreachable(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	server.Close()
+
+	p, err := NewProvider("test-token", server.URL)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	valid, err := p.ValidateToken(context.Background())
+	if valid || !errors.Is(err, provider.ErrTokenValidationUnreachable) {
+		t.Fatalf("ValidateToken = (%v, %v), want false and unreachable error", valid, err)
+	}
+}
 
 func TestNewProvider_RequiresBaseURL(t *testing.T) {
 	_, err := NewProvider("token", "")

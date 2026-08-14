@@ -5,6 +5,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 )
 
 // Run executes all diagnostic checks and returns a report.
@@ -605,24 +607,8 @@ func checkForgeConnectivity(ctx context.Context) []CheckResult {
 		valid, err := p.ValidateToken(checkCtx)
 		cancel()
 
-		if err != nil {
-			results = append(results, CheckResult{
-				Name:     fmt.Sprintf("forge:%s", name),
-				Category: CategoryForge,
-				Status:   StatusUnreachable,
-				Message:  fmt.Sprintf("profile '%s': %s API unreachable", name, profile.Provider),
-				Detail:   err.Error(),
-			})
-			continue
-		}
-
-		if !valid {
-			results = append(results, CheckResult{
-				Name:     fmt.Sprintf("forge:%s", name),
-				Category: CategoryForge,
-				Status:   StatusError,
-				Message:  fmt.Sprintf("profile '%s': %s token is invalid or expired", name, profile.Provider),
-			})
+		if err != nil || !valid {
+			results = append(results, tokenValidationResult(name, profile.Provider, err))
 			continue
 		}
 
@@ -657,6 +643,40 @@ func checkForgeConnectivity(ctx context.Context) []CheckResult {
 	}
 
 	return results
+}
+
+func tokenValidationResult(profileName, providerName string, err error) CheckResult {
+	result := CheckResult{
+		Name:     fmt.Sprintf("forge:%s", profileName),
+		Category: CategoryForge,
+	}
+	if err == nil {
+		result.Status = StatusError
+		result.Message = fmt.Sprintf("profile '%s': %s token is invalid or expired", profileName, providerName)
+		return result
+	}
+
+	result.Detail = err.Error()
+	switch {
+	case errors.Is(err, provider.ErrTokenForbidden):
+		result.Status = StatusError
+		result.Message = fmt.Sprintf("profile '%s': %s token is invalid or forbidden", profileName, providerName)
+	case errors.Is(err, provider.ErrTokenValidationRateLimited):
+		result.Status = StatusWarning
+		result.Message = fmt.Sprintf("profile '%s': %s API rate limited while validating token", profileName, providerName)
+	case errors.Is(err, provider.ErrTokenValidationUnreachable):
+		result.Status = StatusUnreachable
+		result.Message = fmt.Sprintf("profile '%s': %s API unreachable", profileName, providerName)
+	case errors.Is(err, provider.ErrTokenValidationAPI):
+		result.Status = StatusError
+		result.Message = fmt.Sprintf("profile '%s': %s API returned a validation error", profileName, providerName)
+	default:
+		// Preserve the legacy interpretation for external ProviderWithAuth
+		// implementations that return an unclassified error.
+		result.Status = StatusUnreachable
+		result.Message = fmt.Sprintf("profile '%s': %s API unreachable", profileName, providerName)
+	}
+	return result
 }
 
 // --- Helpers ---

@@ -4,9 +4,36 @@
 package provider
 
 import (
+	"errors"
+	"net/http"
 	"testing"
 	"time"
 )
+
+func TestClassifyTokenValidationError(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  int
+		headers http.Header
+		wantErr error
+	}{
+		{name: "forbidden", status: http.StatusForbidden, wantErr: ErrTokenForbidden},
+		{name: "forbidden exhausted", status: http.StatusForbidden, headers: http.Header{"X-RateLimit-Remaining": []string{"0"}}, wantErr: ErrTokenValidationRateLimited},
+		{name: "too many requests", status: http.StatusTooManyRequests, wantErr: ErrTokenValidationRateLimited},
+		{name: "retry after", status: http.StatusForbidden, headers: http.Header{"Retry-After": []string{"60"}}, wantErr: ErrTokenValidationRateLimited},
+		{name: "server error", status: http.StatusInternalServerError, wantErr: ErrTokenValidationAPI},
+		{name: "transport", status: 0, wantErr: ErrTokenValidationUnreachable},
+		{name: "other api", status: http.StatusBadRequest, wantErr: ErrTokenValidationAPI},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ClassifyTokenValidationError("test", tt.status, tt.headers, errors.New("cause"))
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error = %v, want errors.Is(..., %v)", err, tt.wantErr)
+			}
+		})
+	}
+}
 
 func TestSyncAction(t *testing.T) {
 	tests := []struct {

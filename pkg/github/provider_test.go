@@ -5,11 +5,57 @@ package github
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	providerapi "github.com/gizzahub/gzh-cli-gitforge/pkg/provider"
 )
+
+func TestProvider_ValidateToken_ClassifiesFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		headerName string
+		headerVal  string
+		wantErr    error
+	}{
+		{name: "ordinary forbidden", status: http.StatusForbidden, wantErr: providerapi.ErrTokenForbidden},
+		{name: "exhausted forbidden", status: http.StatusForbidden, headerName: "X-RateLimit-Remaining", headerVal: "0", wantErr: providerapi.ErrTokenValidationRateLimited},
+		{name: "too many requests", status: http.StatusTooManyRequests, wantErr: providerapi.ErrTokenValidationRateLimited},
+		{name: "server error", status: http.StatusBadGateway, wantErr: providerapi.ErrTokenValidationAPI},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tt.headerName != "" {
+					w.Header().Set(tt.headerName, tt.headerVal)
+				}
+				w.WriteHeader(tt.status)
+			}))
+			defer server.Close()
+
+			p := mustNewProvider(t, "test-token", server.URL)
+			valid, err := p.ValidateToken(context.Background())
+			if valid || !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ValidateToken = (%v, %v), want false and errors.Is(..., %v)", valid, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestProvider_ValidateToken_TransportFailureIsUnreachable(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	server.Close()
+
+	p := mustNewProvider(t, "test-token", server.URL)
+	valid, err := p.ValidateToken(context.Background())
+	if valid || !errors.Is(err, providerapi.ErrTokenValidationUnreachable) {
+		t.Fatalf("ValidateToken = (%v, %v), want false and unreachable error", valid, err)
+	}
+}
 
 func mustNewProvider(t *testing.T, token, baseURL string) *Provider {
 	t.Helper()

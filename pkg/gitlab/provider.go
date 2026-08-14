@@ -93,15 +93,25 @@ func (p *Provider) SetToken(token string) error {
 
 // ValidateToken validates the current token.
 func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
-	if p.token == "" {
+	p.mu.RLock()
+	token := p.token
+	client := p.client
+	p.mu.RUnlock()
+	if token == "" {
 		return false, nil
 	}
-	_, resp, err := p.client.Users.CurrentUser(gitlab.WithContext(ctx))
+	_, resp, err := client.Users.CurrentUser(gitlab.WithContext(ctx))
 	if err != nil {
-		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
 		}
-		return false, fmt.Errorf("failed to validate GitLab token: %w", err)
+		status := 0
+		var headers http.Header
+		if resp != nil {
+			status = resp.StatusCode
+			headers = resp.Header
+		}
+		return false, provider.ClassifyTokenValidationError("GitLab token validation", status, headers, err)
 	}
 	return true, nil
 }

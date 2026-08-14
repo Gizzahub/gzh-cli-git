@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"code.gitea.io/sdk/gitea"
@@ -93,17 +94,32 @@ func (p *Provider) SetToken(token string) error {
 
 // ValidateToken validates the current token.
 func (p *Provider) ValidateToken(ctx context.Context) (bool, error) {
-	if p.token == "" {
+	p.mu.RLock()
+	token := p.token
+	baseURL := p.baseURL
+	p.mu.RUnlock()
+	if token == "" {
 		return false, nil
 	}
 
-	// GetMyUserInfo returns the authenticated user
-	_, resp, err := p.client.GetMyUserInfo()
+	// The SDK only supports a process-wide default context on Client. Build a
+	// short-lived request instead of mutating p.client, which keeps validation
+	// cancellation local and avoids a data race with concurrent operations.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/v1/user", http.NoBody)
 	if err != nil {
-		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-			return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
-		}
-		return false, fmt.Errorf("failed to validate Gitea token: %w", err)
+		return false, provider.ClassifyTokenValidationError("Gitea token validation", 0, nil, err)
+	}
+	req.Header.Set("Authorization", "token "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, provider.ClassifyTokenValidationError("Gitea token validation", 0, nil, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return false, nil //nolint:nilerr // authentication rejection means the API is reachable but the token is invalid.
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return false, provider.ClassifyTokenValidationError("Gitea token validation", resp.StatusCode, resp.Header, fmt.Errorf("HTTP status %d", resp.StatusCode))
 	}
 	return true, nil
 }

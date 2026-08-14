@@ -889,6 +889,14 @@ func TestGetInfoNilRepo(t *testing.T) {
 	}
 }
 
+func TestParseRemoteBranches_ExcludesSymbolicHEADAndRetainsFinalRef(t *testing.T) {
+	output := "origin/HEAD\trefs/remotes/origin/master\tx\norigin/develop\t\tx"
+	got := parseRemoteBranches(output)
+	if len(got) != 1 || got[0] != "origin/develop" {
+		t.Errorf("parseRemoteBranches() = %q, want [origin/develop]", got)
+	}
+}
+
 // Helper functions
 
 // testLogger is a simple logger implementation for testing.

@@ -47,6 +47,7 @@ func buildInfoRow(
 	cells[colDirty] = dirtyCell(repo)
 	cells[colRemote] = remoteCell(repo, majorityOwner)
 	cells[colOther] = otherBranchesCell(repo, enr)
+	cells[colRemoteOnly] = remoteOnlyBranchesCell(repo, enr)
 
 	return infoRow{
 		marker:   infoMarker(repo, enr),
@@ -239,6 +240,70 @@ func otherBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnrichme
 	}
 
 	return infoCell{text: strings.Join(labels, ", ") + suffix, color: cliutil.ColorGray}
+}
+
+// remoteOnlyBranchesCell summarizes remote-tracking branches with no local
+// counterpart. A branch from one remote is shown without its remote prefix;
+// when multiple remotes advertise the same branch, every occurrence keeps its
+// prefix so the result remains unambiguous.
+func remoteOnlyBranchesCell(repo *repository.RepositoryStatusResult, enr infoEnrichment) infoCell {
+	local := make(map[string]struct{}, len(repo.LocalBranches)+3)
+	for _, branch := range repo.LocalBranches {
+		local[branch] = struct{}{}
+	}
+	for _, branch := range []string{repo.Branch, enr.Base.Name, remoteBranchName(repo.Upstream)} {
+		if branch != "" {
+			local[branch] = struct{}{}
+		}
+	}
+
+	type remoteBranch struct {
+		full   string
+		branch string
+	}
+	branches := make([]remoteBranch, 0, len(repo.RemoteBranches))
+	counts := make(map[string]int)
+	for _, full := range repo.RemoteBranches {
+		branch := remoteBranchName(full)
+		if branch == "" {
+			continue
+		}
+		if _, exists := local[branch]; exists {
+			continue
+		}
+		branches = append(branches, remoteBranch{full: full, branch: branch})
+		counts[branch]++
+	}
+	if len(branches) == 0 {
+		return infoCell{}
+	}
+	sort.Slice(branches, func(i, j int) bool { return branches[i].full < branches[j].full })
+
+	shown := branches
+	suffix := ""
+	if len(branches) > maxOtherShown {
+		shown = branches[:maxOtherShown]
+		suffix = fmt.Sprintf(" +%d", len(branches)-maxOtherShown)
+	}
+	labels := make([]string, 0, len(shown))
+	for _, branch := range shown {
+		label := branch.branch
+		if counts[branch.branch] > 1 {
+			label = branch.full
+		}
+		labels = append(labels, elideMiddle(label, maxBranchWidth))
+	}
+	return infoCell{text: strings.Join(labels, ", ") + suffix, color: cliutil.ColorGray}
+}
+
+// remoteBranchName removes exactly the remote component from a tracking ref.
+// A value without both components cannot be a remote-tracking branch.
+func remoteBranchName(ref string) string {
+	_, branch, ok := strings.Cut(ref, "/")
+	if !ok || branch == "" || branch == "HEAD" {
+		return ""
+	}
+	return branch
 }
 
 // remoteCell names the remote owner only when it is not the workspace's

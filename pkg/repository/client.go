@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
@@ -409,6 +410,16 @@ func (c *client) GetInfo(ctx context.Context, repo *Repository) (*Info, error) {
 		}
 	}
 
+	// Remote-tracking refs are intentionally collected separately from local
+	// branches. A remote's symbolic HEAD (for example origin/HEAD) is not a
+	// branch a user can check out, so %(symref) lets us leave it out here.
+	// The final literal keeps RunOutput's whitespace trimming from consuming an
+	// empty symref field on the last ordinary ref.
+	output, err = c.executor.RunOutput(ctx, repo.Path, "for-each-ref", "--format=%(refname:short)%09%(symref)%09x", "refs/remotes")
+	if err == nil {
+		info.RemoteBranches = parseRemoteBranches(output)
+	}
+
 	// Get stash count and the age of the oldest entry. The age is what separates
 	// "I am mid-task" from work that has been invisible to every other machine
 	// for weeks, and git offers no cheaper way to ask than reading the dates.
@@ -420,6 +431,21 @@ func (c *client) GetInfo(ctx context.Context, repo *Repository) (*Info, error) {
 	c.logger.Info("Retrieved repository info for %s", repo.Path)
 
 	return info, nil
+}
+
+// parseRemoteBranches accepts for-each-ref's ref, symref, marker records.
+// Symbolic refs (origin/HEAD) have a non-empty symref and are not branches.
+func parseRemoteBranches(output string) []string {
+	branches := make([]string, 0)
+	for line := range strings.SplitSeq(output, "\n") {
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) != 3 || parts[0] == "" || parts[1] != "" || parts[2] != "x" {
+			continue
+		}
+		branches = append(branches, parts[0])
+	}
+	sort.Strings(branches)
+	return branches
 }
 
 // GetStatus retrieves the current status of the repository.

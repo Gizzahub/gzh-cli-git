@@ -239,6 +239,10 @@ type Info struct {
 	// LocalBranches contains the list of local branch names.
 	LocalBranches []string
 
+	// RemoteBranches contains remote-tracking branch names in remote/branch
+	// form. Symbolic remote HEAD refs are excluded.
+	RemoteBranches []string
+
 	// StashCount is the number of stash entries.
 	StashCount int
 

@@ -78,10 +78,10 @@ type infoRow struct {
 	baseName string // for deciding whether to hoist the base name into the header
 }
 
-// infoColumns are the fixed-position columns, in print order. "OTHER BRANCHES"
+// infoColumns are the fixed-position columns, in print order. "REMOTE ONLY"
 // is deliberately last and unpadded so it can absorb variable-length content
 // without pushing anything else out of alignment.
-var infoColumns = []string{"REPOSITORY", "BRANCH", "UPSTREAM", "BASE", "WT", "DIRTY", "REMOTE", "OTHER BRANCHES"}
+var infoColumns = []string{"REPOSITORY", "BRANCH", "UPSTREAM", "BASE", "WT", "DIRTY", "REMOTE", "OTHER BRANCHES", "REMOTE ONLY"}
 
 const (
 	colRepo = iota
@@ -92,6 +92,7 @@ const (
 	colDirty
 	colRemote
 	colOther
+	colRemoteOnly
 )
 
 // renderInfoTable writes the one-line-per-repository table. compact drops

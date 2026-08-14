@@ -552,6 +552,7 @@ type RepositoryStatusResult struct {
 	LastCommitDate   string
 	LastCommitAuthor string
 	LocalBranches    []string
+	RemoteBranches   []string
 	StashCount       int
 
 	// OldestStash is when the oldest stash entry was created, zero when there
@@ -2594,6 +2595,7 @@ func (c *client) processStatusRepository(ctx context.Context, rootDir, repoPath 
 	result.LastCommitDate = info.LastCommitDate
 	result.LastCommitAuthor = info.LastCommitAuthor
 	result.LocalBranches = info.LocalBranches
+	result.RemoteBranches = info.RemoteBranches
 	result.StashCount = info.StashCount
 	result.OldestStash = info.OldestStash
 	result.CommitsBehind = info.BehindBy

@@ -159,10 +159,13 @@ func TestRenderInfoTable_CompactDropsAllEmptyColumns(t *testing.T) {
 	withColors(t, false)
 
 	out, row := cleanRepoTable(t, true)
-	for _, dropped := range []string{"UPSTREAM", "DIRTY", "WT", "REMOTE"} {
+	for _, dropped := range []string{"UPSTREAM", "DIRTY", "WT"} {
 		if strings.Contains(out, dropped) {
 			t.Errorf("column %q should be dropped when every cell is empty:\n%s", dropped, out)
 		}
+	}
+	if strings.Contains(out, "BRANCH REMOTE REMOTE ONLY") {
+		t.Errorf("REMOTE should be dropped when every REMOTE cell is empty:\n%s", out)
 	}
 	if !strings.Contains(out, "REPOSITORY") || !strings.Contains(out, "BRANCH") {
 		t.Errorf("REPOSITORY and BRANCH must always survive:\n%s", out)
@@ -402,6 +405,56 @@ func TestOtherBranchesCell_WorktreeBackedFirst(t *testing.T) {
 	}
 	if strings.Contains(got, "master") {
 		t.Errorf("current/base branch must not repeat in OTHER, got %q", got)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_ExcludesLocalAndSymbolicHEAD(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Branch:         "master",
+		Upstream:       "origin/master",
+		LocalBranches:  []string{"master", "feature/local"},
+		RemoteBranches: []string{"origin/HEAD", "origin/develop", "origin/feature/local", "origin/master"},
+	}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{Base: repository.BaseBranchInfo{Name: "master"}}).text
+	if got != "develop" {
+		t.Errorf("remote-only branches = %q, want %q", got, "develop")
+	}
+}
+
+func TestRemoteOnlyBranchesCell_MultipleRemotesSortAndTruncate(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{RemoteBranches: []string{
+		"upstream/develop", "origin/zeta", "origin/develop", "fork/alpha", "origin/beta",
+	}}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
+	// Full refs sort deterministically. develop occurs on two remotes, so both
+	// labels retain their prefixes; the remaining entries collapse to +2.
+	want := "alpha, beta, origin/develop +2"
+	if got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRenderInfoTable_CompactKeepsRemoteOnlyColumn(t *testing.T) {
+	withColors(t, false)
+
+	result := bulkResult(repository.RepositoryStatusResult{
+		Path: "/w/remote-only", Branch: "master", Upstream: "origin/master",
+		RemoteURL:     "git@github.com:Acme/remote-only.git",
+		LocalBranches: []string{"master"}, RemoteBranches: []string{"origin/develop"},
+	})
+	enr := map[string]infoEnrichment{
+		"/w/remote-only": {Base: repository.BaseBranchInfo{Name: "master"}},
+	}
+
+	var buf bytes.Buffer
+	renderInfoTable(&buf, result, enr, false, true)
+	out := buf.String()
+	if !strings.Contains(out, "REMOTE ONLY") || !strings.Contains(out, "develop") {
+		t.Errorf("compact table must retain remote-only information:\n%s", out)
 	}
 }
 

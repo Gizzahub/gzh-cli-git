@@ -213,7 +213,7 @@ type BranchConfig struct {
 	// not from the 5-layer merger.
 	IntegrationBranch BranchList `yaml:"integrationBranch,omitempty"`
 
-	// TaskPattern is the reclaim allow-list (trailing * prefix match).
+	// TaskPattern is the reclaim allow-list (first-* namespace prefix).
 	// Load it only via LoadRepoRootTaskPattern — never findConfigUpward.
 	TaskPattern BranchList `yaml:"taskPattern,omitempty"`
 

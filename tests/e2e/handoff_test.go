@@ -41,16 +41,66 @@ func seedProtectedBranchHandoffRepo(t *testing.T) *E2ERepo {
 	repo.Git("add", "README.md")
 	repo.Git("commit", "-m", "Initial commit")
 
-	// The project policy protects the branch this fixture is currently on. The
-	// config is committed before the work is created so it cannot become part of
-	// the checkpoint whose creation the test is guarding.
-	branch := repo.GetCurrentBranch()
+	// Use an explicit per-fixture branch rather than the default branch. This
+	// prevents an unrelated global/profile policy from making the test pass
+	// before the project .gz-git.yaml is discovered.
+	branch := "handoff-protected-" + filepath.Base(repo.repoDir)
+	repo.Git("checkout", "-b", branch)
+	// The project policy protects this branch. The config is committed before
+	// the work is created so it cannot become part of the checkpoint whose
+	// creation the test is guarding.
 	repo.WriteFile(".gz-git.yaml", fmt.Sprintf("push:\n  policy:\n    protected:\n      - %q\n", branch))
 	repo.Git("add", ".gz-git.yaml")
 	repo.Git("commit", "-m", "Configure protected branch policy")
 	setupRemote(t, repo)
 	repo.WriteFile("notes.txt", "must remain on the protected branch\n")
 	return repo
+}
+
+// runGzhGitIsolatedResult prevents the test process's real home directory,
+// global config, active profile, and token environment from influencing a
+// project-policy assertion. The project .gz-git.yaml remains in repoDir and is
+// therefore the only policy source available to the command.
+func runGzhGitIsolatedResult(t *testing.T, repo *E2ERepo, args ...string) (string, error) {
+	t.Helper()
+
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	if err := os.MkdirAll(configHome, 0o700); err != nil {
+		t.Fatalf("failed to create isolated config home: %v", err)
+	}
+
+	env := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if key == "HOME" || key == "XDG_CONFIG_HOME" ||
+			strings.HasPrefix(key, "GZ_GIT_") ||
+			key == "GITHUB_TOKEN" || key == "GITLAB_TOKEN" || key == "GITEA_TOKEN" {
+			continue
+		}
+		env = append(env, entry)
+	}
+	env = append(env, "HOME="+home, "XDG_CONFIG_HOME="+configHome)
+
+	cmd := exec.Command(repo.binaryPath, args...) //nolint:noctx // test helper
+	cmd.Dir = repo.repoDir
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func readGitPath(t *testing.T, repo *E2ERepo, path string) string {
+	t.Helper()
+
+	gitPath := strings.TrimSpace(repo.Git("rev-parse", "--git-path", path))
+	if !filepath.IsAbs(gitPath) {
+		gitPath = filepath.Join(repo.repoDir, gitPath)
+	}
+	content, err := os.ReadFile(gitPath)
+	if err != nil {
+		t.Fatalf("failed to read git path %s: %v", path, err)
+	}
+	return string(content)
 }
 
 func seedConflictHandoffRepo(t *testing.T) *E2ERepo {
@@ -220,7 +270,7 @@ func TestHandoffEndProtectedBranchPreservesWork(t *testing.T) {
 	beforeRemote := remoteHead(t, repo)
 	beforeStatus := repo.Git("status", "--porcelain=v1")
 
-	output, err := repo.RunGzhGitResult("handoff", "end", "--no-trailers")
+	output, err := runGzhGitIsolatedResult(t, repo, "handoff", "end", "--no-trailers")
 	AssertExitCode(t, err, 1)
 	if err == nil {
 		t.Fatal("handoff end unexpectedly succeeded on a protected branch")
@@ -253,6 +303,18 @@ func TestHandoffEndMergeConflictPreservesWork(t *testing.T) {
 	beforeRemote := remoteHead(t, repo)
 	beforeStatus := repo.Git("status", "--porcelain=v1")
 	beforeConflict := repo.ReadFile("conflict.txt")
+	beforeMergeHead := readGitPath(t, repo, "MERGE_HEAD")
+	if strings.TrimSpace(beforeMergeHead) == "" {
+		t.Fatal("fixture has no MERGE_HEAD after the failed merge")
+	}
+	beforeUnmergedIndex := repo.Git("ls-files", "-u")
+	if strings.TrimSpace(beforeUnmergedIndex) == "" {
+		t.Fatal("fixture has no unmerged index entries after the failed merge")
+	}
+	beforeUnmergedPaths := repo.Git("diff", "--name-only", "--diff-filter=U")
+	if strings.TrimSpace(beforeUnmergedPaths) == "" {
+		t.Fatal("fixture has no unmerged paths after the failed merge")
+	}
 
 	output, err := repo.RunGzhGitResult("handoff", "end", "--no-trailers")
 	AssertExitCode(t, err, 1)
@@ -275,6 +337,15 @@ func TestHandoffEndMergeConflictPreservesWork(t *testing.T) {
 	}
 	if got := repo.ReadFile("conflict.txt"); got != beforeConflict {
 		t.Fatalf("merge-conflict blocker changed conflict file from %q to %q", beforeConflict, got)
+	}
+	if got := readGitPath(t, repo, "MERGE_HEAD"); got != beforeMergeHead {
+		t.Fatalf("merge-conflict blocker changed MERGE_HEAD from %q to %q", beforeMergeHead, got)
+	}
+	if got := repo.Git("ls-files", "-u"); got != beforeUnmergedIndex {
+		t.Fatalf("merge-conflict blocker changed unmerged index from %q to %q", beforeUnmergedIndex, got)
+	}
+	if got := repo.Git("diff", "--name-only", "--diff-filter=U"); got != beforeUnmergedPaths {
+		t.Fatalf("merge-conflict blocker changed unmerged paths from %q to %q", beforeUnmergedPaths, got)
 	}
 }
 

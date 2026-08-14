@@ -82,7 +82,13 @@ func TestProvider_ValidateToken_EmptyToken(t *testing.T) {
 
 func TestProvider_ValidateToken_DistinguishesInvalidTokenFromAPIErrors(t *testing.T) {
 	status := http.StatusUnauthorized
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/user" {
+			t.Errorf("request path = %q, want /api/v1/user", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "token test-token" {
+			t.Errorf("Authorization = %q, want token test-token", got)
+		}
 		w.WriteHeader(status)
 	}))
 	defer server.Close()
@@ -103,6 +109,54 @@ func TestProvider_ValidateToken_DistinguishesInvalidTokenFromAPIErrors(t *testin
 	valid, err = p.ValidateToken(context.Background())
 	if valid || err == nil {
 		t.Fatalf("ValidateToken = (%v, %v), want (false, API error)", valid, err)
+	}
+}
+
+func TestProvider_ListOrganizations_UsesNameAndPagination(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/api/v1/user/orgs" {
+			t.Errorf("request path = %q, want /api/v1/user/orgs", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "token test-token" {
+			t.Errorf("Authorization = %q, want token test-token", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "50" {
+			t.Errorf("limit = %q, want 50", got)
+		}
+		if requests == 1 {
+			if got := r.URL.Query().Get("page"); got != "1" {
+				t.Errorf("first page = %q, want 1", got)
+			}
+			w.Header().Set("Link", `<`+r.URL.Path+`?page=2&limit=50>; rel="next"`)
+			_, _ = w.Write([]byte(`[{"name":"canonical","username":"legacy","description":"first","website":"https://gitea.example/canonical"}]`))
+			return
+		}
+
+		if got := r.URL.Query().Get("page"); got != "2" {
+			t.Errorf("second page = %q, want 2", got)
+		}
+		_, _ = w.Write([]byte(`[{"name":"second","username":"legacy-second"}]`))
+	}))
+	defer server.Close()
+
+	p, err := NewProvider("test-token", server.URL)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	orgs, err := p.ListOrganizations(context.Background())
+	if err != nil {
+		t.Fatalf("ListOrganizations: %v", err)
+	}
+	if len(orgs) != 2 {
+		t.Fatalf("got %d organizations, want 2", len(orgs))
+	}
+	if orgs[0].Name != "canonical" || orgs[1].Name != "second" {
+		t.Fatalf("organization names = [%q, %q], want [canonical, second]", orgs[0].Name, orgs[1].Name)
+	}
+	if orgs[0].URL != "https://gitea.example/canonical" || orgs[0].Description != "first" {
+		t.Errorf("first organization = %#v, want mapped description and URL", orgs[0])
 	}
 }
 

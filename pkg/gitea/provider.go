@@ -194,7 +194,7 @@ func (p *Provider) ListOrganizations(ctx context.Context) ([]*provider.Organizat
 
 		for _, org := range orgs {
 			allOrgs = append(allOrgs, &provider.Organization{
-				Name:        org.UserName,
+				Name:        org.Name,
 				Description: org.Description,
 				URL:         org.Website,
 			})

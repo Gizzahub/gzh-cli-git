@@ -4,8 +4,11 @@
 package reposync
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -251,7 +254,7 @@ func TestBuildSSHCommand(t *testing.T) {
 			name:     "Default port",
 			keyPath:  "/path/to/key",
 			sshPort:  0,
-			contains: []string{"ssh", "-i /path/to/key", "IdentitiesOnly=yes"},
+			contains: []string{"ssh", "-i '/path/to/key'", "IdentitiesOnly=yes"},
 		},
 		{
 			name:     "Custom port",
@@ -263,7 +266,7 @@ func TestBuildSSHCommand(t *testing.T) {
 			name:     "Standard port 22 omitted",
 			keyPath:  "/path/to/key",
 			sshPort:  22,
-			contains: []string{"ssh", "-i /path/to/key"},
+			contains: []string{"ssh", "-i '/path/to/key'"},
 		},
 	}
 
@@ -276,6 +279,39 @@ func TestBuildSSHCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildSSHCommandProtectsKeyPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell to verify GIT_SSH_COMMAND parsing")
+	}
+
+	tempDir := t.TempDir()
+	marker := filepath.Join(tempDir, "injected")
+	keyPath := filepath.Join(tempDir, "key path;touch "+marker+" '$(printf hacked)'")
+	capture := filepath.Join(tempDir, "ssh-args")
+	fakeSSH := filepath.Join(tempDir, "ssh")
+	if err := os.WriteFile(fakeSSH, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_FILE\"\n"), 0o700); err != nil {
+		t.Fatalf("write fake ssh: %v", err)
+	}
+
+	command := buildSSHCommand(keyPath, 2224)
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", command+" git@example.com:group/repo.git")
+	cmd.Env = append(os.Environ(), "PATH="+tempDir+":/usr/bin:/bin", "CAPTURE_FILE="+capture)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("run quoted SSH command: %v, output: %s", err, output)
+	}
+
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("key path was interpreted as shell syntax; marker stat error: %v", err)
+	}
+	args, err := os.ReadFile(capture)
+	if err != nil {
+		t.Fatalf("read fake ssh arguments: %v", err)
+	}
+	if !strings.Contains(string(args), keyPath) {
+		t.Errorf("fake ssh did not receive the complete key path; args=%q", args)
 	}
 }
 

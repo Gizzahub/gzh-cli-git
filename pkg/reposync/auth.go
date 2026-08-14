@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -208,7 +209,9 @@ func prepareSSHAuth(result *AuthResult, auth AuthConfig) error {
 func buildSSHCommand(keyPath string, sshPort int) string {
 	// Base command with key and IdentitiesOnly
 	// IdentitiesOnly=yes prevents ssh from trying other keys
-	cmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", keyPath)
+	// GIT_SSH_COMMAND is evaluated by a command shell. Quote the key path as
+	// one argument so spaces and shell metacharacters cannot alter the command.
+	cmd := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", quoteShellArg(keyPath))
 
 	// Add custom port if specified
 	if sshPort > 0 && sshPort != 22 {
@@ -216,6 +219,52 @@ func buildSSHCommand(keyPath string, sshPort int) string {
 	}
 
 	return cmd
+}
+
+// quoteShellArg quotes one argument in the command language used to execute
+// GIT_SSH_COMMAND. Git for Unix-like systems uses a POSIX shell; Git for
+// Windows uses the Windows command-line quoting rules for native commands.
+// Keeping this at the boundary is important because key paths come from user
+// configuration and are otherwise interpreted as command syntax.
+func quoteShellArg(arg string) string {
+	if runtime.GOOS == "windows" {
+		return quoteWindowsCommandLineArg(arg)
+	}
+
+	// A single-quoted POSIX argument treats every byte literally. The only
+	// character that needs escaping is a single quote itself.
+	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+}
+
+// quoteWindowsCommandLineArg applies the quoting rules consumed by the
+// Windows C runtime. Git for Windows passes GIT_SSH_COMMAND to a native SSH
+// executable, so this keeps paths containing whitespace or quotes in one
+// argument without relying on shell interpolation.
+func quoteWindowsCommandLineArg(arg string) string {
+	if arg != "" && !strings.ContainsAny(arg, " \t\"") {
+		return arg
+	}
+
+	var quoted strings.Builder
+	quoted.WriteByte('"')
+	backslashes := 0
+	for _, char := range arg {
+		switch char {
+		case '\\':
+			backslashes++
+		case '"':
+			quoted.WriteString(strings.Repeat("\\", backslashes*2+1))
+			quoted.WriteByte('"')
+			backslashes = 0
+		default:
+			quoted.WriteString(strings.Repeat("\\", backslashes))
+			quoted.WriteRune(char)
+			backslashes = 0
+		}
+	}
+	quoted.WriteString(strings.Repeat("\\", backslashes*2))
+	quoted.WriteByte('"')
+	return quoted.String()
 }
 
 // createTempSSHKey creates a temporary file containing the SSH key content.

@@ -67,6 +67,70 @@ func TestTempGitRepoWithCommit(t *testing.T) {
 	}
 }
 
+func TestTempWorktreeWithBareOrigin(t *testing.T) {
+	fx := TempWorktreeWithBareOrigin(t)
+
+	if fx.Remote != "origin" {
+		t.Errorf("Remote = %q, want origin", fx.Remote)
+	}
+
+	assertGitOutput(t, fx.Origin, []string{"rev-parse", "--is-bare-repository"}, "true\n")
+	assertGitOutput(t, fx.Clone, []string{"rev-parse", "--is-bare-repository"}, "false\n")
+
+	if _, err := os.Stat(filepath.Join(fx.Worktree, ".git")); err != nil {
+		t.Fatalf("worktree .git missing: %v", err)
+	}
+
+	assertGitOutput(t, fx.Clone, []string{"remote"}, fx.Remote+"\n")
+	assertGitOutput(t, fx.Clone, []string{"config", "--get", "commit.gpgsign"}, "false\n")
+	assertGitOutput(t, fx.Worktree, []string{"config", "--get", "commit.gpgsign"}, "false\n")
+	assertGitOutput(t, fx.Worktree, []string{"branch", "--show-current"}, "feature/worktree\n")
+
+	// Linked worktree: git-dir is not the common dir.
+	gitDir := gitOutput(t, fx.Worktree, "rev-parse", "--git-dir")
+	commonDir := gitOutput(t, fx.Worktree, "rev-parse", "--git-common-dir")
+	if gitDir == commonDir {
+		t.Errorf("worktree git-dir = common-dir %q, want a linked worktree", gitDir)
+	}
+
+	readme := filepath.Join(fx.Worktree, "from-worktree.md")
+	if err := os.WriteFile(readme, []byte("wt\n"), 0o600); err != nil {
+		t.Fatalf("write worktree file: %v", err)
+	}
+	runGit(t, fx.Worktree, "add", "from-worktree.md")
+	runGit(t, fx.Worktree, "commit", "-m", "worktree commit")
+}
+
+func TestTempWorktreeWithBareOriginRemote(t *testing.T) {
+	fx := TempWorktreeWithBareOriginRemote(t, "upstream")
+	if fx.Remote != "upstream" {
+		t.Fatalf("Remote = %q, want upstream", fx.Remote)
+	}
+	assertGitOutput(t, fx.Clone, []string{"remote"}, "upstream\n")
+	if got := gitOutput(t, fx.Clone, "remote", "get-url", "upstream"); got == "" {
+		t.Fatal("upstream remote URL is empty")
+	}
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...) //nolint:noctx // test verification helper; no context.Context available
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return string(out)
+}
+
+func assertGitOutput(t *testing.T, dir string, args []string, want string) {
+	t.Helper()
+	got := gitOutput(t, dir, args...)
+	if got != want {
+		t.Errorf("git %v = %q, want %q", args, got, want)
+	}
+}
+
 func TestTempGitRepoWithBranch(t *testing.T) {
 	branchName := "feature/test"
 	dir := TempGitRepoWithBranch(t, branchName)

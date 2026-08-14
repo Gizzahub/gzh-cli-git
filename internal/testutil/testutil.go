@@ -26,21 +26,84 @@ func TempGitRepo(t *testing.T) string {
 		t.Fatalf("failed to init git repo: %v", err)
 	}
 
-	// Local config only — never depend on the developer's global git settings.
+	configureTempGit(t, dir)
+
+	return dir
+}
+
+// configureTempGit writes only local repo config. Tests must never inherit the
+// developer's global user, signing, or init settings.
+func configureTempGit(t *testing.T, dir string) {
+	t.Helper()
 	// commit.gpgsign=false avoids silent commit failure when the user has signing on.
 	for _, args := range [][]string{
 		{"config", "user.email", "test@test.com"},
 		{"config", "user.name", "Test"},
 		{"config", "commit.gpgsign", "false"},
 	} {
-		cmd = exec.Command("git", args...) //nolint:noctx // test helper; no context.Context available
+		cmd := exec.Command("git", args...) //nolint:noctx // test helper; no context.Context available
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("failed to config git %v: %v", args, err)
 		}
 	}
+}
 
-	return dir
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...) //nolint:noctx // test helper; no context.Context available
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
+}
+
+// WorktreeOrigin is a local-only fixture: a bare origin, a clone of that
+// origin, and a linked worktree of the clone.
+type WorktreeOrigin struct {
+	Origin   string // bare repository used as the remote
+	Clone    string // non-bare clone
+	Worktree string // linked worktree of Clone
+	Remote   string // remote name configured on Clone
+}
+
+// TempWorktreeWithBareOrigin builds a bare origin, a clone, and a linked
+// worktree. The clone's remote is named "origin".
+func TempWorktreeWithBareOrigin(t *testing.T) *WorktreeOrigin {
+	t.Helper()
+	return TempWorktreeWithBareOriginRemote(t, "origin")
+}
+
+// TempWorktreeWithBareOriginRemote is TempWorktreeWithBareOrigin with a
+// caller-chosen remote name (for cases where the remote is not "origin").
+func TempWorktreeWithBareOriginRemote(t *testing.T, remote string) *WorktreeOrigin {
+	t.Helper()
+	if remote == "" {
+		t.Fatal("remote name must not be empty")
+	}
+
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	clone := filepath.Join(root, "clone")
+	worktree := filepath.Join(root, "worktree")
+
+	seed := TempGitRepoWithCommit(t)
+	runGit(t, "", "clone", "--bare", seed, origin)
+	configureTempGit(t, origin)
+
+	runGit(t, "", "clone", "-o", remote, origin, clone)
+	configureTempGit(t, clone)
+
+	runGit(t, clone, "worktree", "add", "-b", "feature/worktree", worktree)
+
+	return &WorktreeOrigin{
+		Origin:   origin,
+		Clone:    clone,
+		Worktree: worktree,
+		Remote:   remote,
+	}
 }
 
 // TempGitRepoWithCommit creates a temp git repo with an initial commit.

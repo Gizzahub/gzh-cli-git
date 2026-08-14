@@ -208,6 +208,15 @@ type BranchConfig struct {
 	DefaultBranch     BranchList `yaml:"defaultBranch,omitempty"`     // main, develop, master (string or list)
 	ProtectedBranches []string   `yaml:"protectedBranches,omitempty"` // Branches to protect
 
+	// IntegrationBranch is the ordered list of integration-branch names.
+	// Consumers must read it from the repo-root file (LoadRepoRootTaskPattern),
+	// not from the 5-layer merger.
+	IntegrationBranch BranchList `yaml:"integrationBranch,omitempty"`
+
+	// TaskPattern is the reclaim allow-list (trailing * prefix match).
+	// Load it only via LoadRepoRootTaskPattern — never findConfigUpward.
+	TaskPattern BranchList `yaml:"taskPattern,omitempty"`
+
 	// Naming templates the branch names that `gz-git branch name` builds, so a
 	// task branch is spelled the same way on every machine and by every agent.
 	Naming *branch.Naming `yaml:"naming,omitempty"`

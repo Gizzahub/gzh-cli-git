@@ -65,7 +65,7 @@ func ExecuteCommands(ctx context.Context, commands []string, workDir string, log
 		// Create context with timeout
 		hookCtx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 
-		execCmd := exec.CommandContext(hookCtx, args[0], args[1:]...)
+		execCmd := exec.CommandContext(hookCtx, args[0], args[1:]...) // #nosec G204 -- hook argv is an explicit configured argument vector; no shell is used.
 		execCmd.Dir = workDir
 		execCmd.Env = os.Environ()
 

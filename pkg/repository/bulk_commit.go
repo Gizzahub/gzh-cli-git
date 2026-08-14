@@ -434,7 +434,7 @@ func (c *client) executeCommit(ctx context.Context, repoPath, message string) (s
 	}
 
 	// Create commit
-	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
+	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message) // #nosec G204 -- git executable and fixed flags are used; message is one argv value.
 	cmd.Dir = repoPath
 	output, err := cmd.CombinedOutput()
 	if err != nil {

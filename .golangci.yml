@@ -128,11 +128,6 @@ linters:
             - errors
             - fmt
           reason: We use stdlib errors with Go 1.13+ error wrapping
-    gosec:
-      excludes:
-        - G104
-        - G204
-        - G304
     govet:
       disable:
         - fieldalignment

@@ -136,6 +136,33 @@ func SanitizeURL(url string) error {
 	return nil
 }
 
+// SanitizeRemoteName validates a remote name before it is passed to git.
+// Remote names are configuration keys, not arbitrary command arguments; a
+// deliberately narrow character set also prevents option injection and
+// malformed ref namespaces.
+func SanitizeRemoteName(name string) error {
+	if name == "" {
+		return fmt.Errorf("remote name cannot be empty")
+	}
+	if len(name) > 255 {
+		return fmt.Errorf("remote name too long")
+	}
+	for i, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			if i == 0 && r == '.' {
+				return fmt.Errorf("remote name cannot start with a dot")
+			}
+			continue
+		}
+		return fmt.Errorf("remote name contains unsupported character %q", r)
+	}
+	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") || strings.Contains(name, "..") {
+		return fmt.Errorf("remote name has invalid suffix or ref sequence")
+	}
+	return nil
+}
+
 // SanitizeCommitMessage validates a commit message.
 // This ensures the message doesn't contain problematic characters.
 func SanitizeCommitMessage(message string) error {
@@ -161,6 +188,11 @@ func SanitizeCommitMessage(message string) error {
 func SanitizeBranchName(name string) error {
 	if name == "" {
 		return fmt.Errorf("branch name cannot be empty")
+	}
+	for _, pattern := range dangerousPatterns {
+		if pattern.MatchString(name) {
+			return fmt.Errorf("branch name contains dangerous pattern")
+		}
 	}
 
 	// Git branch name restrictions

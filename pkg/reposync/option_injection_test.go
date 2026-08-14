@@ -38,3 +38,28 @@ func TestCheckoutBranch_AllowsValidBranch(t *testing.T) {
 		t.Fatalf("valid branch list wrongly rejected: %v", err)
 	}
 }
+
+func TestCheckoutBranch_PreservesHEAD(t *testing.T) {
+	msg, err := checkoutBranch(context.Background(), t.TempDir(), "HEAD", nopGitLogger{})
+	if err != nil {
+		t.Fatalf("checkoutBranch(HEAD) error = %v", err)
+	}
+	if msg != "kept current HEAD" {
+		t.Fatalf("checkoutBranch(HEAD) message = %q, want current HEAD preserved", msg)
+	}
+}
+
+func TestAddAdditionalRemotes_RejectsInvalidInputsBeforeGit(t *testing.T) {
+	ctx := context.Background()
+	logger := nopGitLogger{}
+	dir := t.TempDir() // validation must happen before this path is used by git
+
+	for name, remoteURL := range map[string]string{
+		"--upload-pack=/tmp/evil": "https://example.com/repo.git",
+		"backup":                  "https://example.com/a;touch /tmp/pwned",
+	} {
+		if _, err := addAdditionalRemotes(ctx, dir, map[string]string{name: remoteURL}, logger); err == nil {
+			t.Fatalf("remote %q URL %q: expected validation error", name, remoteURL)
+		}
+	}
+}

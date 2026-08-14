@@ -52,7 +52,9 @@ func runRoot(cmd *cobra.Command, args []string) {
 		generateLLMDocs(cmd)
 		return
 	}
-	cmd.Help()
+	if err := cmd.Help(); err != nil {
+		cmd.PrintErrf("failed to render help: %v\n", err)
+	}
 }
 
 func generateLLMDocs(cmd *cobra.Command) {

@@ -116,7 +116,7 @@ func (b *GitRepoBuilder) Build() string {
 
 func (b *GitRepoBuilder) runGit(args ...string) {
 	b.t.Helper()
-	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...) // #nosec G204 -- test helper invokes git with explicit argv only.
 	cmd.Dir = b.dir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		b.t.Fatalf("git %v failed: %v\n%s", args, err, output)

@@ -148,6 +148,19 @@ func TestSanitizeArgs(t *testing.T) {
 	}
 }
 
+func TestSanitizeRemoteName(t *testing.T) {
+	for _, name := range []string{"origin", "backup-1", "mirror_2"} {
+		if err := SanitizeRemoteName(name); err != nil {
+			t.Errorf("SanitizeRemoteName(%q) = %v, want nil", name, err)
+		}
+	}
+	for _, name := range []string{"", "--upload-pack=/tmp/evil", "backup/name", "a..b", "a.lock"} {
+		if err := SanitizeRemoteName(name); err == nil {
+			t.Errorf("SanitizeRemoteName(%q) = nil, want error", name)
+		}
+	}
+}
+
 // TestSanitizePath tests path sanitization.
 func TestSanitizePath(t *testing.T) {
 	tests := []struct {

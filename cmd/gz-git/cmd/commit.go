@@ -355,14 +355,18 @@ func applyCustomMessages(result *repository.BulkCommitResult, messages map[strin
 
 // editMessagesInEditor opens an editor for bulk message editing.
 // Returns nil if the user canceled (empty file).
-func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]string, error) {
+func editMessagesInEditor(result *repository.BulkCommitResult) (messages map[string]string, err error) { //nolint:gocyclo // editor parsing has independent validation branches.
 	// Create temp file
 	tmpFile, err := os.CreateTemp("", "gz-git-commit-*.txt")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() {
+		if removeErr := os.Remove(tmpPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			err = errors.Join(err, fmt.Errorf("remove temporary commit message file: %w", removeErr))
+		}
+	}()
 
 	// Write template
 	var content strings.Builder
@@ -384,10 +388,15 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	if _, err := tmpFile.WriteString(content.String()); err != nil {
-		tmpFile.Close()
+		closeErr := tmpFile.Close()
+		if closeErr != nil {
+			return nil, errors.Join(fmt.Errorf("cannot write temp file: %w", err), fmt.Errorf("close temp file: %w", closeErr))
+		}
 		return nil, fmt.Errorf("cannot write temp file: %w", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return nil, fmt.Errorf("cannot close temp file: %w", err)
+	}
 
 	// Get editor from environment
 	editor := os.Getenv("EDITOR")
@@ -414,7 +423,7 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	// Open editor
-	cmd := exec.CommandContext(context.Background(), editorPath, tmpPath) // #nosec G702 -- editorPath is resolved from the user's trusted editor configuration and no shell is used.
+	cmd := exec.CommandContext(context.Background(), editorPath, tmpPath) // #nosec G204,G702 -- editorPath is resolved with LookPath and invoked as argv, never through a shell.
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -429,13 +438,13 @@ func editMessagesInEditor(result *repository.BulkCommitResult) (map[string]strin
 	}
 
 	// Read edited content
-	editedData, err := os.ReadFile(tmpPath)
+	editedData, err := os.ReadFile(tmpPath) // #nosec G304 -- tmpPath is created by this command for the editor.
 	if err != nil {
 		return nil, fmt.Errorf("cannot read edited file: %w", err)
 	}
 
 	// Parse edited content
-	messages := make(map[string]string)
+	messages = make(map[string]string)
 	lines := strings.Split(string(editedData), "\n")
 	hasContent := false
 

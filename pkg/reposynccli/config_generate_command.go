@@ -131,10 +131,14 @@ func (f CommandFactory) newConfigGenerateCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.FilterInclude, "include", nil, "Include repos matching regex (name or full path; can be repeated)")
 	cmd.Flags().StringSliceVar(&opts.FilterExclude, "exclude", nil, "Exclude repos matching regex (name or full path; can be repeated)")
 
-	// Mark required
-	cmd.MarkFlagRequired("provider")
-	cmd.MarkFlagRequired("org")
-	cmd.MarkFlagRequired("path")
+	// Mark required flags. These names are registered immediately above, so an
+	// error here indicates a programming/configuration mistake and must not be
+	// silently discarded.
+	for _, name := range []string{"provider", "org", "path"} {
+		if err := cmd.MarkFlagRequired(name); err != nil {
+			panic(fmt.Errorf("mark --%s required: %w", name, err))
+		}
+	}
 
 	return cmd
 }

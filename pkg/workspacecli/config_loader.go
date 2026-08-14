@@ -31,7 +31,7 @@ type FileSpecLoader struct{}
 
 // Load reads and parses a YAML config file.
 func (l FileSpecLoader) Load(ctx context.Context, path string) (*ConfigData, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the explicit workspace config selected by the caller.
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}

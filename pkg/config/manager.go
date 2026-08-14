@@ -15,7 +15,7 @@ import (
 
 // unmarshalFile reads a file and unmarshals it based on its extension.
 func unmarshalFile(path string, v any) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the manager's explicit config path.
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}

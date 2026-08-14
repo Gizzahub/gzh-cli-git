@@ -5,6 +5,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -292,7 +293,9 @@ func (c *client) applyFetchStrategy(ctx context.Context, opts CloneOrUpdateOptio
 
 // applyPullStrategy performs a standard git pull (merge).
 func (c *client) applyPullStrategy(ctx context.Context, opts CloneOrUpdateOptions, logger Logger) (*CloneOrUpdateResult, error) {
-	removeStaleIndexLock(opts.Destination, logger)
+	if err := removeStaleIndexLock(opts.Destination, logger); err != nil {
+		return nil, fmt.Errorf("remove stale index lock: %w", err)
+	}
 
 	// Check for dirty working tree before pull
 	repo, err := c.Open(ctx, opts.Destination)
@@ -347,7 +350,9 @@ func (c *client) applyPullStrategy(ctx context.Context, opts CloneOrUpdateOption
 
 // applyResetStrategy performs a hard reset to match remote state.
 func (c *client) applyResetStrategy(ctx context.Context, opts CloneOrUpdateOptions, logger Logger) (*CloneOrUpdateResult, error) {
-	removeStaleIndexLock(opts.Destination, logger)
+	if err := removeStaleIndexLock(opts.Destination, logger); err != nil {
+		return nil, fmt.Errorf("remove stale index lock: %w", err)
+	}
 
 	// First fetch to get latest remote state (requires auth for remote access)
 	fetchResult, err := c.executor.RunWithEnv(ctx, opts.Destination, opts.Env, "fetch", "origin")
@@ -389,7 +394,9 @@ func (c *client) applyResetStrategy(ctx context.Context, opts CloneOrUpdateOptio
 
 // applyRebaseStrategy rebases local changes on top of remote changes.
 func (c *client) applyRebaseStrategy(ctx context.Context, opts CloneOrUpdateOptions, logger Logger) (*CloneOrUpdateResult, error) {
-	removeStaleIndexLock(opts.Destination, logger)
+	if err := removeStaleIndexLock(opts.Destination, logger); err != nil {
+		return nil, fmt.Errorf("remove stale index lock: %w", err)
+	}
 
 	// Check for dirty working tree before rebase
 	repo, err := c.Open(ctx, opts.Destination)
@@ -577,12 +584,22 @@ func ExtractRepoNameFromURL(repoURL string) (string, error) {
 }
 
 // removeStaleIndexLock checks if a .git/index.lock file exists and removes it to prevent locked operations.
-func removeStaleIndexLock(repoPath string, logger Logger) {
+func removeStaleIndexLock(repoPath string, logger Logger) error {
 	lockFile := filepath.Join(repoPath, ".git", "index.lock")
-	if _, err := os.Stat(lockFile); err == nil {
-		if logger != nil {
-			logger.Warn("stale .git/index.lock found, removing", "destination", repoPath)
+	if _, err := os.Stat(lockFile); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
 		}
-		os.Remove(lockFile)
+		return fmt.Errorf("stat %s: %w", lockFile, err)
 	}
+	if logger != nil {
+		logger.Warn("stale .git/index.lock found, removing", "destination", repoPath)
+	}
+	if err := os.Remove(lockFile); err != nil {
+		return fmt.Errorf("remove %s: %w", lockFile, err)
+	}
+	if logger != nil {
+		logger.Warn("removed stale .git/index.lock", "destination", repoPath)
+	}
+	return nil
 }

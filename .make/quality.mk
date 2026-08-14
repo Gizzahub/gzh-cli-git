@@ -236,7 +236,7 @@ security-deps: ## check dependencies for vulnerabilities
 security-code: ## run security code analysis
 	@echo -e "$(CYAN)Running security code analysis with gosec...$(RESET)"
 	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; }
-	@GOWORK=off gosec -exclude=G104,G204,G304 ./...
+	@GOWORK=off gosec ./...
 
 security-json: ## run security analysis and output JSON/SARIF report
 	@echo -e "$(CYAN)Running security analysis with JSON/SARIF output...$(RESET)"

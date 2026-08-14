@@ -149,7 +149,7 @@ func (l FileSpecLoader) Load(ctx context.Context, path string) (ConfigData, erro
 
 	configPath := cleanPath(path)
 
-	raw, err := os.ReadFile(configPath)
+	raw, err := os.ReadFile(configPath) // #nosec G304 -- configPath is the explicit workspace config selected by the caller.
 	if err != nil {
 		return ConfigData{}, fmt.Errorf("read config: %w", err)
 	}
@@ -803,7 +803,7 @@ func scanGitRepos(dir string) ([]reposync.RepoSpec, error) {
 // getGitRemoteURL gets the origin remote URL from a git repository.
 func getGitRemoteURL(repoPath string) string {
 	configPath := filepath.Join(repoPath, ".git", "config")
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is the repository's own .git/config path.
 	if err != nil {
 		return ""
 	}
@@ -844,7 +844,7 @@ func loadParentProfiles(configPath string, visited map[string]bool) (map[string]
 	}
 	visited[absPath] = true
 
-	raw, err := os.ReadFile(absPath)
+	raw, err := os.ReadFile(absPath) // #nosec G304 -- absPath is resolved from the configured parent workspace.
 	if err != nil {
 		return nil, fmt.Errorf("read parent config %s: %w", absPath, err)
 	}
@@ -982,7 +982,7 @@ func resolveParentPath(parentRef, configPath string) string {
 
 // loadParentConfig loads a parent config file and returns its parsed fileConfig.
 func (l FileSpecLoader) loadParentConfig(parentPath string) (fileConfig, error) {
-	raw, err := os.ReadFile(parentPath)
+	raw, err := os.ReadFile(parentPath) // #nosec G304 -- parentPath is a validated parent config path.
 	if err != nil {
 		return fileConfig{}, fmt.Errorf("read parent config %s: %w", parentPath, err)
 	}

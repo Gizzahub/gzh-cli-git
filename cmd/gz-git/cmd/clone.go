@@ -222,7 +222,7 @@ func collectCloneURLs(urlFlags []string, filePath string) ([]string, error) {
 
 	// Add URLs from file
 	if filePath != "" {
-		file, err := os.Open(filePath)
+		file, err := os.Open(filePath) // #nosec G304 -- --file is an explicit user-selected clone list path.
 		if err != nil {
 			return nil, fmt.Errorf("cannot open file %s: %w", filePath, err)
 		}

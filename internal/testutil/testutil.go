@@ -5,6 +5,7 @@
 package testutil
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,7 +42,7 @@ func configureTempGit(t *testing.T, dir string) {
 		{"config", "user.name", "Test"},
 		{"config", "commit.gpgsign", "false"},
 	} {
-		cmd := exec.Command("git", args...) //nolint:noctx // test helper; no context.Context available
+		cmd := exec.CommandContext(context.Background(), "git", args...) // #nosec G204 -- test helper invokes git with explicit argv only.
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("failed to config git %v: %v", args, err)
@@ -51,7 +52,7 @@ func configureTempGit(t *testing.T, dir string) {
 
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...) //nolint:noctx // test helper; no context.Context available
+	cmd := exec.CommandContext(context.Background(), "git", args...) // #nosec G204 -- test helper invokes git with explicit argv only.
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -139,7 +140,7 @@ func TempGitRepoWithBranch(t *testing.T, branchName string) string {
 	t.Helper()
 	dir := TempGitRepoWithCommit(t)
 
-	cmd := exec.Command("git", "checkout", "-b", branchName) //nolint:noctx // test helper; no context.Context available
+	cmd := exec.CommandContext(context.Background(), "git", "checkout", "-b", branchName) // #nosec G204 -- test helper invokes git with explicit argv only.
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("failed to create branch %s: %v", branchName, err)

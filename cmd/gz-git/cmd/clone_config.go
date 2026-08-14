@@ -111,7 +111,7 @@ func parseCloneConfig(configPath string, useStdin bool) (*CloneConfig, error) {
 			return nil, fmt.Errorf("read stdin: %w", err)
 		}
 	} else {
-		data, err = os.ReadFile(configPath)
+		data, err = os.ReadFile(configPath) // #nosec G304 -- configPath is the explicit user-selected config file.
 		if err != nil {
 			return nil, fmt.Errorf("read config file %s: %w", configPath, err)
 		}

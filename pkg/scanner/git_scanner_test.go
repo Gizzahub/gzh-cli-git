@@ -38,32 +38,6 @@ func TestMatchesPattern(t *testing.T) {
 	}
 }
 
-func TestIsDir(t *testing.T) {
-	// Create a temp directory
-	tmpDir := t.TempDir()
-
-	// Test existing directory
-	if !isDir(tmpDir) {
-		t.Error("isDir should return true for existing directory")
-	}
-
-	// Create a file
-	tmpFile := filepath.Join(tmpDir, "test.txt")
-	if err := os.WriteFile(tmpFile, []byte("test"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test existing file (should return false)
-	if isDir(tmpFile) {
-		t.Error("isDir should return false for file")
-	}
-
-	// Test non-existent path
-	if isDir(filepath.Join(tmpDir, "nonexistent")) {
-		t.Error("isDir should return false for non-existent path")
-	}
-}
-
 func TestGitRepoScanner_Scan(t *testing.T) {
 	// Create a temp directory structure with git repos
 	tmpDir := t.TempDir()

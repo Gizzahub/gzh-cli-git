@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -321,14 +320,6 @@ func matchesPattern(path, pattern string) bool {
 	// Simple glob match
 	matched, err := filepath.Match(pattern, filepath.Base(path))
 	return err == nil && matched
-}
-
-func isDir(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
 }
 
 // ToRepositories converts ScannedRepos to provider.Repository format.

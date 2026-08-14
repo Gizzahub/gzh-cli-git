@@ -98,6 +98,34 @@ func TestAddAdditionalRemotes(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts hierarchical names and valid URL data", func(t *testing.T) {
+		remotes := map[string]string{
+			"team/backup":  "../shared/repo.git",
+			"mirror/query": "https://example.com/repo.git?ref=main&depth=1",
+			"deploy/scp":   "deploy@example.com:team/repo.git",
+		}
+
+		msg, err := addAdditionalRemotes(ctx, repoPath, remotes, logger)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if msg != "configured 3 remote(s)" {
+			t.Errorf("got message %q, want %q", msg, "configured 3 remote(s)")
+		}
+		for name, expectedURL := range remotes {
+			cmd := exec.CommandContext(t.Context(), "git", "remote", "get-url", name)
+			cmd.Dir = repoPath
+			output, err := cmd.Output()
+			if err != nil {
+				t.Errorf("failed to get remote url for %s: %v", name, err)
+				continue
+			}
+			if string(output) != expectedURL+"\n" {
+				t.Errorf("remote %s: got URL %q, want %q", name, string(output), expectedURL)
+			}
+		}
+	})
+
 	t.Run("update existing remote", func(t *testing.T) {
 		// Add a remote first
 		cmd := exec.CommandContext(t.Context(), "git", "remote", "add", "test-remote", "https://old-url.com/repo.git")

@@ -2,8 +2,10 @@ package gitcmd
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Dangerous patterns that could enable command injection or path traversal.
@@ -88,52 +90,60 @@ func SanitizePath(path string) error {
 
 // SanitizeURL validates a Git repository URL.
 // This ensures the URL is in a safe format (HTTPS, SSH, or file).
-func SanitizeURL(url string) error {
-	if url == "" {
+func SanitizeURL(value string) error {
+	if value == "" {
 		return fmt.Errorf("URL cannot be empty")
 	}
 
-	// Check for dangerous patterns
-	for _, pattern := range dangerousPatterns {
-		if pattern.MatchString(url) {
-			return fmt.Errorf("URL contains dangerous pattern")
+	// URLs are passed as one argv value, not through a shell. Shell
+	// metacharacters (notably '&' in query strings) are therefore valid URL
+	// data. Reject only characters that can alter an argv value and values that
+	// Git could interpret as an option.
+	if strings.HasPrefix(value, "-") {
+		return fmt.Errorf("URL cannot start with a dash")
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			return fmt.Errorf("URL contains control or whitespace character")
 		}
 	}
 
-	// Validate URL scheme
-	validSchemes := []string{
-		"https://",
-		"http://",
-		"ssh://",
-		"git://",
-		"git@", // SSH format (git@github.com:...)
-		"file://",
-		"/",   // Local path
-		"./",  // Relative path
-		"../", // Relative path (though discouraged)
+	// SCP-style SSH URLs are not understood by net/url. Accept any non-empty
+	// username/host pair, rather than hard-coding the conventional "git" user.
+	if looksLikeSCPURL(value) {
+		return nil
 	}
 
-	isValid := false
-	for _, scheme := range validSchemes {
-		if strings.HasPrefix(url, scheme) {
-			isValid = true
-			break
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme == "" {
+		// Git accepts local absolute and relative paths as remotes, including
+		// paths outside the current directory such as ../shared/repo.git.
+		if strings.HasPrefix(value, "/") || strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") {
+			return nil
 		}
+		return fmt.Errorf("URL has invalid or unsupported scheme: %s", value)
 	}
-
-	if !isValid {
-		return fmt.Errorf("URL has invalid or unsupported scheme: %s", url)
+	if parsed.Scheme != "https" && parsed.Scheme != "http" && parsed.Scheme != "ssh" && parsed.Scheme != "git" && parsed.Scheme != "file" {
+		return fmt.Errorf("URL has invalid or unsupported scheme: %s", value)
 	}
-
-	// Additional validation for SSH URLs
-	if strings.HasPrefix(url, "git@") {
-		// Format: git@host:path
-		if !strings.Contains(url, ":") {
-			return fmt.Errorf("invalid SSH URL format: %s", url)
-		}
+	if parsed.Scheme != "file" && parsed.Host == "" {
+		return fmt.Errorf("URL has no host: %s", value)
 	}
 
 	return nil
+}
+
+func looksLikeSCPURL(value string) bool {
+	colon := strings.IndexByte(value, ':')
+	if colon <= 0 || strings.Contains(value[:colon], "/") {
+		return false
+	}
+	left := value[:colon]
+	at := strings.LastIndexByte(left, '@')
+	return at > 0 && at < len(left)-1 && colon < len(value)-1
 }
 
 // SanitizeRemoteName validates a remote name before it is passed to git.
@@ -141,24 +151,11 @@ func SanitizeURL(url string) error {
 // deliberately narrow character set also prevents option injection and
 // malformed ref namespaces.
 func SanitizeRemoteName(name string) error {
-	if name == "" {
-		return fmt.Errorf("remote name cannot be empty")
+	if err := validateGitRefName(name, "remote name"); err != nil {
+		return err
 	}
-	if len(name) > 255 {
-		return fmt.Errorf("remote name too long")
-	}
-	for i, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			if i == 0 && r == '.' {
-				return fmt.Errorf("remote name cannot start with a dot")
-			}
-			continue
-		}
-		return fmt.Errorf("remote name contains unsupported character %q", r)
-	}
-	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") || strings.Contains(name, "..") {
-		return fmt.Errorf("remote name has invalid suffix or ref sequence")
+	if strings.HasPrefix(name, "-") {
+		return fmt.Errorf("remote name cannot start with a dash")
 	}
 	return nil
 }
@@ -186,36 +183,41 @@ func SanitizeCommitMessage(message string) error {
 // SanitizeBranchName validates a Git branch name.
 // This ensures the branch name follows Git conventions.
 func SanitizeBranchName(name string) error {
+	if err := validateGitRefName(name, "branch name"); err != nil {
+		return err
+	}
+	if strings.HasPrefix(name, "-") {
+		return fmt.Errorf("branch name cannot start with a dash")
+	}
+	return nil
+}
+
+// validateGitRefName mirrors git check-ref-format's safety rules for a single
+// ref name. It intentionally permits punctuation such as ';', '&', '$', and
+// '`': callers pass refs as argv values and these are valid Git ref bytes.
+func validateGitRefName(name, kind string) error {
 	if name == "" {
-		return fmt.Errorf("branch name cannot be empty")
+		return fmt.Errorf("%s cannot be empty", kind)
 	}
-	for _, pattern := range dangerousPatterns {
-		if pattern.MatchString(name) {
-			return fmt.Errorf("branch name contains dangerous pattern")
-		}
-	}
-
-	// Git branch name restrictions
-	invalidPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`^-`),            // Cannot start with dash (option injection)
-		regexp.MustCompile(`^\.`),           // Cannot start with dot
-		regexp.MustCompile(`\.\.`),          // Cannot contain double dots
-		regexp.MustCompile(`[~^:?*\[\]\\]`), // Cannot contain special chars
-		regexp.MustCompile(`\s`),            // Cannot contain whitespace
-		regexp.MustCompile(`^/|/$|//`),      // Cannot start/end with slash or have double slashes
-		regexp.MustCompile(`\.lock$`),       // Cannot end with .lock
-	}
-
-	for _, pattern := range invalidPatterns {
-		if pattern.MatchString(name) {
-			return fmt.Errorf("branch name contains invalid pattern: %s", name)
-		}
-	}
-
-	// Check length
 	if len(name) > 255 {
-		return fmt.Errorf("branch name too long (max 255 characters)")
+		return fmt.Errorf("%s too long (max 255 characters)", kind)
+	}
+	if name == "@" || strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
+		return fmt.Errorf("%s contains invalid slash or ref sequence", kind)
+	}
+	if strings.Contains(name, "..") || strings.Contains(name, "@{") {
+		return fmt.Errorf("%s contains invalid ref sequence", kind)
 	}
 
+	for _, r := range name {
+		if unicode.IsControl(r) || unicode.IsSpace(r) || strings.ContainsRune("~^:?*[\\", r) {
+			return fmt.Errorf("%s contains invalid character %q", kind, r)
+		}
+	}
+	for _, component := range strings.Split(name, "/") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return fmt.Errorf("%s contains invalid path component %q", kind, component)
+		}
+	}
 	return nil
 }

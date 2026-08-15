@@ -44,7 +44,7 @@ install-analysis-tools: ## install code analysis tools
 	@command -v ineffassign >/dev/null 2>&1 || { echo "Installing ineffassign v0.1.0..." && go install github.com/gordonklaus/ineffassign@v0.1.0; }
 	@command -v dupl >/dev/null 2>&1 || { echo "Installing dupl v0.3.0..." && go install github.com/mibk/dupl@v0.3.0; }
 	@command -v staticcheck >/dev/null 2>&1 || { echo "Installing staticcheck 2025.1.1..." && go install honnef.co/go/tools/cmd/staticcheck@2025.1.1; }
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
+	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
 	@echo -e "$(GREEN)✅ All analysis tools installed!$(RESET)"
 
 # Pin to a v2 release. A v1 binary on PATH rejects this repo's version: "2"
@@ -155,7 +155,7 @@ install-docs-tools: ## install documentation tools
 
 install-security-tools: ## install security analysis tools
 	@echo -e "$(CYAN)Installing security tools...$(RESET)"
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
+	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
 	@echo -e "$(GREEN)✅ Security tools installed!$(RESET)"
 
 # ==============================================================================

@@ -5,7 +5,7 @@
 # agent/<task>/<agent-id>.
 branch:
   integrationBranch:
-    - develop
+    - master
   taskPattern:
     - feat/*
     - fix/*

@@ -32,7 +32,8 @@ var integrateRunCmd = &cobra.Command{
   gz-git integrate run --target origin/main --direct-to-default
 
 Reclaim only runs for names matching the repo-root taskPattern.
-No declaration means reclaim nothing.
+No declaration means reclaim nothing. Remote branch delete uses
+--force-with-lease against the commit that just landed.
 
 Exit Codes:
   0  integrated (reclaim finished or intentionally skipped)

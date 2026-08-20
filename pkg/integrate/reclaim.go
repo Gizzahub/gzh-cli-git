@@ -34,6 +34,7 @@ type reclaimOpts struct {
 	DefaultName  string
 	Integration  string
 	Remote       string
+	TaskSHA      string
 	Patterns     []string
 	Facts        []string
 }
@@ -169,7 +170,16 @@ func reclaimRemoteBranch(ctx context.Context, sg gitRepo, opts reclaimOpts, out 
 	} else if !ok {
 		return true
 	}
-	del, err := sg.run(ctx, "push", opts.Remote, "--delete", opts.Branch)
+	if opts.TaskSHA == "" {
+		out.Failed = append(out.Failed, "remote delete needs the integrated commit for a lease")
+		return false
+	}
+	// Lease against the SHA we integrated, not the current tracking ref.
+	// A fetch between check and reclaim can see a newer tip; deleting that
+	// tip would drop work that never landed on the target.
+	ref := "refs/heads/" + opts.Branch
+	lease := "--force-with-lease=" + ref + ":" + opts.TaskSHA
+	del, err := sg.run(ctx, "push", lease, opts.Remote, ":"+ref)
 	if err == nil && (del == nil || del.ExitCode == 0) {
 		out.Done = append(out.Done, "remote-branch")
 		return true
@@ -180,7 +190,7 @@ func reclaimRemoteBranch(ctx context.Context, sg gitRepo, opts reclaimOpts, out 
 		if del != nil {
 			detail = strings.TrimSpace(del.Stderr)
 		}
-		out.Failed = append(out.Failed, "push --delete "+opts.Remote+"/"+opts.Branch+": "+detail)
+		out.Failed = append(out.Failed, "leased remote delete "+opts.Remote+"/"+opts.Branch+": "+detail)
 		return false
 	}
 	out.Done = append(out.Done, "remote-branch(already-deleted)")

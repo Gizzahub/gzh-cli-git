@@ -5,6 +5,7 @@
 //
 // queue lists unfinished task branches. check answers readiness. run
 // fast-forwards an authorized target and reclaims the task branch.
+// Remote reclaim deletes with --force-with-lease against the integrated SHA.
 //
 // Integration-branch lookup is not ResolveBase. ResolveBase only sees local
 // refs/heads and prefers master over develop. This package prefers a

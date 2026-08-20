@@ -161,6 +161,7 @@ func finishRunReclaim(ctx context.Context, exec *gitcmd.Executor, g gitRepo, roo
 			DefaultName:  defaultBranchName(report.Check.Plan.DefaultRef, report.Check.Plan.Remote),
 			Integration:  report.Check.Plan.Integration.Name,
 			Remote:       report.Check.Plan.Remote,
+			TaskSHA:      report.SHA,
 			Patterns:     decl.Patterns,
 			Facts:        decl.Facts,
 		})

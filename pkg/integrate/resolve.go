@@ -14,13 +14,11 @@ import (
 const (
 	// SourceNone means no integration branch participates.
 	SourceNone = "none"
-	// SourceHeuristic means the develop fallback won.
+	// SourceHeuristic means the remote-HEAD fallback won.
 	SourceHeuristic = "heuristic"
 	// SourceConfigPrefix is the prefix of Source when a declared candidate won.
 	// The full value is "config[i]".
 	SourceConfigPrefix = "config["
-
-	heuristicIntegrationName = "develop"
 )
 
 // Resolution is the integration-branch answer for one repository.
@@ -37,17 +35,20 @@ type Resolution struct {
 // tests feed these without talking to git.
 type Facts struct {
 	// Config is the ordered list of declared integration-branch names.
-	// Empty means "no declaration" and the develop heuristic may run.
+	// Empty means "no declaration" and the remote-HEAD heuristic may run.
 	Config []string
 	// Refs are existing ref names (full, e.g. refs/remotes/origin/develop).
 	Refs []string
 	// Remotes are registered remote names. origin is not assumed.
 	Remotes []string
+	// DefaultName is the bare default-branch name from remote HEAD
+	// (origin/HEAD → master). Empty when HEAD is missing or dangling.
+	DefaultName string
 }
 
 // ResolveFromFacts interprets integration-branch participation from already
 // gathered facts. A declared name that does not exist does not fall back to
-// develop — a typo is non-participation, not a different branch.
+// the default branch — a typo is non-participation, not a different branch.
 func ResolveFromFacts(f Facts) Resolution {
 	refs := make(map[string]struct{}, len(f.Refs))
 	for _, r := range f.Refs {
@@ -80,10 +81,11 @@ func ResolveFromFacts(f Facts) Resolution {
 		return Resolution{Source: SourceNone}
 	}
 
-	if nameExists(heuristicIntegrationName, f.Remotes, refs) {
+	defaultName := strings.TrimSpace(f.DefaultName)
+	if defaultName != "" && nameExists(defaultName, f.Remotes, refs) {
 		return Resolution{
 			Participates: true,
-			Name:         heuristicIntegrationName,
+			Name:         defaultName,
 			Source:       SourceHeuristic,
 		}
 	}
@@ -140,8 +142,8 @@ func isRemoteName(candidate string, remotes []string) bool {
 }
 
 // ResolveIntegrationBranch gathers remotes and refs from repoPath and
-// interprets them. configValues come from the caller (empty in P2).
-// A missing integration branch is not an error.
+// interprets them. configValues come from the caller. A missing
+// integration branch is not an error.
 func ResolveIntegrationBranch(ctx context.Context, exec *gitcmd.Executor, repoPath string, configValues []string) (Resolution, error) {
 	if exec == nil {
 		return Resolution{Source: SourceNone}, fmt.Errorf("git executor is nil")
@@ -155,9 +157,20 @@ func ResolveIntegrationBranch(ctx context.Context, exec *gitcmd.Executor, repoPa
 	if err != nil {
 		return Resolution{Source: SourceNone}, err
 	}
+	defaultName := ""
+	if remote := preferredRemote(remotes); remote != "" {
+		def, ok, err := g.symbolicRef(ctx, "refs/remotes/"+remote+"/HEAD")
+		if err != nil {
+			return Resolution{Source: SourceNone}, err
+		}
+		if ok {
+			defaultName = NormalizeName(def, remotes)
+		}
+	}
 	return ResolveFromFacts(Facts{
-		Config:  configValues,
-		Refs:    refs,
-		Remotes: remotes,
+		Config:      configValues,
+		Refs:        refs,
+		Remotes:     remotes,
+		DefaultName: defaultName,
 	}), nil
 }

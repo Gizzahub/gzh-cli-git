@@ -7,21 +7,26 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
 )
 
-func TestCheck_TargetRequiredWithoutIntegration(t *testing.T) {
+func TestCheck_UndeclaredTargetsOriginHead(t *testing.T) {
 	fx := testutil.TempWorktreeWithBareOrigin(t)
-	_, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
 		RepoPath: fx.Worktree,
 		Branch:   "feature/worktree",
 	})
-	if err == nil || !strings.Contains(err.Error(), "--target") {
-		t.Fatalf("want --target required, got %v", err)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if report.Plan.Target != "origin/main" {
+		t.Fatalf("target = %q, want origin/main", report.Plan.Target)
+	}
+	if report.Plan.Integration.Name != "main" || report.Plan.Integration.Source != SourceHeuristic {
+		t.Fatalf("integration = %+v, want heuristic main", report.Plan.Integration)
 	}
 }
 

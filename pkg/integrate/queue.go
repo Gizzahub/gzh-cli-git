@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 )
 
 const (
@@ -27,7 +28,8 @@ type QueueOptions struct {
 	ExpiryDays int
 	NoFetch    bool
 	Quiet      bool
-	// ConfigValues is the declared integrationBranch list. Empty in P2.
+	// ConfigValues is the declared integrationBranch list. Empty means
+	// load the repo-root .gz-git.yaml, same as check/run.
 	ConfigValues []string
 	Now          time.Time
 }
@@ -80,6 +82,14 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 		return nil, err
 	}
 	g.dir = root
+
+	if len(opts.ConfigValues) == 0 {
+		decl, err := config.LoadRepoRootTaskPattern(root)
+		if err != nil {
+			return nil, err
+		}
+		opts.ConfigValues = decl.IntegrationBranch
+	}
 
 	expiry := opts.ExpiryDays
 	if expiry <= 0 {

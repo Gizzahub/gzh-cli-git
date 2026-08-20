@@ -10,6 +10,7 @@
 // unless --allow-skipped-checks is set.
 //
 // Integration-branch lookup is not ResolveBase. ResolveBase only sees local
-// refs/heads and prefers master over develop. This package prefers a
-// remote-tracking develop and treats a missing base as a reportable state.
+// refs/heads and prefers master over develop. This package uses a declared
+// integrationBranch when present, otherwise the remote HEAD, and treats a
+// missing base as a reportable state.
 package integrate

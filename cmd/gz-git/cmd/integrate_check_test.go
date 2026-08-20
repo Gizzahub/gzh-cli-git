@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
@@ -19,7 +20,7 @@ func TestIntegrateCheckHelp(t *testing.T) {
 	}
 }
 
-func TestIntegrateCheckTargetRequired(t *testing.T) {
+func TestIntegrateCheckUndeclaredResolvesOriginHead(t *testing.T) {
 	restore := setIntegrateCheckGlobals(t)
 	defer restore()
 
@@ -27,8 +28,8 @@ func TestIntegrateCheckTargetRequired(t *testing.T) {
 	t.Chdir(fx.Worktree)
 	quiet = true
 	err := runIntegrateCheck(integrateCheckCmd, []string{"feature/worktree"})
-	if got := cliutil.ExitCodeForError(err); got != 1 {
-		t.Fatalf("missing integration/--target exit = %d, want 1; err=%v", got, err)
+	if err != nil && strings.Contains(err.Error(), "--target") {
+		t.Fatalf("undeclared repo with origin/HEAD must not require --target: %v", err)
 	}
 }
 

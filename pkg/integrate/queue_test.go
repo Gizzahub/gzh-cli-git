@@ -50,14 +50,44 @@ func TestCollectQueue_ExcludesBaseAndIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CollectQueue: %v", err)
 	}
-	if !report.Integration.Participates || report.Integration.Name != "develop" {
-		t.Fatalf("integration = %+v, want develop", report.Integration)
+	if report.Integration.Participates {
+		t.Fatalf("integration = %+v, want none without remote HEAD", report.Integration)
 	}
 	got := refsOf(report)
-	for _, name := range []string{"main", "develop"} {
-		if contains(got, name) {
-			t.Errorf("queue listed excluded branch %q: %v", name, got)
-		}
+	if contains(got, "main") {
+		t.Errorf("queue listed excluded base %q: %v", "main", got)
+	}
+	if !contains(got, "develop") {
+		t.Fatalf("undeclared develop must stay in the queue: %v", got)
+	}
+	if !contains(got, "feat/task") {
+		t.Fatalf("queue missing feat/task: %v", got)
+	}
+}
+
+func TestCollectQueue_LoadsDeclaredIntegrationBranch(t *testing.T) {
+	dir := testutil.TempGitRepoWithCommit(t)
+	writeFile(t, dir, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n")
+	runGit(t, dir, "branch", "develop")
+	runGit(t, dir, "checkout", "-b", "feat/task")
+	writeFile(t, dir, "task.txt", "task\n")
+	runGit(t, dir, "add", "task.txt")
+	runGit(t, dir, "commit", "-m", "task")
+
+	report, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath: dir,
+		Base:     "main",
+		NoFetch:  true,
+	})
+	if err != nil {
+		t.Fatalf("CollectQueue: %v", err)
+	}
+	if !report.Integration.Participates || report.Integration.Name != "develop" {
+		t.Fatalf("integration = %+v, want declared develop", report.Integration)
+	}
+	got := refsOf(report)
+	if contains(got, "develop") {
+		t.Fatalf("declared integration branch listed in queue: %v", got)
 	}
 	if !contains(got, "feat/task") {
 		t.Fatalf("queue missing feat/task: %v", got)

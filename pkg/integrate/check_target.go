@@ -168,7 +168,7 @@ func validateTarget(plan TargetPlan, target string, opts CheckOptions) error {
 	}
 	switch target {
 	case integRef, plan.Integration.Name:
-		if opts.DirectToDefault || opts.Release {
+		if opts.Release || (opts.DirectToDefault && !integrationIsDefault(plan)) {
 			return fmt.Errorf("do not use --direct-to-default/--release against the integration branch")
 		}
 	case plan.DefaultRef:
@@ -182,4 +182,15 @@ func validateTarget(plan TargetPlan, target string, opts CheckOptions) error {
 		return fmt.Errorf("target must be the integration branch (%s) or the default branch (%s)", integRef, plan.DefaultRef)
 	}
 	return nil
+}
+
+func integrationIsDefault(plan TargetPlan) bool {
+	if plan.DefaultRef == "" || plan.Integration.Name == "" {
+		return false
+	}
+	remotes := []string(nil)
+	if plan.Remote != "" {
+		remotes = []string{plan.Remote}
+	}
+	return plan.Integration.Name == NormalizeName(plan.DefaultRef, remotes)
 }

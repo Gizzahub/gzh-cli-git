@@ -27,11 +27,11 @@ func TestMissingRequiredIDsReportsAbsentRows(t *testing.T) {
 
 func TestLoadParsesDivergenceRows(t *testing.T) {
 	const table = "" +
-		"id\tconfig\trefs\tremote\tparticipates\tbare_name\n" +
-		"A\t\trefs/remotes/upstream/develop\tupstream\ttrue\tdevelop\n" +
-		"B\t\trefs/heads/develop\t\ttrue\tdevelop\n" +
-		"C\tdevelopp\trefs/remotes/origin/develop\torigin\tfalse\t\n" +
-		"D\trelease/2.0\trefs/remotes/origin/release/2.0\torigin\ttrue\trelease/2.0\n"
+		"id\tconfig\trefs\tremote\tdefault_name\tparticipates\tbare_name\n" +
+		"A\t\trefs/remotes/upstream/develop\tupstream\tdevelop\ttrue\tdevelop\n" +
+		"B\t\trefs/heads/develop\t\t\tfalse\t\n" +
+		"C\tdevelopp\trefs/remotes/origin/develop\torigin\t\tfalse\t\n" +
+		"D\trelease/2.0\trefs/remotes/origin/release/2.0\torigin\t\ttrue\trelease/2.0\n"
 
 	rows, err := Load(strings.NewReader(table))
 	if err != nil {
@@ -46,8 +46,8 @@ func TestLoadParsesDivergenceRows(t *testing.T) {
 		byID[row.ID] = row
 	}
 
-	if got := byID["A"]; got.Remote != "upstream" || got.BareName != "develop" || !got.Participates {
-		t.Errorf("row A = %+v, want remote=upstream bare=develop participates=true", got)
+	if got := byID["A"]; got.Remote != "upstream" || got.DefaultName != "develop" || got.BareName != "develop" || !got.Participates {
+		t.Errorf("row A = %+v, want remote=upstream default=develop bare=develop participates=true", got)
 	}
 	if got := byID["B"]; got.Remote != "" || len(got.Refs) != 1 || got.Refs[0] != "refs/heads/develop" {
 		t.Errorf("row B = %+v, want empty remote and local develop ref", got)

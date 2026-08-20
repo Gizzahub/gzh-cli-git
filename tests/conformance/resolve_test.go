@@ -25,9 +25,10 @@ func TestResolverMatchesCommittedCorpus(t *testing.T) {
 			cfg = []string{row.Config}
 		}
 		got := integrate.ResolveFromFacts(integrate.Facts{
-			Config:  cfg,
-			Refs:    row.Refs,
-			Remotes: remotes,
+			Config:      cfg,
+			Refs:        row.Refs,
+			Remotes:     remotes,
+			DefaultName: row.DefaultName,
 		})
 		if got.Participates != row.Participates || got.Name != row.BareName {
 			t.Errorf("row %s: got participates=%v name=%q, want participates=%v name=%q",

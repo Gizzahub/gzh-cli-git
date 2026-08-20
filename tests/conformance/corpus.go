@@ -16,12 +16,13 @@ import (
 // if any of these are missing from the committed table.
 var RequiredIDs = []string{"A", "B", "C", "D"}
 
-// Row is one corpus case: (config, refs, remote) → (participates, bare name).
+// Row is one corpus case: (config, refs, remote, default name) → (participates, bare name).
 type Row struct {
 	ID           string
 	Config       string
 	Refs         []string
 	Remote       string
+	DefaultName  string
 	Participates bool
 	BareName     string
 }
@@ -41,7 +42,7 @@ func Load(r io.Reader) ([]Row, error) {
 	cr := csv.NewReader(r)
 	cr.Comma = '\t'
 	cr.Comment = '#'
-	cr.FieldsPerRecord = 6
+	cr.FieldsPerRecord = 7
 	cr.ReuseRecord = false
 	cr.LazyQuotes = true
 
@@ -49,7 +50,7 @@ func Load(r io.Reader) ([]Row, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read corpus header: %w", err)
 	}
-	wantHeader := []string{"id", "config", "refs", "remote", "participates", "bare_name"}
+	wantHeader := []string{"id", "config", "refs", "remote", "default_name", "participates", "bare_name"}
 	if !equalStrings(header, wantHeader) {
 		return nil, fmt.Errorf("corpus header %q, want %q", header, wantHeader)
 	}
@@ -89,9 +90,9 @@ func MissingRequiredIDs(rows []Row) []string {
 }
 
 func parseRow(rec []string) (Row, error) {
-	participates, err := strconv.ParseBool(rec[4])
+	participates, err := strconv.ParseBool(rec[5])
 	if err != nil {
-		return Row{}, fmt.Errorf("id %q: participates %q: %w", rec[0], rec[4], err)
+		return Row{}, fmt.Errorf("id %q: participates %q: %w", rec[0], rec[5], err)
 	}
 	if rec[0] == "" {
 		return Row{}, fmt.Errorf("empty id")
@@ -101,8 +102,9 @@ func parseRow(rec []string) (Row, error) {
 		Config:       rec[1],
 		Refs:         splitRefs(rec[2]),
 		Remote:       rec[3],
+		DefaultName:  rec[4],
 		Participates: participates,
-		BareName:     rec[5],
+		BareName:     rec[6],
 	}, nil
 }
 

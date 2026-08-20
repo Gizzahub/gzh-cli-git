@@ -1,9 +1,11 @@
 # Integration-branch interpretation corpus (DECISION-004).
-# Columns: id, config, refs, remote, participates, bare_name
+# Columns: id, config, refs, remote, default_name, participates, bare_name
 # refs is a comma-separated list of existing refs.
-# Rows A–D are the measured divergences; the Go resolver is not in P0.
-id	config	refs	remote	participates	bare_name
-A		refs/remotes/upstream/develop	upstream	true	develop
-B		refs/heads/develop		true	develop
-C	developp	refs/remotes/origin/develop	origin	false	
-D	release/2.0	refs/remotes/origin/release/2.0	origin	true	release/2.0
+# default_name is the bare remote-HEAD name; empty when HEAD is missing.
+# Rows A–D are the measured divergences.
+id	config	refs	remote	default_name	participates	bare_name
+A		refs/remotes/upstream/develop	upstream	develop	true	develop
+B		refs/heads/develop			false	
+C	developp	refs/remotes/origin/develop	origin		false	
+D	release/2.0	refs/remotes/origin/release/2.0	origin		true	release/2.0
+E		refs/remotes/origin/master,refs/remotes/origin/develop	origin	master	true	master

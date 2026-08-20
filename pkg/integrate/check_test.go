@@ -75,6 +75,15 @@ func TestCheck_NoGateAllowedWhenSkippedFlag(t *testing.T) {
 	if !report.Ready {
 		t.Fatalf("want READY with --allow-skipped-checks, got\n%s", FormatCheck(report))
 	}
+	found := false
+	for _, item := range report.Items {
+		if item.Name == "make check/lint" && item.Status == checkWarn {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected make check/lint WARN:\n%s", FormatCheck(report))
+	}
 }
 
 func TestCheck_StaleTargetFailsFreshness(t *testing.T) {

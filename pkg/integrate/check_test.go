@@ -39,6 +39,44 @@ func TestCheck_ReadyWhenFreshCleanPushed(t *testing.T) {
 	}
 }
 
+func TestCheck_NoGateFails(t *testing.T) {
+	fx := readyTaskFixtureNoGate(t)
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   "dev/actor/feat/task",
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if report.Ready {
+		t.Fatalf("no gate must not be READY:\n%s", FormatCheck(report))
+	}
+	found := false
+	for _, item := range report.Items {
+		if item.Name == "make check/lint" && item.Status == checkFail {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected make check/lint FAIL:\n%s", FormatCheck(report))
+	}
+}
+
+func TestCheck_NoGateAllowedWhenSkippedFlag(t *testing.T) {
+	fx := readyTaskFixtureNoGate(t)
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath:           fx.Worktree,
+		Branch:             "dev/actor/feat/task",
+		AllowSkippedChecks: true,
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !report.Ready {
+		t.Fatalf("want READY with --allow-skipped-checks, got\n%s", FormatCheck(report))
+	}
+}
+
 func TestCheck_StaleTargetFailsFreshness(t *testing.T) {
 	fx := readyTaskFixture(t)
 	// Advance develop after the task branch was created.
@@ -88,6 +126,16 @@ func TestCheck_DirectToDefaultWithoutIntegration(t *testing.T) {
 
 func readyTaskFixture(t *testing.T) *testutil.WorktreeOrigin {
 	t.Helper()
+	fx := readyTaskFixtureNoGate(t)
+	writeGateMakefile(t, fx.Worktree)
+	runGit(t, fx.Worktree, "add", "Makefile")
+	runGit(t, fx.Worktree, "commit", "-m", "declare check gate")
+	runGit(t, fx.Worktree, "push", fx.Remote, "HEAD")
+	return fx
+}
+
+func readyTaskFixtureNoGate(t *testing.T) *testutil.WorktreeOrigin {
+	t.Helper()
 	fx := testutil.TempWorktreeWithBareOrigin(t)
 	runGit(t, fx.Clone, "branch", "develop")
 	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
@@ -100,6 +148,11 @@ func readyTaskFixture(t *testing.T) *testutil.WorktreeOrigin {
 	runGit(t, fx.Worktree, "commit", "-m", "declare integration branch")
 	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")
 	return fx
+}
+
+func writeGateMakefile(t *testing.T, dir string) {
+	t.Helper()
+	writeRepoFile(t, dir, "Makefile", "check:\n\t@true\n")
 }
 
 func writeRepoFile(t *testing.T, dir, name, body string) {

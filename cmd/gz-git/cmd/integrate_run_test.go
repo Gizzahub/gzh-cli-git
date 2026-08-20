@@ -30,6 +30,7 @@ func TestIntegrateRunReclaimIncompleteExitsThree(t *testing.T) {
 	runGit(t, fx.Worktree, "checkout", "-B", "dev/actor/feat/task", "develop")
 	writeFile(t, fx.Worktree, "task.txt", "task\n")
 	writeFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n  taskPattern: dev/*\n")
+	writeFile(t, fx.Worktree, "Makefile", "check:\n\t@true\n")
 	runGit(t, fx.Worktree, "add", ".")
 	runGit(t, fx.Worktree, "commit", "-m", "task")
 	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")

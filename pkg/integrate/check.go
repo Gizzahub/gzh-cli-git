@@ -112,7 +112,13 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 			}
 		}
 		if declared == 0 {
-			add(CheckItem{Name: "make check/lint", Status: checkWarn, Detail: "undefined — this repo declares no integration gate"})
+			status := checkFail
+			detail := "undefined — this repo declares no integration gate"
+			if opts.AllowSkippedChecks {
+				status = checkWarn
+				detail += "; allowed by --allow-skipped-checks"
+			}
+			add(CheckItem{Name: "make check/lint", Status: status, Detail: detail})
 		}
 	}
 	report.Ready = report.Failures == 0

@@ -189,6 +189,7 @@ func runFixture(t *testing.T, pattern string) *testutil.WorktreeOrigin {
 		body += "  taskPattern: " + pattern + "\n"
 	}
 	writeRepoFile(t, fx.Worktree, ".gz-git.yaml", body)
+	writeGateMakefile(t, fx.Worktree)
 	runGit(t, fx.Worktree, "add", ".")
 	runGit(t, fx.Worktree, "commit", "-m", "task work")
 	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")

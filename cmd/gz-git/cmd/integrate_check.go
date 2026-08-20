@@ -46,7 +46,7 @@ func init() {
 	integrateCheckCmd.Flags().StringVar(&integrateCheckTarget, "target", "", "integration target (required when none can be resolved)")
 	integrateCheckCmd.Flags().BoolVar(&integrateCheckDirectToDefault, "direct-to-default", false, "allow targeting the default branch when no integration branch exists")
 	integrateCheckCmd.Flags().BoolVar(&integrateCheckRelease, "release", false, "promote the integration branch onto the default branch")
-	integrateCheckCmd.Flags().BoolVar(&integrateCheckAllowSkipped, "allow-skipped-checks", false, "downgrade SKIPPED CHECK banners to warnings")
+	integrateCheckCmd.Flags().BoolVar(&integrateCheckAllowSkipped, "allow-skipped-checks", false, "allow a repo with no check/lint gate, and downgrade SKIPPED CHECK banners to warnings")
 }
 
 func runIntegrateCheck(cmd *cobra.Command, args []string) error {

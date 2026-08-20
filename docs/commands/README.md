@@ -186,7 +186,11 @@ gz-git cleanup branch --merged                 # single repo (cwd)
 gz-git cleanup branch --stale --stale-days 30  # single repo (cwd)
 gz-git cleanup branch --merged --force .       # bulk mode
 gz-git cleanup branch --merged --remote --force -d 2 ~/projects
+gz-git cleanup branch --bots --merged -r --format json .
+gz-git cleanup branch --bots --merged -r --force --yes .
 ```
+
+`--bots` limits to `dependabot/` `renovate/` `github-actions/`. `--merged -r` without `--bots` deletes every merged remote. Dry-run until `--force`; bulk non-interactive delete also needs `--yes`. Audit codes: `REMOTE_BOT_BRANCH_RECLAIMABLE`, `REMOTE_BOT_BRANCH_PENDING`.
 
 ## Clone (Bulk)
 

@@ -1,13 +1,15 @@
 ---
 name: branch-cleanup
 description: |
-  Guide for cleaning up merged, stale, and gone branches with gz-git.
-  Use when:
+  Guide for cleaning up merged, stale, gone, and leftover bot remote
+  branches with gz-git. Use when:
   - Cleaning up branches after PR merge
   - Removing stale feature branches
   - Bulk branch cleanup across multiple repos
   - Identifying gone branches (remote deleted)
   - Protecting important branches from deletion
+  - Reclaiming leftover Dependabot/Renovate/github-actions remotes
+  - Seeing REMOTE_BOT_BRANCH_RECLAIMABLE or REMOTE_BOT_BRANCH_PENDING
 allowed-tools: Bash, Read, Grep
 ---
 
@@ -22,6 +24,8 @@ This skill covers branch cleanup operations using `gz-git cleanup branch`.
 | `--merged`   | Branches fully merged into base branch         |
 | `--stale`    | Branches with no activity for N days           |
 | `--gone`     | Branches whose remote tracking branch deleted  |
+
+`--bots` is a name filter (`dependabot/` `renovate/` `github-actions/`), not a fourth type.
 
 **Key Feature**: Bulk mode by default - cleans up across all repos in directory.
 
@@ -38,6 +42,32 @@ gz-git cleanup branch --merged
 # Actually delete
 gz-git cleanup branch --merged --force
 ```
+
+---
+
+## Remote bot reclaim (LLM)
+
+Leftover Dependabot / Renovate / github-actions remotes after a squash-merge.
+This is not `/git:dependabot-merge` (that *applies* the update).
+
+```bash
+gz-git info --audit
+gz-git cleanup branch --bots --merged -r --format json .
+# only when the user asked to delete:
+gz-git cleanup branch --bots --merged -r --force --yes .
+```
+
+| Audit code | Meaning | Autofix | Delete? |
+| ---------- | ------- | ------- | ------- |
+| `REMOTE_BOT_BRANCH_RECLAIMABLE` | tip is an ancestor of the base | false | yes, with `--force --yes` if the user asked |
+| `REMOTE_BOT_BRANCH_PENDING` | unmerged; may be an open PR | false | no |
+
+- JSON schema: `gz-git.cleanup.branch/v1`
+- Remote delete only for ancestry-merged refs (`merge-base --is-ancestor`)
+- `--stale` never deletes remote-only names
+- `--merged -r` without `--bots` deletes **every** merged remote, not just bots
+- Protected: `main` `master` `develop` `development` `release/*` `hotfix/*`
+- Dry-run until `--force`. Bulk non-interactive delete also needs `--yes`
 
 ---
 
@@ -166,28 +196,15 @@ Some branches are **always protected** and never deleted:
 
 ### Add Custom Protected Branches
 
+Add names with `--protect`. Cleanup does not read `branch.protectedBranches`
+from config (that field is schema-only for this command).
+
 ```bash
 # Protect additional branches
 gz-git cleanup branch --merged --protect "staging,qa,prod" --force
 
 # Protect with patterns
 gz-git cleanup branch --merged --protect "env/*,deploy/*" --force
-```
-
-### Profile-Based Protection
-
-In your profile or project config:
-
-```yaml
-# ~/.config/gz-git/profiles/work.yaml
-branch:
-  defaultBranch: main
-  protectedBranches:
-    - main
-    - master
-    - develop
-    - staging
-    - release/*
 ```
 
 ---
@@ -206,11 +223,15 @@ gz-git cleanup branch --merged --remote --force
 #   feature/login       → deleted (origin)
 ```
 
-**Warning**: Remote deletion is permanent. Use dry-run first!
+**Warning**: Remote deletion is permanent. Use dry-run first.
+`--merged -r` without `--bots` deletes every merged remote, including human topic branches.
 
 ```bash
 # Preview remote deletion
 gz-git cleanup branch --merged --remote
+
+# Preview leftover bot remotes only
+gz-git cleanup branch --bots --merged -r --format json .
 ```
 
 ---
@@ -412,6 +433,8 @@ gz-git cleanup branch --stale --stale-days 7 .
 | Delete stale (60d)          | `cleanup branch --stale --stale-days 60 --force` |
 | Preview gone                | `cleanup branch --gone`                      |
 | Delete gone                 | `cleanup branch --gone --force`              |
+| Preview leftover bot remotes | `cleanup branch --bots --merged -r --format json .` |
+| Delete leftover bot remotes | `cleanup branch --bots --merged -r --force --yes .` |
 | All types                   | `cleanup branch --merged --stale --gone`     |
 | Bulk mode                   | `cleanup branch --merged --force .`          |
 | With remote                 | `cleanup branch --merged --remote --force`   |

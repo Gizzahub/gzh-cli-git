@@ -56,7 +56,7 @@ docs/.claude-context/ # Context docs
 | `handoff end`           | Commit + push all movable work (screens for secrets)       |
 | `handoff start`         | Pull --rebase + prune all repos on arrival                 |
 | `branch name`           | Build a task's branch name for this device/agent           |
-| `cleanup branch`        | Clean merged/stale/gone branches                           |
+| `cleanup branch`        | Merged/stale/gone. Bots: `--bots --merged -r`. Audit `REMOTE_BOT_BRANCH_*` via `info --audit` (Autofix false). |
 | `forge from`            | Sync from GitHub/GitLab/Gitea org                          |
 | `forge config generate` | Generate config from Forge API                             |
 | `workspace init`        | Scan directory → generate config                           |

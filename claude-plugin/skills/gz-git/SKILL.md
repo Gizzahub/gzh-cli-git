@@ -93,6 +93,9 @@ Basic branch creation/deletion remains native `git`. `gz-git` provides:
 gz-git branch list -a -d 2 ~/projects
 gz-git switch feature/new --create -d 2 ~/projects
 gz-git cleanup branch --merged --force -d 2 ~/projects
+gz-git cleanup branch --bots --merged -r --format json .
+# leftover Dependabot/Renovate remotes; details: skill:branch-cleanup
+# not /git:dependabot-merge (that applies the update)
 gz-git conflict detect feature/new main
 ```
 

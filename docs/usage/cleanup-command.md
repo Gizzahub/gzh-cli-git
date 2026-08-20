@@ -1,200 +1,130 @@
 # gz-git cleanup
 
-Git 리소스 정리 명령어.
+Git 브랜치 정리 명령어. **기본은 dry-run**이며 `--force`가 있어야 삭제한다.
 
 ## 서브커맨드
 
 | 커맨드 | 설명 |
 |--------|------|
-| `branch` | 브랜치 정리 (merged, stale, gone) |
+| `branch` | 브랜치 정리 (`--merged`, `--stale`, `--gone`) |
+| `wizard` | 대화형 정리 |
+
+타입 플래그를 하나 이상 지정해야 한다. `gz-git cleanup branch`만 치면 오류다.
 
 ## cleanup branch
 
-Merged, stale, gone 브랜치 정리.
-
 ```bash
-# Dry-run (기본값) - 삭제 대상만 표시
-gz-git cleanup branch
+# 미리보기 (삭제 없음)
+gz-git cleanup branch --merged
+gz-git cleanup branch --stale
+gz-git cleanup branch --gone
 
-# 실제 삭제
-gz-git cleanup branch --execute
+# 실제 삭제 (dry-run 해제)
+gz-git cleanup branch --merged --force
 
-# 특정 타입만
-gz-git cleanup branch --type merged
-gz-git cleanup branch --type stale
-gz-git cleanup branch --type gone
+# 벌크, 비대화형
+gz-git cleanup branch --merged --force --yes .
 ```
 
 ## 브랜치 타입
 
-| 타입 | 설명 | 감지 방법 |
-|------|------|----------|
-| `merged` | 이미 merge된 브랜치 | `git branch --merged` |
-| `stale` | 오래된 브랜치 (활동 없음) | 마지막 커밋 날짜 |
-| `gone` | 원격에서 삭제된 브랜치 | `[gone]` 표시 |
+| 플래그 | 설명 | 감지 |
+|--------|------|------|
+| `--merged` | base에 이미 들어간 브랜치 | 로컬: `git branch --merged`. 원격만 있는 이름: `merge-base --is-ancestor` |
+| `--stale` | N일간 커밋 없음 (기본 30일) | 마지막 커밋 날짜. **원격만 있는 이름은 삭제하지 않음** |
+| `--gone` | 추적하던 원격이 사라진 로컬 브랜치 | upstream gone |
+
+## 봇 원격 회수
+
+`dependabot/` `renovate/` `github-actions/` 이름만 대상으로 한다. Dependabot PR을 머지하는 `/git:dependabot-merge`와는 다른 일이다.
+
+```bash
+gz-git info --audit
+gz-git cleanup branch --bots --merged -r --format json .
+# 사용자가 삭제를 요청한 뒤에만
+gz-git cleanup branch --bots --merged -r --force --yes .
+```
+
+| 감사 코드 | 의미 | Autofix | 삭제 |
+|-----------|------|---------|------|
+| `REMOTE_BOT_BRANCH_RECLAIMABLE` | tip이 base의 조상 | false | 사용자 요청 시 `--force --yes` |
+| `REMOTE_BOT_BRANCH_PENDING` | 머지되지 않음. 열린 PR일 수 있음 | false | 하지 않음 |
+
+JSON 스키마: `gz-git.cleanup.branch/v1`.
+
+`--merged -r`에 `--bots`가 없으면 **머지된 원격 전부**를 지운다. 사람 토픽 브랜치도 포함된다.
 
 ## 주요 옵션
 
 | 옵션 | 설명 | 기본값 |
 |------|------|--------|
-| `--type` | 정리할 브랜치 타입 | 전체 |
-| `--execute` | 실제 삭제 실행 | false (dry-run) |
-| `--days` | Stale 기준 일수 | 90 |
-| `--protected` | 보호할 브랜치 패턴 | main,master,develop |
+| `--merged` / `--stale` / `--gone` | 정리 타입 (하나 이상 필수) | 없음 |
+| `--bots` | 봇 이름만 (`dependabot/` `renovate/` `github-actions/`) | false |
+| `--stale-days` | stale 기준 일수 | 30 |
+| `-n, --dry-run` | 미리보기 | true |
+| `--force` | 실제 삭제 (dry-run 해제) | false |
+| `-y, --yes` | 벌크 삭제 확인 생략 (비대화형에서 필요) | false |
+| `-r, --remote` | 원격 브랜치도 삭제 | false |
+| `--protect` | 추가 보호 이름 (쉼표 구분) | 없음 |
+| `--base` | merge 판정 base | 자동 |
+| `--format` | `default`, `compact`, `json`, `llm` | `default` |
 | `-d, --scan-depth` | 스캔 깊이 | 1 |
-| `-j, --parallel` | 병렬 처리 수 | 10 |
-| `-f, --force` | 강제 삭제 (-D 사용) | false |
+| `-j, --parallel` | 병렬 수 | 10 |
 
-## 출력 예시
-
-### Dry-run (기본)
-
-```
-Scanning 5 repositories for cleanup...
-
-gzh-cli:
-  [merged]  feature/old-feature     → merged to master 30 days ago
-  [stale]   experiment/test         → no activity for 120 days
-  [gone]    feature/deleted-remote  → remote branch deleted
-
-gzh-cli-core:
-  [merged]  fix/typo                → merged to main 7 days ago
-
-Summary:
-  merged: 2 branches
-  stale:  1 branch
-  gone:   1 branch
-  total:  4 branches
-
-Run with --execute to delete these branches.
-```
-
-### 실제 삭제
-
-```bash
-gz-git cleanup branch --execute
-```
-
-```
-Deleting branches...
-
-✓ gzh-cli: feature/old-feature (merged)
-✓ gzh-cli: experiment/test (stale)
-✓ gzh-cli: feature/deleted-remote (gone)
-✓ gzh-cli-core: fix/typo (merged)
-
-Deleted 4 branches across 2 repositories.
-```
+`--force`는 `git branch -D`가 아니다. dry-run을 끄는 스위치다.
 
 ## 보호 브랜치
 
-기본적으로 보호되는 브랜치:
+내장 목록은 항상 보호된다. cleanup은 `branch.protectedBranches` 설정을 읽지 않는다. 추가는 `--protect`.
 
 - `main`
 - `master`
 - `develop`
+- `development`
 - `release/*`
-
-### 커스텀 보호 패턴
-
-```bash
-# 추가 보호
-gz-git cleanup branch --protected "main,master,develop,staging,prod-*"
-
-# Config에서 설정
-# .gz-git.yaml
-branch:
-  protectedBranches: [main, master, develop, staging, "prod-*"]
-```
-
-## Stale 기준
+- `hotfix/*`
 
 ```bash
-# 60일 이상 활동 없는 브랜치
-gz-git cleanup branch --type stale --days 60
-
-# 180일 이상
-gz-git cleanup branch --type stale --days 180
+gz-git cleanup branch --merged --protect "staging,qa" --force
 ```
+
+## 원격 삭제
+
+기본은 로컬만. 원격은 `-r` / `--remote`.
+
+```bash
+gz-git cleanup branch --merged --remote
+gz-git cleanup branch --bots --merged -r --format json .
+```
+
+원격 `push --delete`는 되돌릴 수 없다. 로컬 삭제는 `git reflog`로 커밋을 찾을 수 있다.
 
 ## 예제
 
-### 정기 정리 스크립트
+### 정기 미리보기 후 삭제
 
 ```bash
-#!/bin/bash
-# weekly-cleanup.sh
-
-cd ~/mydevbox
-
-echo "=== Branch Cleanup Preview ==="
-gz-git cleanup branch
-
-echo ""
-read -p "Proceed with cleanup? (y/N) " confirm
-
-if [[ $confirm == [yY] ]]; then
-    gz-git cleanup branch --execute
-    echo "Cleanup complete!"
-else
-    echo "Cleanup cancelled."
-fi
+gz-git cleanup branch --merged --stale --gone .
+# 출력을 본 뒤
+gz-git cleanup branch --merged --stale --gone --force --yes .
 ```
 
-### CI/CD에서 자동 정리
+### Stale 기준
 
 ```bash
-#!/bin/bash
-# ci-cleanup.sh
-
-# Merged 브랜치만 자동 삭제
-gz-git cleanup branch --type merged --execute
-
-# Stale은 경고만
-gz-git cleanup branch --type stale
+gz-git cleanup branch --stale --stale-days 60
+gz-git cleanup branch --stale --stale-days 180 --force
 ```
 
-### 특정 타입별 정리
+### CI에서 머지된 브랜치만
 
 ```bash
-# Gone 브랜치만 정리 (원격에서 삭제된 것)
-gz-git cleanup branch --type gone --execute
-
-# Merged만 정리
-gz-git cleanup branch --type merged --execute
-
-# 오래된 실험 브랜치 정리 (30일 기준)
-gz-git cleanup branch --type stale --days 30 --execute
+gz-git cleanup branch --merged --force --yes .
 ```
 
-## 주의사항
+## 주의
 
-### Force 삭제
-
-```bash
-# merge되지 않은 브랜치도 삭제 (git branch -D)
-gz-git cleanup branch --force --execute
-```
-
-`--force`는 데이터 손실 가능성이 있으므로 주의!
-
-### 복구
-
-삭제된 브랜치는 `git reflog`로 복구 가능:
-
-```bash
-# 삭제된 브랜치의 마지막 커밋 찾기
-git reflog
-
-# 복구
-git checkout -b recovered-branch <commit-hash>
-```
-
-### 원격 브랜치
-
-`cleanup branch`는 로컬 브랜치만 삭제합니다. 원격 브랜치 삭제는:
-
-```bash
-# 원격 브랜치 삭제
-git push origin --delete feature/old-branch
-```
+- 타입 플래그 없이 실행하면 실패한다.
+- `--merged -r`만 쓰면 머지된 원격 전부가 대상이다. 봇만 지우려면 `--bots`.
+- `develop` 등 내장 보호 이름은 삭제되지 않는다.
+- 원격 삭제는 reflog로 복구할 수 없다.

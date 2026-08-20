@@ -104,14 +104,14 @@ gz-git cleanup branch --merged --stale --gone --force
 gz-git cleanup branch --merged .
 
 # Delete across all repos
-gz-git cleanup branch --merged --force .
+gz-git cleanup branch --merged --force --yes .
 
 # Scan deeper (2 levels)
-gz-git cleanup branch --merged --force -d 2 ~/repos
+gz-git cleanup branch --merged --force --yes -d 2 ~/repos
 
 # Include/exclude patterns
-gz-git cleanup branch --merged --force --include "api-*" .
-gz-git cleanup branch --merged --force --exclude "legacy-*" .
+gz-git cleanup branch --merged --force --yes --include "api-*" .
+gz-git cleanup branch --merged --force --yes --exclude "legacy-*" .
 ```
 
 ---
@@ -250,16 +250,16 @@ gz-git cleanup branch --bots --merged --remote --format json .
 
 ```bash
 # Scan 2 levels deep
-gz-git cleanup branch --merged --force -d 2 ~/repos
+gz-git cleanup branch --merged --force --yes -d 2 ~/repos
 
 # Only frontend repos
-gz-git cleanup branch --merged --force --include "frontend-*" .
+gz-git cleanup branch --merged --force --yes --include "frontend-*" .
 
 # Exclude vendor repos
-gz-git cleanup branch --merged --force --exclude "vendor|third-party" .
+gz-git cleanup branch --merged --force --yes --exclude "vendor|third-party" .
 
 # Include submodules
-gz-git cleanup branch --merged --force --recursive .
+gz-git cleanup branch --merged --force --yes --recursive .
 ```
 
 ---
@@ -299,27 +299,27 @@ gz-git cleanup branch --gone --force
 gz-git cleanup branch --merged --stale --gone .
 
 # Review output, then execute
-gz-git cleanup branch --merged --stale --gone --force .
+gz-git cleanup branch --merged --stale --gone --force --yes .
 ```
 
 ### Pre-Release Cleanup
 
 ```bash
 # Clean up merged feature branches
-gz-git cleanup branch --merged --force .
+gz-git cleanup branch --merged --force --yes .
 
 # Clean up stale branches (90+ days)
-gz-git cleanup branch --stale --stale-days 90 --force .
+gz-git cleanup branch --stale --stale-days 90 --force --yes .
 ```
 
 ### Monorepo Cleanup
 
 ```bash
 # Scan entire monorepo (deep)
-gz-git cleanup branch --merged --force -d 3 --recursive ~/monorepo
+gz-git cleanup branch --merged --force --yes -d 3 --recursive ~/monorepo
 
 # Exclude certain paths
-gz-git cleanup branch --merged --force --exclude "vendor|node_modules" .
+gz-git cleanup branch --merged --force --yes --exclude "vendor|node_modules" .
 ```
 
 ---
@@ -394,14 +394,17 @@ Cleanup does not read `branch.protectedBranches` from config.
 
 ### "failed to delete remote branch"
 
-Remote deletion needs push permission.
+Cleanup leases the classified SHA
+(`--force-with-lease=refs/heads/<name>:<sha>`). Empty SHA refuses the
+delete. Do not fall back to unleased `git push origin --delete`.
 
 ```bash
-# Check remote access
-git push origin --delete feature/branch
-
-# May need force push permission
+gz-git fetch --prune
+gz-git cleanup branch --bots --merged --remote --format json .
 ```
+
+If the tip moved, the lease refuses on purpose. Re-run dry-run. Push
+permission is still required.
 
 ### "no branches to clean up"
 
@@ -431,7 +434,7 @@ gz-git cleanup branch --stale --stale-days 7 .
 | Preview leftover bot remotes | `cleanup branch --bots --merged --remote --format json .` |
 | Delete leftover bot remotes | `cleanup branch --bots --merged --remote --force --yes .` |
 | All types                   | `cleanup branch --merged --stale --gone`     |
-| Bulk mode                   | `cleanup branch --merged --force .`          |
+| Bulk mode                   | `cleanup branch --merged --force --yes .`          |
 | With remote                 | `cleanup branch --merged --remote --force`   |
 | Protect branches            | `--protect "staging,qa"`                     |
 | Custom base                 | `--base develop`                             |

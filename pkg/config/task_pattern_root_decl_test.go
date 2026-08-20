@@ -39,6 +39,7 @@ func TestLoadRepoRootTaskPattern_ThisRepoDeclaration(t *testing.T) {
 		"feat/x",
 		"test/info-branch-cell-colors",
 		"agent/task/hermes-01", // agent/* must cover the multi-segment shape
+		"dev/mac/fix/reclaim-dev-pattern",
 	}
 	for _, name := range mustMatch {
 		if !MatchesAnyTaskPattern(name, decl.Patterns) {

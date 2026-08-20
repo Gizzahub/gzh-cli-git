@@ -24,8 +24,19 @@ type makeProbe struct {
 	Code      int
 }
 
+// allowedMakeTargets is the closed set runMakeTarget may launch. check.go
+// probes exactly this set; the guard keeps that invariant enforced if a
+// future caller grows the list.
+var allowedMakeTargets = map[string]struct{}{
+	"check": {},
+	"lint":  {},
+}
+
 func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
-	cmd := exec.CommandContext(ctx, "make", target) //nolint:gosec // target is check or lint
+	if _, ok := allowedMakeTargets[target]; !ok {
+		return makeProbe{Target: target, Err: fmt.Errorf("undeclared make target %q", target)}
+	}
+	cmd := exec.CommandContext(ctx, "make", target) // #nosec G204 -- validated against allowedMakeTargets above
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "MAKELEVEL=0", "MAKEFLAGS=", "LC_ALL=C")
 	var buf bytes.Buffer

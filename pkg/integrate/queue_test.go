@@ -179,7 +179,8 @@ func runGitDated(t *testing.T, dir string, when time.Time, message string) {
 	stamp := when.Format("2006-01-02T15:04:05-0700")
 	cmd := exec.Command("git", "commit", "-m", message) //nolint:noctx // test helper
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GIT_AUTHOR_DATE="+stamp,
 		"GIT_COMMITTER_DATE="+stamp,
 	)

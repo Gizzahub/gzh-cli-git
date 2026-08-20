@@ -159,16 +159,22 @@ func TestRenderInfoTable_CompactDropsAllEmptyColumns(t *testing.T) {
 	withColors(t, false)
 
 	out, row := cleanRepoTable(t, true)
-	for _, dropped := range []string{"UPSTREAM", "DIRTY", "WT", "REMOTE"} {
+	for _, dropped := range []string{"DIRTY", "WT", "REMOTE"} {
 		if strings.Contains(out, dropped) {
 			t.Errorf("column %q should be dropped when every cell is empty:\n%s", dropped, out)
 		}
+	}
+	if strings.Contains(out, "BRANCH REMOTE REMOTE ONLY") {
+		t.Errorf("REMOTE should be dropped when every REMOTE cell is empty:\n%s", out)
 	}
 	if !strings.Contains(out, "REPOSITORY") || !strings.Contains(out, "BRANCH") {
 		t.Errorf("REPOSITORY and BRANCH must always survive:\n%s", out)
 	}
 	if strings.Contains(row, cellNormal) {
 		t.Errorf("--compact removes empty columns rather than filling them:\n%s", out)
+	}
+	if strings.Contains(out, "REMOTE ONLY") {
+		t.Errorf("REMOTE ONLY should be dropped when it is empty for every repository:\n%s", out)
 	}
 }
 
@@ -243,32 +249,82 @@ func TestBaseCell_SilentOnBaseBranch(t *testing.T) {
 	}
 }
 
-// TestDivergenceCell_DistinguishesInSyncFromNoUpstream is why Upstream was
-// added to RepositoryStatusResult: both states produce zero ahead/behind, but
-// only one of them is fine.
-func TestDivergenceCell_DistinguishesInSyncFromNoUpstream(t *testing.T) {
-	withColors(t, false)
+// TestBranchCell_PromptStyleDivergence is why Upstream was added to
+// RepositoryStatusResult: in-sync and no-upstream both produce zero
+// ahead/behind, but only one of them is fine. The divergence now rides on the
+// branch name in the shape a shell prompt uses, so an in-sync branch prints
+// its name alone.
+//
+// The color is asserted alongside the text because it is a decision, not a
+// side effect: the cell takes the divergence's severity color (yellow for a
+// one-way divergence, red for both), cyan when there is nothing to report,
+// and a detached HEAD keeps its own red. Colors are forced on for this —
+// with the gate off every cliutil.Color* is blank and a comparison against
+// them pins nothing.
+func TestBranchCell_PromptStyleDivergence(t *testing.T) {
+	withColors(t, true)
 
-	if got := divergenceCell(0, 0, false, true); got.text != "" {
-		t.Errorf("in sync = %q, want empty", got.text)
+	repo := &repository.RepositoryStatusResult{Branch: "main", Upstream: "origin/main"}
+	if got := branchCell(repo); got.text != "main" || got.color != cliutil.ColorCyan {
+		t.Errorf("in sync = (%q, %q), want the bare name in cyan", got.text, got.color)
 	}
-	if got := divergenceCell(0, 0, true, true); got.text != "no upstream" {
-		t.Errorf("untracked branch = %q, want \"no upstream\"", got.text)
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsAhead: 2}
+	if got := branchCell(repo); got.text != "feat/x ↑2" || got.color != cliutil.ColorYellow {
+		t.Errorf("ahead only = (%q, %q), want %q in yellow", got.text, got.color, "feat/x ↑2")
 	}
-	if got := divergenceCell(2, 3, false, true); got.text != "↑2 ↓3" {
-		t.Errorf("diverged = %q, want \"↑2 ↓3\"", got.text)
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsBehind: 4}
+	if got := branchCell(repo); got.text != "feat/x ↓4" || got.color != cliutil.ColorYellow {
+		t.Errorf("behind only = (%q, %q), want %q in yellow", got.text, got.color, "feat/x ↓4")
+	}
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", CommitsAhead: 2, CommitsBehind: 3}
+	if got := branchCell(repo); got.text != "feat/x ↑2 ↓3" || got.color != cliutil.ColorRed {
+		t.Errorf("diverged = (%q, %q), want %q in red", got.text, got.color, "feat/x ↑2 ↓3")
+	}
+
+	repo = &repository.RepositoryStatusResult{Branch: "feat/x", RemoteURL: "git@github.com:Acme/b.git"}
+	if got := branchCell(repo); got.text != "feat/x no upstream" || got.color != cliutil.ColorYellow {
+		t.Errorf("untracked branch = (%q, %q), want %q in yellow", got.text, got.color, "feat/x no upstream")
+	}
+
+	repo = &repository.RepositoryStatusResult{HeadSHA: "9f8e7d6"}
+	if got := branchCell(repo); got.text != "detached@9f8e7d6" || got.color != cliutil.ColorRed {
+		t.Errorf("detached = (%q, %q), want %q in red", got.text, got.color, "detached@9f8e7d6")
 	}
 }
 
-// TestDivergenceCell_SilentWithoutARemote keeps the two columns from printing
-// the same words for two different facts. A repository with no remote has
-// nothing to track and nothing to push to; REMOTE says "no remote" once, and
-// UPSTREAM saying it again would double the noise without adding a fact.
-func TestDivergenceCell_SilentWithoutARemote(t *testing.T) {
-	withColors(t, false)
+// TestBranchCell_SilentWithoutARemote keeps the branch and REMOTE columns from
+// printing the same words for two different facts. A repository with no remote
+// has nothing to track and nothing to push to; REMOTE says "no remote" once,
+// and the branch saying it again would double the noise without adding a fact.
+// The name still prints in cyan: nothing-to-report is not a warning here,
+// because the REMOTE column is where this state turns red.
+func TestBranchCell_SilentWithoutARemote(t *testing.T) {
+	withColors(t, true)
 
-	if got := divergenceCell(0, 0, true, false); got.text != "" {
-		t.Errorf("no remote at all = %q, want empty (REMOTE column carries it)", got.text)
+	repo := &repository.RepositoryStatusResult{Branch: "feat/x"}
+	if got := branchCell(repo); got.text != "feat/x" || got.color != cliutil.ColorCyan {
+		t.Errorf("no remote at all = (%q, %q), want the bare name in cyan (REMOTE column carries it)", got.text, got.color)
+	}
+}
+
+// TestRemoteCell_PresenceColors pins the REMOTE column's contract: presence is
+// the normal case and says nothing at all, while "no remote" marks the
+// repository that cannot push or pull in red. Colors forced on for the same
+// reason as the branch-cell tests — the gate blanks the values otherwise.
+func TestRemoteCell_PresenceColors(t *testing.T) {
+	withColors(t, true)
+
+	repo := &repository.RepositoryStatusResult{}
+	if got := remoteCell(repo); got.text != "no remote" || got.color != cliutil.ColorRed {
+		t.Errorf("no remote = (%q, %q), want %q in red", got.text, got.color, "no remote")
+	}
+
+	repo = &repository.RepositoryStatusResult{RemoteURL: "git@github.com:Acme/b.git"}
+	if got := remoteCell(repo); got.text != "" || got.color != "" {
+		t.Errorf("remote present = (%q, %q), want an empty cell (presence is the normal case)", got.text, got.color)
 	}
 }
 
@@ -285,6 +341,22 @@ func TestRemoteOwner(t *testing.T) {
 		if got := remoteOwner(tc.in); got != tc.want {
 			t.Errorf("remoteOwner(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+// TestOwnerNote covers the --full replacement for the table's old owner
+// callout: only a remote pointing away from the workspace majority is worth a
+// line, and the comparison must not trip on case.
+func TestOwnerNote(t *testing.T) {
+	if got := ownerNote("", "github.com/Acme"); got != "" {
+		t.Errorf("no remote = %q, want no note", got)
+	}
+	if got := ownerNote("git@github.com:acme/a.git", "github.com/Acme"); got != "" {
+		t.Errorf("majority owner (any case) = %q, want no note", got)
+	}
+	got := ownerNote("git@gitlab.com:other/b.git", "github.com/Acme")
+	if !strings.Contains(got, "gitlab.com/other") || !strings.Contains(got, "github.com/Acme") {
+		t.Errorf("stray owner = %q, want both owners named", got)
 	}
 }
 
@@ -402,6 +474,177 @@ func TestOtherBranchesCell_WorktreeBackedFirst(t *testing.T) {
 	}
 	if strings.Contains(got, "master") {
 		t.Errorf("current/base branch must not repeat in OTHER, got %q", got)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_ExcludesLocalAndSymbolicHEAD(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Branch:         "master",
+		Upstream:       "origin/master",
+		Remotes:        map[string]string{"origin": ""},
+		LocalBranches:  []string{"master", "feature/local"},
+		RemoteBranches: []string{"origin/HEAD", "origin/develop", "origin/feature/local", "origin/master"},
+	}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{Base: repository.BaseBranchInfo{Name: "master"}}).text
+	if got != "develop" {
+		t.Errorf("remote-only branches = %q, want %q", got, "develop")
+	}
+}
+
+func TestRemoteOnlyBranchesCell_MultipleRemotesSortAndTruncate(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{Remotes: map[string]string{"upstream": "", "origin": "", "fork": ""}, RemoteBranches: []string{
+		"upstream/develop", "origin/zeta", "origin/develop", "fork/alpha", "origin/beta",
+	}}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
+	// Multiple displayed remotes force every label to retain its full ref; the
+	// remaining entries collapse to +2.
+	want := "fork/alpha, origin/beta, origin/develop +2"
+	if got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_TopLevelBranchesSurviveTruncation(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{Remotes: map[string]string{"origin": ""}, RemoteBranches: []string{
+		"origin/dependabot/github_actions/a", "origin/dependabot/github_actions/b",
+		"origin/dependabot/github_actions/c", "origin/dependabot/github_actions/d",
+		"origin/develop",
+	}}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
+	if !strings.HasPrefix(got, "develop, ") || !strings.HasSuffix(got, " +2") {
+		t.Errorf("top-level develop must lead a truncated remote-only list, got %q", got)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_UsesConfiguredSlashRemoteNames(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes:        map[string]string{"team/foo": "", "origin": ""},
+		LocalBranches:  []string{"bar", "origin/develop"},
+		RemoteBranches: []string{"team/foo/bar", "origin/develop", "origin/release"},
+	}
+	// bar is a local counterpart to team/foo/bar. A local branch literally
+	// named origin/develop is not a counterpart to remote origin/develop.
+	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "develop, release"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_QualifiesAmbiguousSlashRemoteBranches(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes:        map[string]string{"team/foo": "", "origin": ""},
+		RemoteBranches: []string{"team/foo/bar", "origin/bar"},
+	}
+	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "origin/bar, team/foo/bar"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_ExpandsCollidingElisions(t *testing.T) {
+	withColors(t, false)
+
+	first := "very-long-remote-alpha-middle-identical-tail/develop"
+	second := "very-long-remote-bravo-middle-identical-tail/develop"
+	if elideMiddle(first, maxBranchWidth) != elideMiddle(second, maxBranchWidth) {
+		t.Fatalf("fixture must collide after elision")
+	}
+	repo := &repository.RepositoryStatusResult{
+		Remotes:        map[string]string{strings.TrimSuffix(first, "/develop"): "", strings.TrimSuffix(second, "/develop"): ""},
+		RemoteBranches: []string{first, second},
+	}
+	got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text
+	if !strings.Contains(got, first) || !strings.Contains(got, second) {
+		t.Errorf("colliding labels must retain full refs, got %q", got)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_UsesFullLabelsForMultipleRemotes(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes: map[string]string{"foo": "", "up": "", "origin": ""},
+		RemoteBranches: []string{
+			"foo/bar", "up/bar", "origin/foo/bar", "foo/bar", // duplicate ref must not duplicate output
+		},
+	}
+	if got, want := remoteOnlyBranchesCell(repo, infoEnrichment{}).text, "foo/bar, up/bar, origin/foo/bar"; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteOnlyBranchesCell_AvoidsCascadingCrossKindCollisions(t *testing.T) {
+	withColors(t, false)
+
+	repo := &repository.RepositoryStatusResult{
+		Remotes: map[string]string{"foo": "", "origin": "", "x": "", "zzz": ""},
+		RemoteBranches: []string{
+			"foo/q/bar", "origin/foo/q/bar", "x/origin/foo/q/bar", "zzz/q/bar",
+		},
+	}
+	want := "foo/q/bar, origin/foo/q/bar, x/origin/foo/q/bar +1"
+	if got := remoteOnlyBranchesCell(repo, infoEnrichment{}).text; got != want {
+		t.Errorf("remote-only branches = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteTrackingBranch_OverlappingRemoteNamespacesUseLongestPrefix(t *testing.T) {
+	remote, branch, ok := remoteTrackingBranch("team/foo/bar", map[string]string{"team": "", "team/foo": ""})
+	if !ok || remote != "team/foo" || branch != "bar" {
+		t.Errorf("remoteTrackingBranch() = (%q, %q, %v), want (team/foo, bar, true)", remote, branch, ok)
+	}
+}
+
+func TestInfoOutputsExposeRemoteOnlyBranches(t *testing.T) {
+	result := bulkResult(repository.RepositoryStatusResult{
+		Path: "/w/r", RelativePath: "r", Branch: "master", Status: "clean",
+		Remotes: map[string]string{"origin": ""}, LocalBranches: []string{"master"},
+		RemoteBranches: []string{"origin/develop"},
+	})
+	enr := map[string]infoEnrichment{"/w/r": {Base: repository.BaseBranchInfo{Name: "master"}}}
+
+	full := captureStdout(t, func() { displayInfoResultsDetailed(result, enr) })
+	if !strings.Contains(full, "Remote-only (1): origin/develop") {
+		t.Errorf("full output lacks remote-only field:\n%s", full)
+	}
+
+	jsonOut := captureStdout(t, func() { displayInfoResultsStructured(result, enr, "json") })
+	if !strings.Contains(jsonOut, "\"remote_only_branches\": [") || !strings.Contains(jsonOut, "origin/develop") {
+		t.Errorf("JSON output lacks remote_only_branches:\n%s", jsonOut)
+	}
+
+	llmOut := captureStdout(t, func() { displayInfoResultsStructured(result, enr, "llm") })
+	if !strings.Contains(llmOut, "origin/develop") {
+		t.Errorf("LLM output lacks remote-only branch value:\n%s", llmOut)
+	}
+}
+
+func TestRenderInfoTable_CompactKeepsRemoteOnlyColumn(t *testing.T) {
+	withColors(t, false)
+
+	result := bulkResult(repository.RepositoryStatusResult{
+		Path: "/w/remote-only", Branch: "master", Upstream: "origin/master",
+		RemoteURL:     "git@github.com:Acme/remote-only.git",
+		Remotes:       map[string]string{"origin": ""},
+		LocalBranches: []string{"master"}, RemoteBranches: []string{"origin/develop"},
+	})
+	enr := map[string]infoEnrichment{
+		"/w/remote-only": {Base: repository.BaseBranchInfo{Name: "master"}},
+	}
+
+	var buf bytes.Buffer
+	renderInfoTable(&buf, result, enr, false, true)
+	out := buf.String()
+	if !strings.Contains(out, "REMOTE ONLY") || !strings.Contains(out, "develop") {
+		t.Errorf("compact table must retain remote-only information:\n%s", out)
 	}
 }
 

@@ -5,9 +5,7 @@ package integrate
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -273,19 +271,11 @@ func nestedIgnoredRepos(ctx context.Context, g gitRepo, worktree string) []strin
 }
 
 func dirEmpty(path string) (bool, error) {
-	f, err := os.Open(path) //nolint:gosec // reclaim inspects the worktree parent
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
-	names, err := f.Readdirnames(1)
-	if errors.Is(err, io.EOF) {
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return len(names) == 0, nil
+	return len(entries) == 0, nil
 }
 
 func defaultBranchName(defaultRef, remote string) string {

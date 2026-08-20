@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/gizzahub/gzh-cli-gitforge/internal/safefs"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
-	"gopkg.in/yaml.v3"
 )
 
 const factNoDeclaration = "no declaration"

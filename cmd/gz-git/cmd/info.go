@@ -134,14 +134,6 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scan failed: %w", err)
 	}
 
-	// Display results. --audit is checked before --format because it defines its
-	// own document (schema, findings, remediations); reusing the status JSON
-	// would emit the shape a caller did not ask for.
-	if !infoAudit && (infoFlags.Format == "json" || infoFlags.Format == "llm") {
-		displayInfoResultsStructured(result, infoFlags.Format)
-		return nil
-	}
-
 	// Base-branch and worktree facts are info-specific and cost extra git
 	// invocations, so they are gathered here rather than in BulkStatus, which
 	// every other bulk command shares.
@@ -152,6 +144,11 @@ func runInfo(cmd *cobra.Command, args []string) error {
 
 	if infoAudit {
 		return runInfoAudit(cmd.OutOrStdout(), result, enrichment, directory, autofixOverrides, time.Now())
+	}
+
+	if infoFlags.Format == "json" || infoFlags.Format == "llm" {
+		displayInfoResultsStructured(result, enrichment, infoFlags.Format)
+		return nil
 	}
 
 	if infoFull {
@@ -173,14 +170,19 @@ func displayInfoResultsDetailed(result *repository.BulkStatusResult, enrichment 
 	fmt.Println()
 	fmt.Printf("found %d repositories (scanned in %s)\n", len(result.Repositories), result.Duration.Round(10*time.Millisecond))
 
+	// The owner most of the workspace shares, so each detail block can flag
+	// the repository that points somewhere else — the stray-fork signal the
+	// table's REMOTE column no longer carries now that it is presence-only.
+	majorityOwner, _ := majorityRemoteOwner(result.Repositories)
+
 	for _, repo := range result.Repositories {
 		fmt.Println()
-		displayInfoRepository(repo, enrichment[repo.Path])
+		displayInfoRepository(repo, enrichment[repo.Path], majorityOwner)
 	}
 	fmt.Println()
 }
 
-func displayInfoRepository(repo repository.RepositoryStatusResult, enr infoEnrichment) {
+func displayInfoRepository(repo repository.RepositoryStatusResult, enr infoEnrichment, majorityOwner string) {
 	path := filepath.Base(repo.Path)
 	if verbose {
 		path = repo.RelativePath
@@ -211,8 +213,12 @@ func displayInfoRepository(repo repository.RepositoryStatusResult, enr infoEnric
 	displayInfoVersion(repo)
 	displayInfoStatus(repo)
 	displayInfoLastUpdate(repo)
+	if note := ownerNote(repo.RemoteURL, majorityOwner); note != "" {
+		fmt.Print(note)
+	}
 	displayInfoRemotes(repo.Remotes)
 	displayInfoBranches(repo.LocalBranches)
+	displayInfoRemoteOnlyBranches(remoteOnlyTrackingBranches(&repo, enr))
 }
 
 func displayInfoUpstream(repo repository.RepositoryStatusResult) {
@@ -298,7 +304,159 @@ func displayInfoBranches(branches []string) {
 	fmt.Printf("  Branches (%d):   %s\n", len(branches), branchesStr)
 }
 
-func displayInfoResultsStructured(result *repository.BulkStatusResult, format string) {
-	// Re-use status JSON output format as it contains all info
-	displayStatusResultsStructured(result, format)
+func displayInfoRemoteOnlyBranches(branches []string) {
+	if len(branches) == 0 {
+		return
+	}
+	shown := branches
+	if len(branches) > itemLimit {
+		shown = append([]string(nil), branches[:itemLimit]...)
+		shown = append(shown, fmt.Sprintf("... (%d more)", len(branches)-itemLimit))
+	}
+	fmt.Printf("  Remote-only (%d): %s\n", len(branches), strings.Join(shown, ", "))
+}
+
+// InfoJSONOutput is the structured contract for `gz-git info`. Unlike status,
+// it includes remote_only_branches: complete remote-tracking refs with no
+// corresponding local, current, base, or upstream branch.
+type InfoJSONOutput struct {
+	TotalScanned   int                        `json:"total_scanned"`
+	TotalProcessed int                        `json:"total_processed"`
+	DurationMs     int64                      `json:"duration_ms"`
+	Summary        map[string]int             `json:"summary"`
+	Repositories   []InfoRepositoryJSONOutput `json:"repositories"`
+}
+
+type InfoRepositoryJSONOutput struct {
+	Path               string   `json:"path"`
+	Branch             string   `json:"branch,omitempty"`
+	Status             string   `json:"status"`
+	UncommittedFiles   int      `json:"uncommitted_files,omitempty"`
+	UntrackedFiles     int      `json:"untracked_files,omitempty"`
+	CommitsAhead       int      `json:"commits_ahead,omitempty"`
+	CommitsBehind      int      `json:"commits_behind,omitempty"`
+	ConflictFiles      []string `json:"conflict_files,omitempty"`
+	RemoteOnlyBranches []string `json:"remote_only_branches"`
+	DurationMs         int64    `json:"duration_ms,omitempty"`
+	Error              string   `json:"error,omitempty"`
+}
+
+func displayInfoResultsStructured(result *repository.BulkStatusResult, enrichment map[string]infoEnrichment, format string) {
+	output := InfoJSONOutput{
+		TotalScanned:   result.TotalScanned,
+		TotalProcessed: result.TotalProcessed,
+		DurationMs:     result.Duration.Milliseconds(),
+		Summary:        result.Summary,
+		Repositories:   make([]InfoRepositoryJSONOutput, 0, len(result.Repositories)),
+	}
+	for i := range result.Repositories {
+		repo := &result.Repositories[i]
+		repoOutput := InfoRepositoryJSONOutput{
+			Path:               repo.RelativePath,
+			Branch:             repo.Branch,
+			Status:             repo.Status,
+			UncommittedFiles:   repo.TrackedChangedFiles,
+			UntrackedFiles:     repo.UntrackedFiles,
+			CommitsAhead:       repo.CommitsAhead,
+			CommitsBehind:      repo.CommitsBehind,
+			ConflictFiles:      repo.ConflictFiles,
+			RemoteOnlyBranches: remoteOnlyTrackingBranches(repo, enrichment[repo.Path]),
+			DurationMs:         repo.Duration.Milliseconds(),
+		}
+		if repo.Error != nil {
+			repoOutput.Error = repo.Error.Error()
+		}
+		output.Repositories = append(output.Repositories, repoOutput)
+	}
+	writeBulkOutput(format, output)
+}
+
+// The functions below read the remote owner, which only --full reports now:
+// the table's REMOTE column is presence-only, so "which owner" moved here.
+
+// ownerNote flags a repository whose remote points at a different owner than
+// the workspace majority. Repositories on the majority print nothing — the
+// URL list that follows already carries the full detail.
+func ownerNote(remoteURL, majorityOwner string) string {
+	owner := remoteOwner(remoteURL)
+	if owner == "" || sameOwner(owner, majorityOwner) {
+		return ""
+	}
+	return fmt.Sprintf("  Owner:          %s (differs from workspace majority %s)\n", owner, majorityOwner)
+}
+
+// majorityRemoteOwner returns the most common remote owner across the scan and
+// how many repositories use it. Owners are grouped case-insensitively because
+// forge hosts treat "Gizzahub" and "gizzahub" as the same account, so counting
+// them separately would invent a discrepancy that does not exist. The returned
+// spelling is the one that occurs most often, ties broken alphabetically for a
+// stable result across runs.
+func majorityRemoteOwner(repos []repository.RepositoryStatusResult) (owner string, count int) {
+	counts := make(map[string]int)
+	spellings := make(map[string]map[string]int)
+
+	for i := range repos {
+		o := remoteOwner(repos[i].RemoteURL)
+		if o == "" {
+			continue
+		}
+		key := strings.ToLower(o)
+		counts[key]++
+		if spellings[key] == nil {
+			spellings[key] = make(map[string]int)
+		}
+		spellings[key][o]++
+	}
+
+	bestKey := ""
+	for key, n := range counts {
+		if n > counts[bestKey] || (n == counts[bestKey] && key < bestKey) {
+			bestKey = key
+		}
+	}
+	if bestKey == "" {
+		return "", 0
+	}
+
+	best := ""
+	for spelling, n := range spellings[bestKey] {
+		if n > spellings[bestKey][best] || (n == spellings[bestKey][best] && spelling < best) {
+			best = spelling
+		}
+	}
+	return best, counts[bestKey]
+}
+
+// sameOwner compares owners the way forge hosts do.
+func sameOwner(a, b string) bool {
+	return a != "" && strings.EqualFold(a, b)
+}
+
+// remoteOwner reduces a remote URL to "host/owner", covering both the scp-like
+// form (git@host:owner/repo.git) and the URL form (https://host/owner/repo).
+// It returns "" when the URL is empty or does not carry an owner segment.
+func remoteOwner(remoteURL string) string {
+	url := strings.TrimSuffix(strings.TrimSpace(remoteURL), ".git")
+	if url == "" {
+		return ""
+	}
+
+	// scp-like: strip the user@ prefix and turn the single ":" into "/".
+	if !strings.Contains(url, "://") {
+		if at := strings.Index(url, "@"); at >= 0 {
+			url = url[at+1:]
+		}
+		url = strings.Replace(url, ":", "/", 1)
+	} else {
+		url = url[strings.Index(url, "://")+3:]
+		if at := strings.Index(url, "@"); at >= 0 {
+			url = url[at+1:]
+		}
+	}
+
+	parts := strings.Split(strings.Trim(url, "/"), "/")
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[0] + "/" + parts[1]
 }

@@ -14,56 +14,113 @@ BINEXT := $(shell go env GOEXE)
 BINARY := $(executablename)$(BINEXT)
 GOBIN := $(shell go env GOBIN)
 GOPATH := $(shell go env GOPATH)
+HOST_GOCACHE := $(shell go env GOCACHE)
+HOST_GOMODCACHE := $(shell go env GOMODCACHE)
+HOST_GOTOOLCHAIN := $(shell go env GOTOOLCHAIN)
 
 # OS-specific path separator and binary install dir
 ifeq ($(OS),Windows_NT)
 SEP := \\\\
+GOPATH_LIST_SEP := ;
 else
 SEP := /
+GOPATH_LIST_SEP := :
 endif
 
-USERBIN := $(HOME)$(SEP).local$(SEP)bin
-
-ifeq ($(strip $(GOBIN)),)
-  ifeq ($(OS),Windows_NT)
-    BINDIR := $(GOPATH)$(SEP)bin
+ifeq ($(strip $(BINDIR)),)
+  ifeq ($(strip $(GOBIN)),)
+    GOPATH_FIRST := $(shell printf '%s\n' '$(GOPATH)' | cut -d '$(GOPATH_LIST_SEP)' -f1)
+    override INSTALL_BINDIR := $(GOPATH_FIRST)$(SEP)bin
   else
-    BINDIR := $(GOPATH)$(SEP)bin
+    override INSTALL_BINDIR := $(GOBIN)
   endif
 else
-  BINDIR := $(GOBIN)
+  override INSTALL_BINDIR := $(BINDIR)
 endif
 
 # ==============================================================================
 # Build Targets
 # ==============================================================================
 
-.PHONY: build install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
+.PHONY: build install test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
 
 build: ## build golang binary
 	@printf "$(CYAN)Building %s...$(RESET)\n" "$(BINARY)"
-	@go build -ldflags "-X main.version=$(VERSION)" -o $(BINARY) ./cmd/gz-git
+	@go build -ldflags "-X main.version=$(VERSION)" -o "$(BINARY)" ./cmd/gz-git
 	@printf "$(GREEN)Built %s successfully$(RESET)\n" "$(BINARY)"
 
 
 install: build ## install golang binary
-	@printf "$(CYAN)Installing $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
-	@mkdir -p "$(BINDIR)"
-	@mkdir -p "$(USERBIN)"
-	@echo @mkdir -p "$(USERBIN)"
-	@cp $(BINARY) "$(USERBIN)"/"$(BINARY)"
-	@echo @cp $(BINARY) "$(USERBIN)"/"$(BINARY)"
-	@mv $(BINARY) "$(BINDIR)"/
-	@printf "$(GREEN)✅ Installed $(BINARY) $(VERSION) to %s$(RESET)\n" "$(BINDIR)$(SEP)$(BINARY)"
+	@printf "$(CYAN)Installing $(BINARY) $(VERSION) to %s$(RESET)\n" "$(INSTALL_BINDIR)$(SEP)$(BINARY)"
+	@mkdir -p "$(INSTALL_BINDIR)"
+	@if [ -d "$(INSTALL_BINDIR)$(SEP)$(BINARY)" ]; then \
+		printf "$(RED)Error: install target is a directory: %s$(RESET)\n" "$(INSTALL_BINDIR)$(SEP)$(BINARY)" >&2; \
+		exit 1; \
+	fi
+	@mv "$(BINARY)" "$(INSTALL_BINDIR)$(SEP)$(BINARY)"
+	@printf "$(GREEN)✅ Installed $(BINARY) $(VERSION) to %s$(RESET)\n" "$(INSTALL_BINDIR)$(SEP)$(BINARY)"
 	@echo ""
 	@printf "$(CYAN)Verifying installation...$(RESET)\n"
-	@"$(BINDIR)$(SEP)$(BINARY)" --version || echo -e "$(YELLOW)Note: Binary installed but --version flag not implemented$(RESET)"
+	@"$(INSTALL_BINDIR)$(SEP)$(BINARY)" --version
 	@echo ""
 	@printf "$(GREEN)🎉 Installation complete! Run '$(BINARY) --help' to get started.$(RESET)\n"
 
+test-install: ## verify install uses only BINDIR without touching user directories
+	@set -eu; \
+		tmpdir="$$(mktemp -d "$${TMPDIR:-/tmp}/gz-git-install.XXXXXX")"; \
+		trap 'chmod -R u+w "$$tmpdir"; rm -rf "$$tmpdir"' EXIT; \
+		if [ "$(TEST_INSTALL_EXTERNAL_BINDIR_CHECK)" != 1 ]; then \
+			sentinel="$$tmpdir/external bindir"; \
+			$(MAKE) --no-print-directory test-install TEST_INSTALL_EXTERNAL_BINDIR_CHECK=1 BINDIR="$$sentinel"; \
+			test ! -e "$$sentinel$(SEP)$(BINARY)"; \
+			install_bindir_sentinel="$$tmpdir/external install bindir"; \
+			$(MAKE) --no-print-directory test-install TEST_INSTALL_EXTERNAL_BINDIR_CHECK=1 INSTALL_BINDIR="$$install_bindir_sentinel"; \
+			test ! -e "$$install_bindir_sentinel$(SEP)$(BINARY)"; \
+		fi; \
+		for mode in gobin gopath bindir; do \
+			test_home="$$tmpdir/$$mode home"; \
+			mkdir -p "$$test_home"; \
+			if [ "$$mode" = gobin ]; then \
+				bindir="$$tmpdir/gobin dir"; \
+				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR= GOBIN="$$bindir" HOME="$$test_home"; \
+			elif [ "$$mode" = gopath ]; then \
+				gopath_first="$$tmpdir/first gopath"; \
+				gopath_second="$$tmpdir/second gopath"; \
+				gopath="$$gopath_first$(GOPATH_LIST_SEP)$$gopath_second"; \
+				bindir="$$gopath_first$(SEP)bin"; \
+				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR= GOBIN= GOPATH="$$gopath" HOME="$$test_home"; \
+				test ! -e "$$gopath_second$(SEP)bin$(SEP)$(BINARY)"; \
+			else \
+				bindir="$$tmpdir/bindir override"; \
+				GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install BINDIR="$$bindir" GOBIN="$$tmpdir/ignored gobin" HOME="$$test_home"; \
+				test ! -e "$$tmpdir/ignored gobin$(SEP)$(BINARY)"; \
+			fi; \
+			test -x "$$bindir$(SEP)$(BINARY)"; \
+			test ! -e "$$test_home$(SEP).local$(SEP)bin$(SEP)$(BINARY)"; \
+		done; \
+		failure_target="$$tmpdir/target directory$(SEP)$(BINARY)"; \
+		mkdir -p "$$failure_target"; \
+		if GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory -j2 install BINDIR="$$tmpdir/target directory" HOME="$$tmpdir/failure home" >"$$tmpdir/failure.log" 2>&1; then \
+			echo "expected install to reject a directory target" >&2; \
+			exit 1; \
+		fi; \
+		grep -F "Error: install target is a directory" "$$tmpdir/failure.log" >/dev/null; \
+		plugin_target="$$tmpdir/plugin directory$(SEP)git-forge"; \
+		mkdir -p "$$plugin_target"; \
+		if GOWORK=off GOCACHE="$(HOST_GOCACHE)" GOMODCACHE="$(HOST_GOMODCACHE)" GOTOOLCHAIN="$(HOST_GOTOOLCHAIN)" $(MAKE) --no-print-directory install-git-plugin BINDIR="$$tmpdir/plugin directory" HOME="$$tmpdir/plugin home" >"$$tmpdir/plugin-failure.log" 2>&1; then \
+			echo "expected install-git-plugin to reject a directory target" >&2; \
+			exit 1; \
+		fi; \
+		grep -F "Error: git plugin target is a directory" "$$tmpdir/plugin-failure.log" >/dev/null; \
+		printf "$(GREEN)✅ Install path regression checks passed$(RESET)\n"
+
 install-git-plugin: install ## install as git plugin (git forge)
 	@printf "$(CYAN)Installing git plugin symlink...$(RESET)\n"
-	@ln -sf "$(BINDIR)$(SEP)$(BINARY)" "$(BINDIR)$(SEP)git-forge"
+	@if [ -d "$(INSTALL_BINDIR)$(SEP)git-forge" ]; then \
+		printf "$(RED)Error: git plugin target is a directory: %s$(RESET)\n" "$(INSTALL_BINDIR)$(SEP)git-forge" >&2; \
+		exit 1; \
+	fi
+	@ln -sf "$(INSTALL_BINDIR)$(SEP)$(BINARY)" "$(INSTALL_BINDIR)$(SEP)git-forge"
 	@printf "$(GREEN)✅ Git plugin installed! Use 'git forge' to run.$(RESET)\n"
 
 run: ## run the application (usage: make run [args...] or ARGS="args" make run)
@@ -91,8 +148,6 @@ bootstrap: ## install build dependencies
 clean: ## clean up environment
 	@echo -e "$(CYAN)Cleaning up build artifacts...$(RESET)"
 	@rm -rf coverage.out coverage.html dist/ $(executablename) $(BINARY)
-	@rm -f $(shell go env GOPATH)/bin/$(executablename)
-	@rm -f $(shell go env GOPATH)/bin/$(BINARY)
 	@rm -f lint-report.json gosec-report.json
 	@echo -e "$(GREEN)✅ Cleanup completed$(RESET)"
 
@@ -193,11 +248,12 @@ build-info: ## show build information and current configuration
 	@echo -e "  GOPROXY:        $(GOPROXY)"
 	@echo -e "  GOSUMDB:        $(GOSUMDB)"
 	@echo "  GOPATH:         $$(go env GOPATH)"
+	@echo "  BINDIR:         $(INSTALL_BINDIR)"
 	@echo "  GOROOT:         $$(go env GOROOT)"
 	@echo ""
 	@echo -e "$(GREEN)🎯 Build Targets:$(RESET)"
 	@echo -e "  • $(CYAN)build$(RESET)               Build golang binary"
-	@echo -e "  • $(CYAN)install$(RESET)             Install golang binary to GOPATH/bin"
+	@echo -e "  • $(CYAN)install$(RESET)             Install golang binary to BINDIR, GOBIN, or GOPATH/bin"
 	@echo -e "  • $(CYAN)run$(RESET)                 Run the application"
 	@echo -e "  • $(CYAN)bootstrap$(RESET)           Install build dependencies"
 	@echo -e "  • $(CYAN)clean$(RESET)               Clean up build artifacts"

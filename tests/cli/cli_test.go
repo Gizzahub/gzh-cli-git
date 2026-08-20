@@ -159,7 +159,7 @@ func TestCLIInfo(t *testing.T) {
 	expectedStrings := []string{
 		"REPOSITORY", // table header
 		"BRANCH",     // always populated: every repo has a branch or is detached
-		"UPSTREAM",   // present even when nothing has drifted
+		"BASE",       // present even when nothing has drifted; divergence rides on BRANCH
 		"WT",
 		"DIRTY",
 		"repositories",

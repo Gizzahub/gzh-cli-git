@@ -480,7 +480,8 @@ func runCloneBeforeHooks(ctx context.Context, hooks *CloneHooks, opts repository
 	if parentDir == "" {
 		parentDir = "."
 	}
-	if err := os.MkdirAll(parentDir, 0o755); err != nil { // #nosec G301 -- cloned repositories must retain normal shared directory readability.
+	// #nosec G301 -- cloned repositories must retain normal shared directory readability.
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return fmt.Errorf("create parent directory for before hooks: %w", err)
 	}
 	if err := executeHooks(ctx, hooks.Before, parentDir, opts.Logger); err != nil {

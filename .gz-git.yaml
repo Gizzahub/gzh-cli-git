@@ -1,0 +1,16 @@
+# Repo-root declaration for integrate/reclaim. Read by
+# config.LoadRepoRootTaskPattern (repo-root file only, never the upward
+# merger). taskPattern is the reclaim allow-list: the prefix before the
+# first '*' marks a task-branch namespace, so agent/* also covers
+# agent/<task>/<agent-id>.
+branch:
+  integrationBranch:
+    - develop
+  taskPattern:
+    - feat/*
+    - fix/*
+    - docs/*
+    - refactor/*
+    - test/*
+    - chore/*
+    - agent/*

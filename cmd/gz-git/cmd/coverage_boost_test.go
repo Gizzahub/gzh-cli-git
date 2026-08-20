@@ -152,8 +152,8 @@ func TestPrintBulkStashAndCommitAndInfo(t *testing.T) {
 		// the zero value, which is what a repository whose extra probes failed
 		// renders as.
 		displayInfoResultsDetailed(infoRes, nil)
-		displayInfoResultsStructured(infoRes, "json")
-		displayInfoResultsStructured(infoRes, "llm")
+		displayInfoResultsStructured(infoRes, nil, "json")
+		displayInfoResultsStructured(infoRes, nil, "llm")
 	})
 }
 

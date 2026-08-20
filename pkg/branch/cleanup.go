@@ -103,51 +103,47 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 		}
 	}
 
-	// Analyze each branch
 	for _, branch := range branches {
-		if !normalizeCleanupBranch(branch) {
-			continue
-		}
-
-		// Skip current branch
-		if branch.IsHead {
-			continue
-		}
-
-		// Check if protected
-		if c.isProtectedBranch(branch.Name, opts.Exclude) {
-			report.Protected = append(report.Protected, branch)
-			continue
-		}
-
-		if opts.BotsOnly && !repository.IsBotBranch(branch.Name) {
-			continue
-		}
-
-		// Check if merged
-		if opts.IncludeMerged {
-			merged, err := c.isBranchMerged(ctx, repo, branch, opts.BaseBranch)
-			if err == nil && merged {
-				report.Merged = append(report.Merged, branch)
-				continue
-			}
-		}
-
-		// Stale stays local-only: an unmerged remote bot branch may be an open PR.
-		if opts.IncludeStale && !branch.IsRemote {
-			if stale, err := c.isBranchStale(ctx, repo, branch.Name, opts.StaleThreshold); err == nil && stale {
-				report.Stale = append(report.Stale, branch)
-				continue
-			}
-		}
-
-		// Check if the upstream this branch tracked is gone
-		if !branch.IsRemote && gone[branch.Name] {
-			report.Orphaned = append(report.Orphaned, branch)
-		}
+		c.classifyCleanupBranch(ctx, repo, branch, opts, gone, report)
 	}
 
 	return report, nil
+}
+
+func (c *cleanupService) classifyCleanupBranch(
+	ctx context.Context,
+	repo *repository.Repository,
+	branch *Branch,
+	opts AnalyzeOptions,
+	gone map[string]bool,
+	report *CleanupReport,
+) {
+	if !normalizeCleanupBranch(branch) || branch.IsHead {
+		return
+	}
+	if c.isProtectedBranch(branch.Name, opts.Exclude) {
+		report.Protected = append(report.Protected, branch)
+		return
+	}
+	if opts.BotsOnly && !repository.IsBotBranch(branch.Name) {
+		return
+	}
+	if opts.IncludeMerged {
+		if merged, err := c.isBranchMerged(ctx, repo, branch, opts.BaseBranch); err == nil && merged {
+			report.Merged = append(report.Merged, branch)
+			return
+		}
+	}
+	// Stale stays local-only: an unmerged remote bot branch may be an open PR.
+	if opts.IncludeStale && !branch.IsRemote {
+		if stale, err := c.isBranchStale(ctx, repo, branch.Name, opts.StaleThreshold); err == nil && stale {
+			report.Stale = append(report.Stale, branch)
+			return
+		}
+	}
+	if !branch.IsRemote && gone[branch.Name] {
+		report.Orphaned = append(report.Orphaned, branch)
+	}
 }
 
 // Execute performs cleanup based on report.

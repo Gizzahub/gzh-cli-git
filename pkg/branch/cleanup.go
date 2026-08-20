@@ -199,15 +199,9 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 
 	// Remote-only names are deleted via push --delete; BranchManager.Delete
 	// Exists only on refs/heads/, so a remotes/origin/… candidate would fail
-	// with not found.
-	remoteListed := map[string]bool{}
-	for _, branch := range toDelete {
-		if branch.IsRemote {
-			remoteListed[branch.Name] = true
-		}
-	}
-
-	// Delete branches
+	// with not found. Only names Analyze already classified as remote-merged
+	// are deleted here — pairing a local delete with a same-named unmerged
+	// remote would drop an open PR.
 	for _, branch := range toDelete {
 		if branch.IsRemote {
 			if err := c.deleteRemoteBranch(ctx, repo, branch); err != nil {
@@ -234,14 +228,6 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		}
 
 		result.Deleted = append(result.Deleted, branch.Name)
-
-		// --remote on a local-only report still deletes the same-named remote
-		// when Analyze did not list it separately (IncludeRemote false).
-		if opts.Remote && !remoteListed[branch.Name] && c.remoteTrackingExists(ctx, repo, branch.Name) {
-			if err := c.deleteRemoteBranch(ctx, repo, &Branch{Name: branch.Name, IsRemote: true, Ref: "refs/remotes/origin/" + branch.Name}); err != nil {
-				result.Failed = append(result.Failed, DeleteFailure{Branch: branch.Name, Err: err})
-			}
-		}
 	}
 
 	return result, nil
@@ -306,8 +292,14 @@ func (c *cleanupService) deleteRemoteBranch(ctx context.Context, repo *repositor
 	if remote == "" {
 		remote = "origin"
 	}
-	_, err := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "push", remote, "--delete", name)
-	return err
+	result, err := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "push", remote, "--delete", name)
+	if err != nil {
+		return err
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("git push %s --delete %s: %s", remote, name, strings.TrimSpace(result.Stderr))
+	}
+	return nil
 }
 
 // normalizeCleanupBranch strips a remotes/<remote>/ prefix from Name so
@@ -344,11 +336,6 @@ func splitRemoteTrackingName(name string) (remote, branch string) {
 	return name[:i], name[i+1:]
 }
 
-func (c *cleanupService) remoteTrackingExists(ctx context.Context, repo *repository.Repository, name string) bool {
-	result, err := c.executor.Run(ctx, repo.Path, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+name)
-	return err == nil && result.ExitCode == 0
-}
-
 func remoteAndBranch(branch *Branch) (remote, name string) {
 	if branch == nil {
 		return "", ""
@@ -356,8 +343,9 @@ func remoteAndBranch(branch *Branch) (remote, name string) {
 	if strings.HasPrefix(branch.Ref, "refs/remotes/") {
 		return splitRemoteTrackingName(strings.TrimPrefix(branch.Ref, "refs/remotes/"))
 	}
+	// Name is already stripped of origin/ by normalizeCleanupBranch.
 	if branch.IsRemote {
-		return splitRemoteTrackingName(branch.Name)
+		return "origin", branch.Name
 	}
 	return "", branch.Name
 }

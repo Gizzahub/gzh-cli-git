@@ -119,6 +119,90 @@ func TestCleanupService_ExecuteDeletesRemoteOnly(t *testing.T) {
 	}
 }
 
+func TestCleanupService_ExecuteReportsPushDeleteFailure(t *testing.T) {
+	dir := testutil.TempGitRepoWithCommit(t)
+	gitCommit(t, dir, "branch", "-M", "master")
+	gitCommit(t, dir, "checkout", "-b", "tmp-merged")
+	writeAndCommit(t, dir, "landed.txt", "landed")
+	mergedSHA := gitOutput(t, dir, "rev-parse", "HEAD")
+	gitCommit(t, dir, "checkout", "master")
+	gitCommit(t, dir, "merge", "--no-ff", "--no-edit", "tmp-merged")
+	gitCommit(t, dir, "branch", "-D", "tmp-merged")
+	gitCommit(t, dir, "update-ref", "refs/remotes/origin/dependabot/go_modules/x", mergedSHA)
+	gitCommit(t, dir, "remote", "add", "origin", filepath.Join(dir, "no-such-origin.git"))
+
+	repo := &repository.Repository{Path: dir}
+	svc := NewCleanupService()
+	report, err := svc.Analyze(context.Background(), repo, AnalyzeOptions{
+		IncludeMerged: true,
+		IncludeRemote: true,
+		BotsOnly:      true,
+		BaseBranch:    "master",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if report.IsEmpty() {
+		t.Fatal("expected remote-only merged bot in report")
+	}
+
+	result, err := svc.Execute(context.Background(), repo, report, ExecuteOptions{Force: true, Remote: true})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(result.Deleted) != 0 {
+		t.Errorf("Deleted = %v, want none on push failure", result.Deleted)
+	}
+	if len(result.Failed) == 0 {
+		t.Fatal("push --delete failure was reported as success")
+	}
+}
+
+func TestCleanupService_ExecuteDoesNotDeleteUnmergedRemote(t *testing.T) {
+	seed := testutil.TempGitRepoWithCommit(t)
+	gitCommit(t, seed, "branch", "-M", "master")
+	gitCommit(t, seed, "checkout", "-b", "dependabot/go_modules/x")
+	writeAndCommit(t, seed, "bot.txt", "bot")
+	mergedSHA := gitOutput(t, seed, "rev-parse", "HEAD")
+	gitCommit(t, seed, "checkout", "master")
+	gitCommit(t, seed, "merge", "--no-ff", "--no-edit", "dependabot/go_modules/x")
+
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	clone := filepath.Join(root, "clone")
+	gitCommit(t, t.TempDir(), "clone", "--bare", seed, origin)
+	gitCommit(t, t.TempDir(), "clone", origin, clone)
+
+	gitCommit(t, clone, "checkout", "dependabot/go_modules/x")
+	writeAndCommit(t, clone, "open.txt", "open-pr")
+	gitCommit(t, clone, "push", "origin", "dependabot/go_modules/x")
+	gitCommit(t, clone, "checkout", "master")
+	gitCommit(t, clone, "branch", "-f", "dependabot/go_modules/x", mergedSHA)
+	gitCommit(t, clone, "fetch", "origin")
+
+	repo := &repository.Repository{Path: clone}
+	svc := NewCleanupService()
+	report, err := svc.Analyze(context.Background(), repo, AnalyzeOptions{
+		IncludeMerged: true,
+		IncludeRemote: true,
+		BotsOnly:      true,
+		BaseBranch:    "master",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+
+	if _, err := svc.Execute(context.Background(), repo, report, ExecuteOptions{Force: true, Remote: true}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/dependabot/go_modules/x") //nolint:noctx // test helper
+	cmd.Dir = origin
+	if err := cmd.Run(); err != nil {
+		t.Fatal("origin lost unmerged dependabot/go_modules/x")
+	}
+}
+
 func writeAndCommit(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, name)

@@ -158,6 +158,74 @@ func TestCleanupService_ExecuteReportsPushDeleteFailure(t *testing.T) {
 	}
 }
 
+func TestCleanupService_ExecuteLeaseRefusesMovedRemoteTip(t *testing.T) {
+	seed := testutil.TempGitRepoWithCommit(t)
+	gitCommit(t, seed, "branch", "-M", "master")
+	gitCommit(t, seed, "checkout", "-b", "dependabot/go_modules/x")
+	writeAndCommit(t, seed, "bot.txt", "bot")
+	gitCommit(t, seed, "checkout", "master")
+	gitCommit(t, seed, "merge", "--no-ff", "--no-edit", "dependabot/go_modules/x")
+
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	clone := filepath.Join(root, "clone")
+	gitCommit(t, t.TempDir(), "clone", "--bare", seed, origin)
+	gitCommit(t, t.TempDir(), "clone", origin, clone)
+
+	repo := &repository.Repository{Path: clone}
+	svc := NewCleanupService()
+	report, err := svc.Analyze(context.Background(), repo, AnalyzeOptions{
+		IncludeMerged: true,
+		IncludeRemote: true,
+		BotsOnly:      true,
+		BaseBranch:    "master",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(report.Merged) != 1 || report.Merged[0].Name != "dependabot/go_modules/x" {
+		t.Fatalf("Merged = %+v, want [dependabot/go_modules/x]", namesOf(report.Merged))
+	}
+	classifiedSHA := gitOutput(t, clone, "rev-parse", "refs/remotes/origin/dependabot/go_modules/x")
+	if report.Merged[0].SHA != classifiedSHA {
+		t.Fatalf("classified SHA = %q, want full tracking SHA %q", report.Merged[0].SHA, classifiedSHA)
+	}
+
+	other := filepath.Join(t.TempDir(), "other")
+	gitCommit(t, t.TempDir(), "clone", origin, other)
+	gitCommit(t, other, "config", "user.email", "test@test.com")
+	gitCommit(t, other, "config", "user.name", "Test")
+	gitCommit(t, other, "config", "commit.gpgsign", "false")
+	gitCommit(t, other, "checkout", "-B", "dependabot/go_modules/x", "origin/dependabot/go_modules/x")
+	writeAndCommit(t, other, "sneak.txt", "sneak")
+	gitCommit(t, other, "push", "origin", "dependabot/go_modules/x")
+	newSHA := gitOutput(t, other, "rev-parse", "HEAD")
+
+	result, err := svc.Execute(context.Background(), repo, report, ExecuteOptions{
+		Force:  true,
+		Remote: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(result.Deleted) != 0 {
+		t.Errorf("Deleted = %v, want none; lease must refuse a moved tip", result.Deleted)
+	}
+	if len(result.Failed) == 0 {
+		t.Fatal("moved remote tip was reported as success")
+	}
+
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/dependabot/go_modules/x") //nolint:noctx // test helper
+	cmd.Dir = origin
+	if err := cmd.Run(); err != nil {
+		t.Fatal("moved remote branch must still exist")
+	}
+	got := gitOutput(t, origin, "rev-parse", "refs/heads/dependabot/go_modules/x")
+	if got != newSHA {
+		t.Errorf("origin tip = %s, want new commit %s", got, newSHA)
+	}
+}
+
 func TestCleanupService_ExecuteDoesNotDeleteUnmergedRemote(t *testing.T) {
 	seed := testutil.TempGitRepoWithCommit(t)
 	gitCommit(t, seed, "branch", "-M", "master")

@@ -5,6 +5,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -247,7 +248,7 @@ func TestEvaluateRepo_DirtyOnBaseReportedOnce(t *testing.T) {
 	}
 }
 
-func TestEvaluateRepo_RemoteBotReclaimableUsesPushDelete(t *testing.T) {
+func TestEvaluateRepo_RemoteBotReclaimableUsesCleanupCommand(t *testing.T) {
 	got := EvaluateRepo(AuditInput{
 		Name:            "r",
 		Status:          &RepositoryStatusResult{Branch: "master", Upstream: "origin/master"},
@@ -266,13 +267,18 @@ func TestEvaluateRepo_RemoteBotReclaimableUsesPushDelete(t *testing.T) {
 	if f.Fix == nil || f.Fix.Action != ActionDeleteRemoteBranch {
 		t.Fatalf("action = %v, want %s", f.Fix, ActionDeleteRemoteBranch)
 	}
-	want := []string{"git", "push", "origin", "--delete", "dependabot/go_modules/x", "renovate/docker-alpine"}
+	want := []string{"gz-git", "cleanup", "branch", "--bots", "--merged", "--remote", "--force", "--yes"}
 	if len(f.Fix.Command) != len(want) {
 		t.Fatalf("command = %v, want %v", f.Fix.Command, want)
 	}
 	for i := range want {
 		if f.Fix.Command[i] != want[i] {
 			t.Fatalf("command = %v, want %v", f.Fix.Command, want)
+		}
+	}
+	for _, arg := range f.Fix.Command {
+		if arg == "--delete" {
+			t.Errorf("audit must not suggest raw git push --delete: %v", f.Fix.Command)
 		}
 	}
 	if f.Fix.Reversible {
@@ -283,6 +289,12 @@ func TestEvaluateRepo_RemoteBotReclaimableUsesPushDelete(t *testing.T) {
 	}
 	if f.Evidence["verified_by"] != "git merge-base --is-ancestor" {
 		t.Errorf("evidence lacks the ancestry proof: %v", f.Evidence)
+	}
+	if !strings.Contains(f.Fix.Note, "lease") {
+		t.Errorf("note must mention the lease: %q", f.Fix.Note)
+	}
+	if !strings.Contains(f.Fix.Note, "Do not raw git push --delete") {
+		t.Errorf("note must refuse raw push --delete: %q", f.Fix.Note)
 	}
 }
 

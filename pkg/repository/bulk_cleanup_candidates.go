@@ -3,7 +3,10 @@
 
 package repository
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 const (
 	branchLocationLocal  = "local"
@@ -127,7 +130,11 @@ func (c *client) appendRemoteMerged(
 		if !c.isRefAncestor(ctx, repoPath, remote+"/"+b.name, baseBranch) {
 			continue
 		}
-		toDelete = append(toDelete, branchInfo{name: b.name, reason: "merged", location: branchLocationRemote})
+		info, ok := c.remoteMergedCandidate(ctx, repoPath, remote, b.name)
+		if !ok {
+			continue
+		}
+		toDelete = append(toDelete, info)
 		result.MergedCount++
 	}
 
@@ -144,7 +151,11 @@ func (c *client) appendRemoteMerged(
 		if !c.isRefAncestor(ctx, repoPath, remote+"/"+name, baseBranch) {
 			continue
 		}
-		toDelete = append(toDelete, branchInfo{name: name, reason: "merged", location: branchLocationRemote})
+		info, ok := c.remoteMergedCandidate(ctx, repoPath, remote, name)
+		if !ok {
+			continue
+		}
+		toDelete = append(toDelete, info)
 		result.MergedCount++
 	}
 
@@ -169,13 +180,47 @@ func (c *client) executeCleanupDeletes(
 	return deleted
 }
 
+func (c *client) remoteMergedCandidate(ctx context.Context, repoPath, remote, name string) (branchInfo, bool) {
+	if remote == "" {
+		remote = defaultRemoteName
+	}
+	sha := c.fullRefSHA(ctx, repoPath, "refs/remotes/"+remote+"/"+name)
+	if sha == "" {
+		sha = c.fullRefSHA(ctx, repoPath, remote+"/"+name)
+	}
+	if sha == "" {
+		return branchInfo{}, false
+	}
+	return branchInfo{name: name, reason: "merged", location: branchLocationRemote, sha: sha}, true
+}
+
+func (c *client) fullRefSHA(ctx context.Context, repoPath, ref string) string {
+	sha, err := c.executor.RunOutput(ctx, repoPath, "rev-parse", "--verify", ref)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(sha)
+}
+
 func (c *client) deleteCleanupBranch(ctx context.Context, repoPath, remote string, b branchInfo) bool {
 	if b.location == branchLocationRemote {
 		if remote == "" {
 			remote = defaultRemoteName
 		}
-		result, err := c.executor.RunWithEnv(ctx, repoPath, nonInteractiveEnv, "push", remote, "--delete", b.name)
-		return err == nil && result.ExitCode == 0
+		if b.sha == "" {
+			return false
+		}
+		ref := "refs/heads/" + b.name
+		lease := "--force-with-lease=" + ref + ":" + b.sha
+		result, err := c.executor.RunWithEnv(ctx, repoPath, nonInteractiveEnv, "push", lease, remote, ":"+ref)
+		if err == nil && result != nil && result.ExitCode == 0 {
+			return true
+		}
+		heads, lsErr := c.executor.RunWithEnv(ctx, repoPath, nonInteractiveEnv, "ls-remote", "--heads", remote, b.name)
+		if lsErr != nil || heads == nil || heads.ExitCode != 0 || strings.TrimSpace(heads.Stdout) != "" {
+			return false
+		}
+		return true
 	}
 
 	deleteArgs := []string{"branch", "-d", b.name}
@@ -203,6 +248,7 @@ type branchInfo struct {
 	name     string
 	reason   string // "merged", "stale", "gone"
 	location string // "local", "remote"
+	sha      string // full classified tip; required to lease a remote delete
 }
 
 func (b branchInfo) entry() CleanupBranchEntry {

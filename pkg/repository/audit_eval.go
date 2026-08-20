@@ -200,9 +200,9 @@ func evaluateRemoteBots(in AuditInput) []Finding {
 			},
 			Fix: &Remediation{
 				Action:     ActionDeleteRemoteBranch,
-				Command:    append([]string{"git", "push", "origin", "--delete"}, in.RemoteBotMerged...),
+				Command:    []string{"gz-git", "cleanup", "branch", "--bots", "--merged", "--remote", "--force", "--yes"},
 				Reversible: false,
-				Note:       "irreversible; listed only because ancestry confirmed the tip is already in the base",
+				Note:       "irreversible; the cleanup command leases the classified SHA so a newer remote tip is not deleted. Do not raw git push --delete",
 			},
 		})
 	}

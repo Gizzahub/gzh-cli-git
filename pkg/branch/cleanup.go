@@ -121,6 +121,9 @@ func (c *cleanupService) classifyCleanupBranch(
 	if !normalizeCleanupBranch(branch) || branch.IsHead {
 		return
 	}
+	if branch.IsRemote {
+		c.captureRemoteBranchSHA(ctx, repo, branch)
+	}
 	if c.isProtectedBranch(branch.Name, opts.Exclude) {
 		report.Protected = append(report.Protected, branch)
 		return
@@ -193,11 +196,11 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		return result, nil
 	}
 
-	// Remote-only names are deleted via push --delete; BranchManager.Delete
-	// Exists only on refs/heads/, so a remotes/origin/… candidate would fail
-	// with not found. Only names Analyze already classified as remote-merged
-	// are deleted here — pairing a local delete with a same-named unmerged
-	// remote would drop an open PR.
+	// Remote-only names are deleted with a leased push of :refs/heads/<name>.
+	// BranchManager.Delete Exists only on refs/heads/, so a remotes/origin/…
+	// candidate would fail with not found. Only names Analyze already classified
+	// as remote-merged are deleted here — pairing a local delete with a
+	// same-named unmerged remote would drop an open PR.
 	for _, branch := range toDelete {
 		if branch.IsRemote {
 			if err := c.deleteRemoteBranch(ctx, repo, branch); err != nil {
@@ -278,8 +281,33 @@ func (c *cleanupService) isBranchMerged(ctx context.Context, repo *repository.Re
 	return false, nil
 }
 
-// deleteRemoteBranch runs `git push <remote> --delete <name>`. Name must
-// already be stripped of the origin/ prefix.
+// captureRemoteBranchSHA stores the full object name of the remote-tracking
+// ref. git branch -vv may leave an abbreviated SHA, which is not a reliable
+// lease expect value.
+func (c *cleanupService) captureRemoteBranchSHA(ctx context.Context, repo *repository.Repository, branch *Branch) {
+	tip := branch.Ref
+	if tip == "" {
+		remote, name := remoteAndBranch(branch)
+		if name == "" {
+			branch.SHA = ""
+			return
+		}
+		if remote == "" {
+			remote = "origin"
+		}
+		tip = "refs/remotes/" + remote + "/" + name
+	}
+	result, err := c.executor.Run(ctx, repo.Path, "rev-parse", "--verify", tip)
+	if err != nil || result == nil || result.ExitCode != 0 {
+		branch.SHA = ""
+		return
+	}
+	branch.SHA = strings.TrimSpace(result.Stdout)
+}
+
+// deleteRemoteBranch leases the classified SHA and pushes :refs/heads/<name>.
+// An empty SHA refuses the delete rather than falling back to unleased
+// --delete. Name must already be stripped of the origin/ prefix.
 func (c *cleanupService) deleteRemoteBranch(ctx context.Context, repo *repository.Repository, branch *Branch) error {
 	remote, name := remoteAndBranch(branch)
 	if name == "" {
@@ -288,12 +316,25 @@ func (c *cleanupService) deleteRemoteBranch(ctx context.Context, repo *repositor
 	if remote == "" {
 		remote = "origin"
 	}
-	result, err := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "push", remote, "--delete", name)
-	if err != nil {
-		return err
+	if branch.SHA == "" {
+		return fmt.Errorf("remote delete needs the classified commit for a lease")
 	}
-	if result.ExitCode != 0 {
-		return fmt.Errorf("git push %s --delete %s: %s", remote, name, strings.TrimSpace(result.Stderr))
+	ref := "refs/heads/" + name
+	lease := "--force-with-lease=" + ref + ":" + branch.SHA
+	result, err := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "push", lease, remote, ":"+ref)
+	if err == nil && result != nil && result.ExitCode == 0 {
+		return nil
+	}
+	heads, lsErr := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "ls-remote", "--heads", remote, name)
+	if lsErr != nil || heads == nil || heads.ExitCode != 0 || strings.TrimSpace(heads.Stdout) != "" {
+		if err != nil {
+			return err
+		}
+		detail := ""
+		if result != nil {
+			detail = strings.TrimSpace(result.Stderr)
+		}
+		return fmt.Errorf("leased remote delete %s/%s: %s", remote, name, detail)
 	}
 	return nil
 }

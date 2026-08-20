@@ -235,6 +235,66 @@ func TestBulkCleanup_RemoteMergedExecute(t *testing.T) {
 	}
 }
 
+func TestBulkCleanup_RemoteMergedLeaseRefusesMovedTip(t *testing.T) {
+	origin, clone := botRemoteBareClone(t)
+	c, ok := NewClient().(*client)
+	if !ok {
+		t.Fatal("NewClient did not return *client")
+	}
+
+	ctx := context.Background()
+	result := &RepositoryCleanupResult{}
+	opts := BulkCleanupOptions{
+		IncludeMerged: true,
+		DeleteRemote:  true,
+		BotsOnly:      true,
+		BaseBranch:    "master",
+	}
+	toDelete := c.collectCleanupCandidates(ctx, clone, "master", defaultRemoteName, "master", opts, result)
+
+	classifiedSHA := ""
+	foundRemote := false
+	for _, b := range toDelete {
+		if b.name == "dependabot/go_modules/x" && b.location == branchLocationRemote {
+			foundRemote = true
+			classifiedSHA = b.sha
+		}
+	}
+	if !foundRemote {
+		t.Fatal("expected remote merged bot candidate")
+	}
+	if classifiedSHA == "" {
+		t.Fatal("classified SHA is empty")
+	}
+
+	other := filepath.Join(t.TempDir(), "other")
+	runGit(t, "", "clone", origin, other)
+	runGit(t, other, "config", "user.email", "test@test.com")
+	runGit(t, other, "config", "user.name", "Test")
+	runGit(t, other, "config", "commit.gpgsign", "false")
+	runGit(t, other, "checkout", "-B", "dependabot/go_modules/x", "origin/dependabot/go_modules/x")
+	commitFile(t, other, "sneak.txt")
+	runGit(t, other, "push", "origin", "dependabot/go_modules/x")
+	newSHA := gitOut(t, other, "rev-parse", "HEAD")
+
+	deleted := c.executeCleanupDeletes(ctx, clone, defaultRemoteName, toDelete, NewNoopLogger(), "clone")
+	for _, b := range deleted {
+		if b.name == "dependabot/go_modules/x" && b.location == branchLocationRemote {
+			t.Error("leased delete reported success after remote tip moved")
+		}
+	}
+	if !refExists(t, origin, "refs/heads/dependabot/go_modules/x") {
+		t.Fatal("moved remote branch must still exist")
+	}
+	got := gitOut(t, origin, "rev-parse", "refs/heads/dependabot/go_modules/x")
+	if got != newSHA {
+		t.Errorf("origin tip = %s, want new commit %s", got, newSHA)
+	}
+	if classifiedSHA == newSHA {
+		t.Fatal("race did not move the tip")
+	}
+}
+
 func botRemoteBareClone(t *testing.T) (origin, clone string) {
 	t.Helper()
 	seed := testutil.TempGitRepoWithCommit(t)

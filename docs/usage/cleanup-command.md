@@ -40,9 +40,9 @@ gz-git cleanup branch --merged --force --yes .
 
 ```bash
 gz-git info --audit
-gz-git cleanup branch --bots --merged -r --format json .
+gz-git cleanup branch --bots --merged --remote --format json .
 # 사용자가 삭제를 요청한 뒤에만
-gz-git cleanup branch --bots --merged -r --force --yes .
+gz-git cleanup branch --bots --merged --remote --force --yes .
 ```
 
 | 감사 코드 | 의미 | Autofix | 삭제 |
@@ -52,7 +52,7 @@ gz-git cleanup branch --bots --merged -r --force --yes .
 
 JSON 스키마: `gz-git.cleanup.branch/v1`.
 
-`--merged -r`에 `--bots`가 없으면 **머지된 원격 전부**를 지운다. 사람 토픽 브랜치도 포함된다.
+`--merged --remote`에 `--bots`가 없으면 **머지된 원격 전부**를 지운다. 사람 토픽 브랜치도 포함된다.
 
 ## 주요 옵션
 
@@ -64,7 +64,7 @@ JSON 스키마: `gz-git.cleanup.branch/v1`.
 | `-n, --dry-run` | 미리보기 | true |
 | `--force` | 실제 삭제 (dry-run 해제) | false |
 | `-y, --yes` | 벌크 삭제 확인 생략 (비대화형에서 필요) | false |
-| `-r, --remote` | 원격 브랜치도 삭제 | false |
+| `-r, --remote` | `--merged`이고 tip이 base 조상일 때만 원격 삭제 | false |
 | `--protect` | 추가 보호 이름 (쉼표 구분) | 없음 |
 | `--base` | merge 판정 base | 자동 |
 | `--format` | `default`, `compact`, `json`, `llm` | `default` |
@@ -90,11 +90,11 @@ gz-git cleanup branch --merged --protect "staging,qa" --force
 
 ## 원격 삭제
 
-기본은 로컬만. 원격은 `-r` / `--remote`.
+기본은 로컬만. `--remote` (`-r`)는 `--merged`이고 tip이 base 조상일 때만 원격을 지운다. `--stale`/`--gone`에는 원격만 있는 이름을 지우지 않는다. 이 명령의 `-r`은 `--remote`이며 `--recursive`가 아니다.
 
 ```bash
 gz-git cleanup branch --merged --remote
-gz-git cleanup branch --bots --merged -r --format json .
+gz-git cleanup branch --bots --merged --remote --format json .
 ```
 
 원격 `push --delete`는 되돌릴 수 없다. 로컬 삭제는 `git reflog`로 커밋을 찾을 수 있다.
@@ -125,6 +125,6 @@ gz-git cleanup branch --merged --force --yes .
 ## 주의
 
 - 타입 플래그 없이 실행하면 실패한다.
-- `--merged -r`만 쓰면 머지된 원격 전부가 대상이다. 봇만 지우려면 `--bots`.
+- `--merged --remote`만 쓰면 머지된 원격 전부가 대상이다. 봇만 지우려면 `--bots`.
 - `develop` 등 내장 보호 이름은 삭제되지 않는다.
 - 원격 삭제는 reflog로 복구할 수 없다.

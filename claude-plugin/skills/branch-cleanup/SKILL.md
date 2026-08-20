@@ -27,7 +27,7 @@ This skill covers branch cleanup operations using `gz-git cleanup branch`.
 
 `--bots` is a name filter (`dependabot/` `renovate/` `github-actions/`), not a fourth type.
 
-**Key Feature**: Bulk mode by default - cleans up across all repos in directory.
+Single-repo unless a directory argument is given (that path is bulk). Bulk non-interactive delete needs `--force --yes`.
 
 ---
 
@@ -52,10 +52,12 @@ This is not `/git:dependabot-merge` (that *applies* the update).
 
 ```bash
 gz-git info --audit
-gz-git cleanup branch --bots --merged -r --format json .
+gz-git cleanup branch --bots --merged --remote --format json .
 # only when the user asked to delete:
-gz-git cleanup branch --bots --merged -r --force --yes .
+gz-git cleanup branch --bots --merged --remote --force --yes .
 ```
+
+On this command `-r` is `--remote`, not recursive (recursive has no short flag).
 
 | Audit code | Meaning | Autofix | Delete? |
 | ---------- | ------- | ------- | ------- |
@@ -65,7 +67,7 @@ gz-git cleanup branch --bots --merged -r --force --yes .
 - JSON schema: `gz-git.cleanup.branch/v1`
 - Remote delete only for ancestry-merged refs (`merge-base --is-ancestor`)
 - `--stale` never deletes remote-only names
-- `--merged -r` without `--bots` deletes **every** merged remote, not just bots
+- `--merged --remote` without `--bots` deletes **every** merged remote, not just bots
 - Protected: `main` `master` `develop` `development` `release/*` `hotfix/*`
 - Dry-run until `--force`. Bulk non-interactive delete also needs `--yes`
 
@@ -224,14 +226,14 @@ gz-git cleanup branch --merged --remote --force
 ```
 
 **Warning**: Remote deletion is permanent. Use dry-run first.
-`--merged -r` without `--bots` deletes every merged remote, including human topic branches.
+`--merged --remote` without `--bots` deletes every merged remote, including human topic branches.
 
 ```bash
 # Preview remote deletion
 gz-git cleanup branch --merged --remote
 
 # Preview leftover bot remotes only
-gz-git cleanup branch --bots --merged -r --format json .
+gz-git cleanup branch --bots --merged --remote --format json .
 ```
 
 ---
@@ -385,17 +387,10 @@ git log main..feature/branch
 git branch -D feature/branch
 ```
 
-### "protected branch cannot be deleted"
+### Protected name was skipped
 
-Branch is in protected list.
-
-```bash
-# Check protected branches
-gz-git cleanup branch --merged -v
-
-# Remove from protection (if intentional)
-# Edit profile or use different base
-```
+Built-in protected names are skipped, not erroring. Extra names use `--protect`.
+Cleanup does not read `branch.protectedBranches` from config.
 
 ### "failed to delete remote branch"
 
@@ -433,8 +428,8 @@ gz-git cleanup branch --stale --stale-days 7 .
 | Delete stale (60d)          | `cleanup branch --stale --stale-days 60 --force` |
 | Preview gone                | `cleanup branch --gone`                      |
 | Delete gone                 | `cleanup branch --gone --force`              |
-| Preview leftover bot remotes | `cleanup branch --bots --merged -r --format json .` |
-| Delete leftover bot remotes | `cleanup branch --bots --merged -r --force --yes .` |
+| Preview leftover bot remotes | `cleanup branch --bots --merged --remote --format json .` |
+| Delete leftover bot remotes | `cleanup branch --bots --merged --remote --force --yes .` |
 | All types                   | `cleanup branch --merged --stale --gone`     |
 | Bulk mode                   | `cleanup branch --merged --force .`          |
 | With remote                 | `cleanup branch --merged --remote --force`   |

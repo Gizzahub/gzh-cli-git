@@ -93,9 +93,9 @@ Basic branch creation/deletion remains native `git`. `gz-git` provides:
 gz-git branch list -a -d 2 ~/projects
 gz-git switch feature/new --create -d 2 ~/projects
 gz-git cleanup branch --merged --force -d 2 ~/projects
-gz-git cleanup branch --bots --merged -r --format json .
+gz-git cleanup branch --bots --merged --remote --format json .
 # leftover Dependabot/Renovate remotes; details: skill:branch-cleanup
-# not /git:dependabot-merge (that applies the update)
+# cleanup -r is --remote (not recursive). not /git:dependabot-merge
 gz-git conflict detect feature/new main
 ```
 
@@ -302,6 +302,6 @@ See: `skill:config-profiles` for profile setup guide.
 | `workspace-management`   | Local workspace CLI operations        |
 | `config-profiles`        | Profile creation and management       |
 | `forge-sync`             | GitHub/GitLab/Gitea sync              |
-| `branch-cleanup`         | Merged/stale/gone branch cleanup      |
+| `branch-cleanup`         | Merged/stale/gone and leftover bot remotes |
 | `sync-troubleshooting`   | Sync diagnostics and error resolution |
 | `devbox-setup`           | Multi-repo Makefile setup             |

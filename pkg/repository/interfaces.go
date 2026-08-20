@@ -126,6 +126,12 @@ type Client interface {
 	// base — work that has landed and whose branch is now reclaimable. Base
 	// itself and the current branch are excluded.
 	MergedBranches(ctx context.Context, repo *Repository, base string) ([]string, error)
+
+	// BotRemoteBranches partitions origin remote-tracking refs with bot prefixes
+	// into those whose tips are ancestors of base vs those that are not.
+	// Names are returned without the remote prefix. Skips origin/HEAD and
+	// IsProtected names. Empty base returns nil, nil, nil.
+	BotRemoteBranches(ctx context.Context, repo *Repository, base string) (merged, pending []string, err error)
 }
 
 // Logger provides a logging interface for library consumers.

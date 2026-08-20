@@ -47,6 +47,10 @@ type BulkCleanupOptions struct {
 	// DeleteRemote also deletes remote branches
 	DeleteRemote bool
 
+	// BotsOnly restricts candidates to Dependabot/Renovate/github-actions
+	// prefixes. It is a filter, not a cleanup type.
+	BotsOnly bool
+
 	// ProtectPatterns are additional patterns to protect from deletion
 	ProtectPatterns []string
 
@@ -130,6 +134,19 @@ type RepositoryCleanupResult struct {
 
 	// DeletedBranches is the list of deleted branch names
 	DeletedBranches []string
+
+	// Branches is the per-branch account (name, reason, location, kind)
+	// used by machine-readable printers. DeletedBranches stays a flat name
+	// list for existing human output.
+	Branches []CleanupBranchEntry
+}
+
+// CleanupBranchEntry is one branch a cleanup run would delete (dry-run) or did.
+type CleanupBranchEntry struct {
+	Name     string `json:"name"`
+	Reason   string `json:"reason"`
+	Location string `json:"location"`
+	Kind     string `json:"kind,omitempty"`
 }
 
 // GetStatus returns the status for summary calculation.
@@ -244,8 +261,6 @@ func (c *client) processCleanupRepositories(ctx context.Context, rootDir string,
 }
 
 // processCleanupRepository processes a single repository cleanup.
-//
-//nolint:gocognit,gocyclo // cleanup orchestration inherently branches across multiple cleanup types; splitting would harm readability
 func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath string, opts BulkCleanupOptions, logger Logger) RepositoryCleanupResult {
 	startTime := time.Now()
 
@@ -278,56 +293,12 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		baseBranch = c.detectBaseBranch(ctx, repoPath)
 	}
 
-	// Get current branch to avoid deleting it
-	currentBranch := result.Branch
-
-	// Collect branches to delete
-	var toDelete []branchInfo
-
-	// Get merged branches
-	if opts.IncludeMerged {
-		merged, err := c.getMergedBranches(ctx, repoPath, baseBranch)
-		if err == nil {
-			for _, b := range merged {
-				if !c.isProtectedBranch(b, currentBranch, opts.ProtectPatterns) {
-					toDelete = append(toDelete, branchInfo{name: b, reason: "merged"})
-					result.MergedCount++
-				} else {
-					result.ProtectedCount++
-				}
-			}
-		}
+	remote := defaultRemoteName
+	if info != nil && info.Remote != "" {
+		remote = info.Remote
 	}
 
-	// Get stale branches
-	if opts.IncludeStale {
-		stale, err := c.getStaleBranches(ctx, repoPath, opts.StaleThreshold)
-		if err == nil {
-			for _, b := range stale {
-				if !c.isProtectedBranch(b, currentBranch, opts.ProtectPatterns) && !containsBranch(toDelete, b) {
-					toDelete = append(toDelete, branchInfo{name: b, reason: "stale"})
-					result.StaleCount++
-				} else if !containsBranch(toDelete, b) {
-					result.ProtectedCount++
-				}
-			}
-		}
-	}
-
-	// Get gone branches (tracking branches with deleted remote)
-	if opts.IncludeGone {
-		gone, err := c.getGoneBranches(ctx, repoPath)
-		if err == nil {
-			for _, b := range gone {
-				if !c.isProtectedBranch(b, currentBranch, opts.ProtectPatterns) && !containsBranch(toDelete, b) {
-					toDelete = append(toDelete, branchInfo{name: b, reason: "gone"})
-					result.GoneCount++
-				} else if !containsBranch(toDelete, b) {
-					result.ProtectedCount++
-				}
-			}
-		}
-	}
+	toDelete := c.collectCleanupCandidates(ctx, repoPath, baseBranch, remote, result.Branch, opts, &result)
 
 	// Display count only: exit≠0 → leave TotalAnalyzed zero. Not a delete guard.
 	//nolint:errcheck // intentional: empty list is a valid display answer
@@ -337,7 +308,6 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		result.TotalAnalyzed = len(lines)
 	}
 
-	// Check if there's anything to clean up
 	if len(toDelete) == 0 {
 		result.Status = StatusNothingToDo
 		result.Message = "No branches to clean up"
@@ -345,37 +315,19 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		return result
 	}
 
-	// Dry run - just report
 	if opts.DryRun {
 		result.Status = StatusWouldCleanup
 		result.Message = fmt.Sprintf("Would delete %d branch(es)", len(toDelete))
-		for _, b := range toDelete {
-			result.DeletedBranches = append(result.DeletedBranches, b.name)
-		}
+		recordCleanupBranches(&result, toDelete)
 		result.Duration = time.Since(startTime)
 		return result
 	}
 
-	// Execute cleanup
-	deletedCount := 0
-	for _, b := range toDelete {
-		deleteArgs := []string{"branch", "-d", b.name}
-		// Use force delete for unmerged branches
-		if b.reason == "stale" || b.reason == "gone" {
-			deleteArgs = []string{"branch", "-D", b.name}
-		}
-
-		deleteResult, err := c.executor.Run(ctx, repoPath, deleteArgs...)
-		if err == nil && deleteResult.ExitCode == 0 {
-			deletedCount++
-			result.DeletedBranches = append(result.DeletedBranches, b.name)
-		} else {
-			logger.Warn("failed to delete branch", "repo", result.RelativePath, "branch", b.name)
-		}
-	}
+	deleted := c.executeCleanupDeletes(ctx, repoPath, remote, toDelete, logger, result.RelativePath)
+	recordCleanupBranches(&result, deleted)
 
 	result.Status = StatusCleanedUp
-	result.Message = fmt.Sprintf("Deleted %d branch(es)", deletedCount)
+	result.Message = fmt.Sprintf("Deleted %d branch(es)", len(deleted))
 	result.Duration = time.Since(startTime)
 
 	logger.Info("repository cleaned up",
@@ -385,22 +337,6 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		"gone", result.GoneCount)
 
 	return result
-}
-
-// branchInfo holds branch name and deletion reason.
-type branchInfo struct {
-	name   string
-	reason string // "merged", "stale", "gone"
-}
-
-// containsBranch checks if branch is already in the list.
-func containsBranch(list []branchInfo, name string) bool {
-	for _, b := range list {
-		if b.name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // detectBaseBranch detects the main/master branch.

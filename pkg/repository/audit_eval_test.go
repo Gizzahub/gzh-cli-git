@@ -247,6 +247,74 @@ func TestEvaluateRepo_DirtyOnBaseReportedOnce(t *testing.T) {
 	}
 }
 
+func TestEvaluateRepo_RemoteBotReclaimableUsesPushDelete(t *testing.T) {
+	got := EvaluateRepo(AuditInput{
+		Name:            "r",
+		Status:          &RepositoryStatusResult{Branch: "master", Upstream: "origin/master"},
+		Base:            BaseBranchInfo{Name: "master", Source: "heuristic"},
+		RemoteBotMerged: []string{"dependabot/go_modules/x", "renovate/docker-alpine"},
+		AutofixPolicy:   allowAll,
+	})
+
+	f := findingByCode(got, CodeRemoteBotReclaimable)
+	if f == nil {
+		t.Fatalf("no %s finding; got %v", CodeRemoteBotReclaimable, codes(got))
+	}
+	if f.Severity != SeverityInfo {
+		t.Errorf("severity = %q, want %q", f.Severity, SeverityInfo)
+	}
+	if f.Fix == nil || f.Fix.Action != ActionDeleteRemoteBranch {
+		t.Fatalf("action = %v, want %s", f.Fix, ActionDeleteRemoteBranch)
+	}
+	want := []string{"git", "push", "origin", "--delete", "dependabot/go_modules/x", "renovate/docker-alpine"}
+	if len(f.Fix.Command) != len(want) {
+		t.Fatalf("command = %v, want %v", f.Fix.Command, want)
+	}
+	for i := range want {
+		if f.Fix.Command[i] != want[i] {
+			t.Fatalf("command = %v, want %v", f.Fix.Command, want)
+		}
+	}
+	if f.Fix.Reversible {
+		t.Error("remote delete must be marked irreversible")
+	}
+	if f.Fix.Autofix {
+		t.Error("autofix granted on irreversible remote delete")
+	}
+	if f.Evidence["verified_by"] != "git merge-base --is-ancestor" {
+		t.Errorf("evidence lacks the ancestry proof: %v", f.Evidence)
+	}
+}
+
+func TestEvaluateRepo_RemoteBotPendingHasNoDeleteCommand(t *testing.T) {
+	got := EvaluateRepo(AuditInput{
+		Name:             "r",
+		Status:           &RepositoryStatusResult{Branch: "master", Upstream: "origin/master"},
+		Base:             BaseBranchInfo{Name: "master", Source: "heuristic"},
+		RemoteBotPending: []string{"dependabot/go_modules/unmerged"},
+		AutofixPolicy:    allowAll,
+	})
+
+	f := findingByCode(got, CodeRemoteBotPending)
+	if f == nil {
+		t.Fatalf("no %s finding; got %v", CodeRemoteBotPending, codes(got))
+	}
+	if f.Fix == nil {
+		t.Fatal("pending finding has no remediation")
+	}
+	if f.Fix.Action != ActionResolveManually {
+		t.Errorf("action = %q, want %q", f.Fix.Action, ActionResolveManually)
+	}
+	for _, arg := range f.Fix.Command {
+		if arg == "--delete" || arg == "push" {
+			t.Errorf("pending remediation must not delete: %v", f.Fix.Command)
+		}
+	}
+	if !f.Fix.Reversible {
+		t.Error("pending note-only remediation should stay reversible")
+	}
+}
+
 func TestEvaluateRepo_MergedBranchesUseSafeDelete(t *testing.T) {
 	got := EvaluateRepo(AuditInput{
 		Name:           "r",

@@ -14,6 +14,8 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
+const cleanupBranchSchema = "gz-git.cleanup.branch/v1"
+
 // cleanupBranchBulkFlags holds bulk-specific flags.
 var cleanupBranchBulkFlags BulkCommandFlags
 
@@ -28,6 +30,7 @@ var (
 	cleanupBranchRemote     bool
 	cleanupBranchProtect    string
 	cleanupBranchBaseBranch string
+	cleanupBranchBots       bool
 )
 
 // cleanupBranchCmd represents the cleanup branch command.
@@ -36,6 +39,15 @@ var cleanupBranchCmd = &cobra.Command{
 	Short: "Clean up merged, stale, or gone branches",
 	Long: cliutil.QuickStartHelp(`  # Preview merged branches in current repo
   gz-git cleanup branch --merged
+
+  # Preview leftover Dependabot/Renovate remote branches
+  gz-git cleanup branch --bots --merged -r
+
+  # Machine-readable preview
+  gz-git cleanup branch --bots --merged -r --format json
+
+  # Actually delete bot remotes (bulk, non-interactive)
+  gz-git cleanup branch --bots --merged -r --force --yes .
 
   # Preview stale branches (no activity for 30 days)
   gz-git cleanup branch --stale
@@ -47,7 +59,7 @@ var cleanupBranchCmd = &cobra.Command{
   gz-git cleanup branch --merged --force .
 
   # Protect additional branches
-  gz-git cleanup branch --merged --protect "staging,qa" --force`),
+  gz-git cleanup branch --merged --protect "staging,qa" --force`) + cliutil.ExitCodesBulkHelp(),
 	Example: ``,
 	RunE:    runCleanupBranch,
 }
@@ -64,11 +76,12 @@ func init() {
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchForce, "force", false, "actually delete branches (disables dry-run)")
 	cleanupBranchCmd.Flags().BoolVarP(&cleanupBranchYes, "yes", "y", false, "skip the confirmation prompt for bulk deletion (required in a non-interactive environment)")
 	cleanupBranchCmd.Flags().BoolVarP(&cleanupBranchRemote, "remote", "r", false, "also delete remote branches")
+	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchBots, "bots", false, "only Dependabot, Renovate, and github-actions branches")
 	cleanupBranchCmd.Flags().StringVar(&cleanupBranchProtect, "protect", "", "additional branches to protect (comma-separated)")
 	cleanupBranchCmd.Flags().StringVar(&cleanupBranchBaseBranch, "base", "", "base branch for merge detection (default: auto-detect)")
 
 	// Bulk operation flags (skip dry-run to avoid conflict with custom dry-run; skip recursive shorthand to avoid -r clash with --remote)
-	addBulkFlagsWithOpts(cleanupBranchCmd, &cleanupBranchBulkFlags, BulkFlagOptions{SkipDryRun: true, SkipFormat: true, SkipWatch: true, SkipFetch: true, SkipRecursive: true})
+	addBulkFlagsWithOpts(cleanupBranchCmd, &cleanupBranchBulkFlags, BulkFlagOptions{SkipDryRun: true, SkipWatch: true, SkipFetch: true, SkipRecursive: true})
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchBulkFlags.IncludeSubmodules, "recursive", false, "recursively include nested repositories and submodules")
 }
 
@@ -81,6 +94,10 @@ func runCleanupBranch(cmd *cobra.Command, args []string) error {
 	// Require at least one cleanup type
 	if !cleanupBranchMerged && !cleanupBranchStale && !cleanupBranchGone {
 		return fmt.Errorf("specify at least one cleanup type: --merged, --stale, or --gone")
+	}
+
+	if err := validateBulkFormat(cleanupBranchBulkFlags.Format); err != nil {
+		return err
 	}
 
 	// Force flag disables dry-run
@@ -125,68 +142,93 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 		IncludeGone:    cleanupBranchGone,
 		Exclude:        excludePatterns,
 		BaseBranch:     cleanupBranchBaseBranch,
+		BotsOnly:       cleanupBranchBots,
 	}
 
-	if !quiet {
+	machine := cliutil.IsMachineFormat(cleanupBranchBulkFlags.Format)
+	if shouldShowProgress(cleanupBranchBulkFlags.Format, quiet) {
 		fmt.Println("Analyzing branches...")
 	}
 
+	start := time.Now()
 	report, err := svc.Analyze(ctx, repo, analyzeOpts)
 	if err != nil {
 		return fmt.Errorf("failed to analyze branches: %w", err)
 	}
+	currentBranch := ""
+	if info, infoErr := repository.NewClient().GetInfo(ctx, repo); infoErr == nil && info != nil {
+		currentBranch = info.Branch
+	}
 
-	// Display report
-	if !quiet {
+	if !machine && !quiet {
 		printCleanupBranchReport(report, cleanupBranchDryRun)
 	}
 
-	// If no branches to clean up, exit
+	entries := cleanupEntriesFromReport(report)
+	status := repository.StatusWouldCleanup
 	if report.IsEmpty() {
+		status = repository.StatusNothingToDo
+	}
+
+	if cleanupBranchDryRun {
+		if machine {
+			writeCleanupBranchJSON(cleanupBranchJSONFromSingle(repo, currentBranch, entries, status, "", start))
+			return nil
+		}
+		if report.IsEmpty() {
+			if !quiet {
+				fmt.Println("\n✓ No branches to clean up")
+			}
+			return nil
+		}
+		if !quiet {
+			fmt.Println("\nDry-run mode: use --force to actually delete branches")
+		}
+		return nil
+	}
+
+	if report.IsEmpty() {
+		if machine {
+			writeCleanupBranchJSON(cleanupBranchJSONFromSingle(repo, currentBranch, nil, repository.StatusNothingToDo, "", start))
+			return nil
+		}
 		if !quiet {
 			fmt.Println("\n✓ No branches to clean up")
 		}
 		return nil
 	}
 
-	// Execute cleanup if not dry-run
-	if !cleanupBranchDryRun {
-		// Force deletes unmerged branches too; Confirm is only consulted when
-		// Force is false, so it is intentionally omitted here (setting it was a
-		// no-op that read as "--force means the user confirmed").
-		executeOpts := branch.ExecuteOptions{
-			DryRun:  false,
-			Force:   true,
-			Remote:  cleanupBranchRemote,
-			Exclude: excludePatterns,
-		}
+	// Force deletes unmerged branches too; Confirm is only consulted when
+	// Force is false, so it is intentionally omitted here (setting it was a
+	// no-op that read as "--force means the user confirmed").
+	executeOpts := branch.ExecuteOptions{
+		DryRun:  false,
+		Force:   true,
+		Remote:  cleanupBranchRemote,
+		Exclude: excludePatterns,
+	}
 
-		result, err := svc.Execute(ctx, repo, report, executeOpts)
-		if err != nil {
-			return fmt.Errorf("failed to execute cleanup: %w", err)
-		}
+	result, err := svc.Execute(ctx, repo, report, executeOpts)
+	if err != nil {
+		return fmt.Errorf("failed to execute cleanup: %w", err)
+	}
 
-		// Report what was deleted, not what was a candidate. The old count came
-		// from the report, so it was announced whether or not a single deletion
-		// went through — and Execute discarded the failures on its way out.
-		if !quiet {
-			fmt.Printf("\n✓ Deleted %d branch(es)\n", len(result.Deleted))
-		}
-
-		if len(result.Failed) > 0 {
-			fmt.Fprintf(os.Stderr, "\n✗ Failed to delete %d branch(es):\n", len(result.Failed))
-			for _, f := range result.Failed {
-				fmt.Fprintf(os.Stderr, "  %-30s %v\n", f.Branch, f.Err)
-			}
-
-			// Exit 2, the code this CLI reserves for "some of the work failed",
-			// so a script can tell a partial cleanup from a tool error (1).
-			return cliutil.NewExitError(cliutil.ExitPartialFailed,
-				fmt.Errorf("%d of %d branches failed to delete",
-					len(result.Failed), len(result.Deleted)+len(result.Failed)))
-		}
+	deleted := filterCleanupEntries(entries, result.Deleted)
+	if machine {
+		writeCleanupBranchJSON(cleanupBranchJSONFromSingle(repo, currentBranch, deleted, repository.StatusCleanedUp, "", start))
 	} else if !quiet {
-		fmt.Println("\nDry-run mode: use --force to actually delete branches")
+		fmt.Printf("\n✓ Deleted %d branch(es)\n", len(result.Deleted))
+	}
+
+	if len(result.Failed) > 0 {
+		fmt.Fprintf(os.Stderr, "\n✗ Failed to delete %d branch(es):\n", len(result.Failed))
+		for _, f := range result.Failed {
+			fmt.Fprintf(os.Stderr, "  %-30s %v\n", f.Branch, f.Err)
+		}
+
+		return cliutil.NewExitError(cliutil.ExitPartialFailed,
+			fmt.Errorf("%d of %d branches failed to delete",
+				len(result.Failed), len(result.Deleted)+len(result.Failed)))
 	}
 
 	return nil
@@ -207,6 +249,7 @@ func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns
 		StaleThreshold:    time.Duration(cleanupBranchStaleDays) * 24 * time.Hour,
 		BaseBranch:        cleanupBranchBaseBranch,
 		DeleteRemote:      cleanupBranchRemote,
+		BotsOnly:          cleanupBranchBots,
 		ProtectPatterns:   excludePatterns,
 		IncludeSubmodules: cleanupBranchBulkFlags.IncludeSubmodules,
 		IncludePattern:    cleanupBranchBulkFlags.Include,
@@ -229,7 +272,7 @@ func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns
 		}
 	}
 
-	if !quiet {
+	if shouldShowProgress(cleanupBranchBulkFlags.Format, quiet) {
 		modeStr := "[DRY-RUN]"
 		if !cleanupBranchDryRun {
 			modeStr = "[EXECUTE]"
@@ -242,10 +285,14 @@ func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns
 		return fmt.Errorf("bulk cleanup failed: %w", err)
 	}
 
-	// Print results
-	printBulkCleanupBranchResult(result, cleanupBranchDryRun)
+	format := cleanupBranchBulkFlags.Format
+	if format == "json" || format == "llm" {
+		writeCleanupBranchJSON(cleanupBranchJSONFromBulk(result, cleanupBranchDryRun))
+	} else if !quiet || format == "default" || format == "compact" {
+		printBulkCleanupBranchResult(result, cleanupBranchDryRun)
+	}
 
-	return nil
+	return errPartialFailure(result.Summary[repository.StatusError], result.TotalProcessed)
 }
 
 // confirmBulkCleanupBranch runs a dry-run preview, prints the branches that
@@ -270,14 +317,20 @@ func confirmBulkCleanupBranch(ctx context.Context, client repository.Client, opt
 		}
 	}
 
+	machine := cliutil.IsMachineFormat(cleanupBranchBulkFlags.Format)
 	if branchCount == 0 {
+		// Machine output still needs the empty JSON document from the real
+		// run; returning true lets BulkCleanup emit status=nothing-to-do.
+		if machine {
+			return true, nil
+		}
 		if !quiet {
 			fmt.Println("\n✓ No branches to clean up")
 		}
 		return false, nil
 	}
 
-	if !quiet {
+	if !machine && !quiet {
 		fmt.Printf("\nAbout to delete %d branch(es) across %d repositor(ies):\n", branchCount, repoCount)
 		for _, repo := range preview.Repositories {
 			if repo.Status == repository.StatusWouldCleanup && len(repo.DeletedBranches) > 0 {

@@ -105,6 +105,10 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 
 	// Analyze each branch
 	for _, branch := range branches {
+		if !normalizeCleanupBranch(branch) {
+			continue
+		}
+
 		// Skip current branch
 		if branch.IsHead {
 			continue
@@ -116,16 +120,21 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 			continue
 		}
 
+		if opts.BotsOnly && !repository.IsBotBranch(branch.Name) {
+			continue
+		}
+
 		// Check if merged
 		if opts.IncludeMerged {
-			if merged, err := c.isBranchMerged(ctx, repo, branch.Name, opts.BaseBranch); err == nil && merged {
+			merged, err := c.isBranchMerged(ctx, repo, branch, opts.BaseBranch)
+			if err == nil && merged {
 				report.Merged = append(report.Merged, branch)
 				continue
 			}
 		}
 
-		// Check if stale
-		if opts.IncludeStale {
+		// Stale stays local-only: an unmerged remote bot branch may be an open PR.
+		if opts.IncludeStale && !branch.IsRemote {
 			if stale, err := c.isBranchStale(ctx, repo, branch.Name, opts.StaleThreshold); err == nil && stale {
 				report.Stale = append(report.Stale, branch)
 				continue
@@ -133,7 +142,7 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 		}
 
 		// Check if the upstream this branch tracked is gone
-		if gone[branch.Name] {
+		if !branch.IsRemote && gone[branch.Name] {
 			report.Orphaned = append(report.Orphaned, branch)
 		}
 	}
@@ -188,12 +197,31 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		return result, nil
 	}
 
+	// Remote-only names are deleted via push --delete; BranchManager.Delete
+	// Exists only on refs/heads/, so a remotes/origin/… candidate would fail
+	// with not found.
+	remoteListed := map[string]bool{}
+	for _, branch := range toDelete {
+		if branch.IsRemote {
+			remoteListed[branch.Name] = true
+		}
+	}
+
 	// Delete branches
 	for _, branch := range toDelete {
+		if branch.IsRemote {
+			if err := c.deleteRemoteBranch(ctx, repo, branch); err != nil {
+				result.Failed = append(result.Failed, DeleteFailure{Branch: branch.Name, Err: err})
+				continue
+			}
+			result.Deleted = append(result.Deleted, branch.Name)
+			continue
+		}
+
 		deleteOpts := DeleteOptions{
 			Name:    branch.Name,
 			Force:   opts.Force,
-			Remote:  opts.Remote && branch.IsRemote,
+			Remote:  false,
 			Confirm: opts.Confirm,
 		}
 
@@ -206,6 +234,14 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		}
 
 		result.Deleted = append(result.Deleted, branch.Name)
+
+		// --remote on a local-only report still deletes the same-named remote
+		// when Analyze did not list it separately (IncludeRemote false).
+		if opts.Remote && !remoteListed[branch.Name] && c.remoteTrackingExists(ctx, repo, branch.Name) {
+			if err := c.deleteRemoteBranch(ctx, repo, &Branch{Name: branch.Name, IsRemote: true, Ref: "refs/remotes/origin/" + branch.Name}); err != nil {
+				result.Failed = append(result.Failed, DeleteFailure{Branch: branch.Name, Err: err})
+			}
+		}
 	}
 
 	return result, nil
@@ -227,24 +263,103 @@ func (c *cleanupService) detectBaseBranch(ctx context.Context, repo *repository.
 }
 
 // isBranchMerged checks if a branch is fully merged into base.
-func (c *cleanupService) isBranchMerged(ctx context.Context, repo *repository.Repository, branch, base string) (bool, error) {
-	// Run git branch --merged base
+// Local names use `git branch --merged`. Remote-only names are invisible
+// to that listing, so they are checked with merge-base --is-ancestor
+// against the remote-tracking ref.
+func (c *cleanupService) isBranchMerged(ctx context.Context, repo *repository.Repository, branch *Branch, base string) (bool, error) {
+	if branch.IsRemote {
+		tip := branch.Ref
+		if tip == "" {
+			tip = "refs/remotes/origin/" + branch.Name
+		}
+		result, err := c.executor.Run(ctx, repo.Path, "merge-base", "--is-ancestor", tip, base)
+		if err != nil {
+			return false, err
+		}
+		return result.ExitCode == 0, nil
+	}
+
 	result, err := c.run(ctx, repo.Path, "branch", "--merged", base)
 	if err != nil {
 		return false, err
 	}
 
-	// Parse output
 	lines := strings.SplitSeq(strings.TrimSpace(result.Stdout), "\n")
 	for line := range lines {
 		line = strings.TrimSpace(line)
 		line = strings.TrimPrefix(line, "* ")
-		if line == branch {
+		if line == branch.Name {
 			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+// deleteRemoteBranch runs `git push <remote> --delete <name>`. Name must
+// already be stripped of the origin/ prefix.
+func (c *cleanupService) deleteRemoteBranch(ctx context.Context, repo *repository.Repository, branch *Branch) error {
+	remote, name := remoteAndBranch(branch)
+	if name == "" {
+		return fmt.Errorf("empty remote branch name")
+	}
+	if remote == "" {
+		remote = "origin"
+	}
+	_, err := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(), "push", remote, "--delete", name)
+	return err
+}
+
+// normalizeCleanupBranch strips a remotes/<remote>/ prefix from Name so
+// delete argv is the branch name. Returns false for origin/HEAD and other
+// unusable refs.
+func normalizeCleanupBranch(branch *Branch) bool {
+	if branch == nil || branch.Name == "" {
+		return false
+	}
+	if !branch.IsRemote {
+		return branch.Name != "HEAD"
+	}
+	remote, name := splitRemoteTrackingName(branch.Name)
+	if name == "" || name == "HEAD" {
+		return false
+	}
+	if branch.Ref == "" {
+		if remote == "" {
+			remote = "origin"
+		}
+		branch.Ref = "refs/remotes/" + remote + "/" + name
+	}
+	branch.Name = name
+	return true
+}
+
+func splitRemoteTrackingName(name string) (remote, branch string) {
+	name = strings.TrimPrefix(name, "remotes/")
+	name = strings.TrimPrefix(name, "refs/remotes/")
+	i := strings.IndexByte(name, '/')
+	if i <= 0 {
+		return "", name
+	}
+	return name[:i], name[i+1:]
+}
+
+func (c *cleanupService) remoteTrackingExists(ctx context.Context, repo *repository.Repository, name string) bool {
+	result, err := c.executor.Run(ctx, repo.Path, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+name)
+	return err == nil && result.ExitCode == 0
+}
+
+func remoteAndBranch(branch *Branch) (remote, name string) {
+	if branch == nil {
+		return "", ""
+	}
+	if strings.HasPrefix(branch.Ref, "refs/remotes/") {
+		return splitRemoteTrackingName(strings.TrimPrefix(branch.Ref, "refs/remotes/"))
+	}
+	if branch.IsRemote {
+		return splitRemoteTrackingName(branch.Name)
+	}
+	return "", branch.Name
 }
 
 // isBranchStale checks if a branch has no recent activity.

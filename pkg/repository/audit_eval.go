@@ -177,6 +177,53 @@ func evaluateBranchPosition(in AuditInput, st *RepositoryStatusResult) []Finding
 	}
 
 	findings = append(findings, evaluateWorktreeReclaim(held, in.Base.Name)...)
+	findings = append(findings, evaluateRemoteBots(in)...)
+
+	return findings
+}
+
+// evaluateRemoteBots reports leftover Dependabot/Renovate/github-actions
+// remote-tracking refs. One finding per code per repo, not per branch.
+func evaluateRemoteBots(in AuditInput) []Finding {
+	var findings []Finding
+
+	if len(in.RemoteBotMerged) > 0 {
+		findings = append(findings, Finding{
+			Code:     CodeRemoteBotReclaimable,
+			Severity: SeverityInfo,
+			Message: fmt.Sprintf("%d remote bot branch(es) are fully merged into %s and can be deleted",
+				len(in.RemoteBotMerged), in.Base.Name),
+			Evidence: map[string]any{
+				"branches":    in.RemoteBotMerged,
+				"base":        in.Base.Name,
+				"verified_by": "git merge-base --is-ancestor",
+			},
+			Fix: &Remediation{
+				Action:     ActionDeleteRemoteBranch,
+				Command:    append([]string{"git", "push", "origin", "--delete"}, in.RemoteBotMerged...),
+				Reversible: false,
+				Note:       "irreversible; listed only because ancestry confirmed the tip is already in the base",
+			},
+		})
+	}
+
+	if len(in.RemoteBotPending) > 0 {
+		findings = append(findings, Finding{
+			Code:     CodeRemoteBotPending,
+			Severity: SeverityInfo,
+			Message: fmt.Sprintf("%d unmerged remote bot branch(es) may be open pull requests",
+				len(in.RemoteBotPending)),
+			Evidence: map[string]any{
+				"branches": in.RemoteBotPending,
+				"base":     in.Base.Name,
+			},
+			Fix: &Remediation{
+				Action:     ActionResolveManually,
+				Reversible: true,
+				Note:       "unmerged bot ref; may be an open PR — do not delete",
+			},
+		})
+	}
 
 	return findings
 }

@@ -106,6 +106,12 @@ func TestApplyAutofixPolicy_NeverGrantsOnIrreversible(t *testing.T) {
 			Status: &RepositoryStatusResult{Branch: "feat/x", Upstream: "origin/feat/x", UnstagedFiles: 3},
 			Base:   BaseBranchInfo{Name: "master", Source: "heuristic"},
 		},
+		{ // REMOTE_BOT_BRANCH_RECLAIMABLE -> push --delete is irreversible
+			Name:            "remote-bot",
+			Status:          &RepositoryStatusResult{Branch: "master", Upstream: "origin/master"},
+			Base:            BaseBranchInfo{Name: "master", Source: "heuristic"},
+			RemoteBotMerged: []string{"dependabot/go_modules/x"},
+		},
 	}
 
 	for _, in := range inputs {

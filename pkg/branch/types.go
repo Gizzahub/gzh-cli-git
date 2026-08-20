@@ -172,6 +172,7 @@ type AnalyzeOptions struct {
 	IncludeGone    bool          // Include local branches whose upstream is gone
 	Exclude        []string      // Patterns to exclude
 	BaseBranch     string        // Base branch for merge detection (default: main/master)
+	BotsOnly       bool          // Restrict candidates to Dependabot/Renovate/github-actions prefixes
 }
 
 // ExecuteOptions configures branch cleanup execution.

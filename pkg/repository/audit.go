@@ -25,15 +25,17 @@ const (
 	CodeScanError        = "SCAN_ERROR"
 
 	// Branch position.
-	CodeDetachedHead       = "DETACHED_HEAD"
-	CodeNoUpstream         = "NO_UPSTREAM"
-	CodeUpstreamDiverged   = "UPSTREAM_DIVERGED"
-	CodeUnpushedCommits    = "UNPUSHED_COMMITS"
-	CodeUpstreamBehind     = "UPSTREAM_BEHIND"
-	CodeBranchBehindBase   = "BRANCH_BEHIND_BASE"
-	CodeBaseUnresolved     = "BASE_UNRESOLVED"
-	CodeWorkOnBaseBranch   = "WORK_ON_BASE_BRANCH"
-	CodeMergedNotReclaimed = "MERGED_BRANCH_NOT_RECLAIMED"
+	CodeDetachedHead         = "DETACHED_HEAD"
+	CodeNoUpstream           = "NO_UPSTREAM"
+	CodeUpstreamDiverged     = "UPSTREAM_DIVERGED"
+	CodeUnpushedCommits      = "UNPUSHED_COMMITS"
+	CodeUpstreamBehind       = "UPSTREAM_BEHIND"
+	CodeBranchBehindBase     = "BRANCH_BEHIND_BASE"
+	CodeBaseUnresolved       = "BASE_UNRESOLVED"
+	CodeWorkOnBaseBranch     = "WORK_ON_BASE_BRANCH"
+	CodeMergedNotReclaimed   = "MERGED_BRANCH_NOT_RECLAIMED"
+	CodeRemoteBotReclaimable = "REMOTE_BOT_BRANCH_RECLAIMABLE"
+	CodeRemoteBotPending     = "REMOTE_BOT_BRANCH_PENDING"
 
 	// Local state.
 	CodeDirtyWorktree       = "DIRTY_WORKTREE"
@@ -53,19 +55,20 @@ const (
 // own capabilities to invoke; Command is the concrete argv for the simple case
 // where it just wants to run git.
 const (
-	ActionResolveManually  = "resolve-manually"
-	ActionRebaseOntoBase   = "rebase-onto-base"
-	ActionPush             = "push"
-	ActionPull             = "pull"
-	ActionSetUpstream      = "set-upstream"
-	ActionCheckoutBranch   = "checkout-branch"
-	ActionMoveWorkToBranch = "move-work-to-branch"
-	ActionCommitOrDiscard  = "commit-or-discard"
-	ActionDeleteBranch     = "delete-branch"
-	ActionPruneWorktrees   = "prune-worktrees"
-	ActionRemoveWorktree   = "remove-worktree"
-	ActionReviewStash      = "review-stash"
-	ActionConfigureBase    = "configure-base"
+	ActionResolveManually    = "resolve-manually"
+	ActionRebaseOntoBase     = "rebase-onto-base"
+	ActionPush               = "push"
+	ActionPull               = "pull"
+	ActionSetUpstream        = "set-upstream"
+	ActionCheckoutBranch     = "checkout-branch"
+	ActionMoveWorkToBranch   = "move-work-to-branch"
+	ActionCommitOrDiscard    = "commit-or-discard"
+	ActionDeleteBranch       = "delete-branch"
+	ActionDeleteRemoteBranch = "delete-remote-branch"
+	ActionPruneWorktrees     = "prune-worktrees"
+	ActionRemoveWorktree     = "remove-worktree"
+	ActionReviewStash        = "review-stash"
+	ActionConfigureBase      = "configure-base"
 )
 
 // AuditResult is the top-level document.
@@ -183,6 +186,14 @@ type AuditInput struct {
 	// excluding the base itself. Verified by ancestry, never inferred from
 	// naming or from divergence counts.
 	MergedBranches []string
+
+	// RemoteBotMerged are origin remote-tracking bot branches whose tips are
+	// ancestors of the base. Names have no origin/ prefix.
+	RemoteBotMerged []string
+
+	// RemoteBotPending are origin remote-tracking bot branches that are not
+	// ancestors of the base — they may still be an open PR.
+	RemoteBotPending []string
 
 	// EnrichErr is a failure from collecting the extra facts above.
 	EnrichErr error

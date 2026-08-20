@@ -79,6 +79,8 @@ func buildAudit(
 			Worktrees:         enr.Worktrees,
 			PrunableWorktrees: enr.PrunableWorktrees,
 			MergedBranches:    enr.MergedBranches,
+			RemoteBotMerged:   enr.RemoteBotMerged,
+			RemoteBotPending:  enr.RemoteBotPending,
 			EnrichErr:         enr.Err,
 			StaleStashAfter:   defaultStaleStashAfter,
 			Now:               now,

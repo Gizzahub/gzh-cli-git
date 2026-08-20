@@ -58,6 +58,19 @@ func TestCommandGroupsCoreIncludesBranchStashTagWorktree(t *testing.T) {
 	}
 }
 
+func TestCleanupBranchHasBotsAndFormatFlags(t *testing.T) {
+	if cleanupBranchCmd.Flags().Lookup("bots") == nil {
+		t.Fatal("cleanup branch missing --bots")
+	}
+	if cleanupBranchCmd.Flags().Lookup("format") == nil {
+		t.Fatal("cleanup branch missing --format")
+	}
+	long := cleanupBranchCmd.Long
+	if !strings.Contains(long, "--bots --merged -r") {
+		t.Errorf("cleanup branch help missing bot remote example:\n%s", long)
+	}
+}
+
 func TestBranchHelpMentionsCreateDeletePolicy(t *testing.T) {
 	long := branchCmd.Long
 	if !strings.Contains(long, "create/delete") && !strings.Contains(long, "create") {

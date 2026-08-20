@@ -54,6 +54,11 @@ type infoEnrichment struct {
 	// default one-line view has no use for.
 	MergedBranches []string
 
+	// RemoteBotMerged / RemoteBotPending partition origin bot remotes by
+	// ancestry against Base. Audit-only, same cost reason as MergedBranches.
+	RemoteBotMerged  []string
+	RemoteBotPending []string
+
 	// Err records why enrichment was incomplete, or nil. It is reported in the
 	// detail view rather than aborting the scan: failing to resolve a base
 	// branch must not hide the repository's status.
@@ -139,6 +144,14 @@ func enrichOne(
 			}
 		} else {
 			out.MergedBranches = merged
+		}
+		if botMerged, botPending, err := client.BotRemoteBranches(ctx, repo, out.Base.Name); err != nil {
+			if out.Err == nil {
+				out.Err = err
+			}
+		} else {
+			out.RemoteBotMerged = botMerged
+			out.RemoteBotPending = botPending
 		}
 	}
 

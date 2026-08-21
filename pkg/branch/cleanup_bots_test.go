@@ -271,6 +271,77 @@ func TestCleanupService_ExecuteDoesNotDeleteUnmergedRemote(t *testing.T) {
 	}
 }
 
+func TestCleanupService_AnalyzeBotsOnlyRemoteSuperseded(t *testing.T) {
+	dir := testutil.TempGitRepoWithCommit(t)
+	gitCommit(t, dir, "branch", "-M", "master")
+	writeAndCommit(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n\nrequire github.com/aws/aws-sdk-go-v2 v1.32.0\n")
+
+	gitCommit(t, dir, "checkout", "-b", "tmp-bot")
+	writeAndCommit(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n\nrequire github.com/aws/aws-sdk-go-v2 v1.40.0\n")
+	botSHA := gitOutput(t, dir, "rev-parse", "HEAD")
+
+	gitCommit(t, dir, "checkout", "master")
+	writeAndCommit(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n\nrequire github.com/aws/aws-sdk-go-v2 v1.41.1\n")
+	gitCommit(t, dir, "branch", "-D", "tmp-bot")
+	gitCommit(t, dir, "update-ref", "refs/remotes/origin/dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0", botSHA)
+	gitCommit(t, dir, "update-ref", "refs/remotes/origin/feat/human", botSHA)
+
+	repo := &repository.Repository{Path: dir}
+	report, err := NewCleanupService().Analyze(context.Background(), repo, AnalyzeOptions{
+		IncludeSuperseded: true,
+		IncludeRemote:     true,
+		BotsOnly:          true,
+		BaseBranch:        "master",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(report.Merged) != 0 {
+		t.Errorf("Merged = %v, want none", namesOf(report.Merged))
+	}
+	if len(report.Superseded) != 1 || report.Superseded[0].Name != "dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0" {
+		t.Fatalf("Superseded = %v, want the unmerged bot whose version already landed", namesOf(report.Superseded))
+	}
+	if !report.Superseded[0].IsRemote {
+		t.Error("superseded bot should be remote")
+	}
+	if report.Superseded[0].SHA == "" {
+		t.Error("superseded bot is missing the classified SHA for a lease")
+	}
+	for _, b := range report.GetAllBranches() {
+		if b.Name == "feat/human" {
+			t.Error("--superseded leaked a human topic branch")
+		}
+	}
+}
+
+func TestCleanupService_AnalyzeStillNewerBotNotSuperseded(t *testing.T) {
+	dir := testutil.TempGitRepoWithCommit(t)
+	gitCommit(t, dir, "branch", "-M", "master")
+	writeAndCommit(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n\nrequire github.com/aws/aws-sdk-go-v2 v1.32.0\n")
+
+	gitCommit(t, dir, "checkout", "-b", "tmp-bot")
+	writeAndCommit(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n\nrequire github.com/aws/aws-sdk-go-v2 v1.41.1\n")
+	botSHA := gitOutput(t, dir, "rev-parse", "HEAD")
+	gitCommit(t, dir, "checkout", "master")
+	gitCommit(t, dir, "branch", "-D", "tmp-bot")
+	gitCommit(t, dir, "update-ref", "refs/remotes/origin/dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.41.1", botSHA)
+
+	repo := &repository.Repository{Path: dir}
+	report, err := NewCleanupService().Analyze(context.Background(), repo, AnalyzeOptions{
+		IncludeSuperseded: true,
+		IncludeRemote:     true,
+		BotsOnly:          true,
+		BaseBranch:        "master",
+	})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(report.Superseded) != 0 {
+		t.Errorf("Superseded = %v, want none for a still-newer bot", namesOf(report.Superseded))
+	}
+}
+
 func writeAndCommit(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, name)

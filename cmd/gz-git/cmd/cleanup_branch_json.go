@@ -116,6 +116,7 @@ func cleanupEntriesFromReport(report *branch.CleanupReport) []repository.Cleanup
 	appendEntries(report.Merged, "merged")
 	appendEntries(report.Stale, "stale")
 	appendEntries(report.Orphaned, "gone")
+	appendEntries(report.Superseded, "superseded")
 	return out
 }
 

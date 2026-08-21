@@ -35,6 +35,7 @@ const (
 	CodeWorkOnBaseBranch     = "WORK_ON_BASE_BRANCH"
 	CodeMergedNotReclaimed   = "MERGED_BRANCH_NOT_RECLAIMED"
 	CodeRemoteBotReclaimable = "REMOTE_BOT_BRANCH_RECLAIMABLE"
+	CodeRemoteBotSuperseded  = "REMOTE_BOT_BRANCH_SUPERSEDED"
 	CodeRemoteBotPending     = "REMOTE_BOT_BRANCH_PENDING"
 
 	// Local state.
@@ -191,8 +192,14 @@ type AuditInput struct {
 	// ancestors of the base. Names have no origin/ prefix.
 	RemoteBotMerged []string
 
+	// RemoteBotSuperseded are origin remote-tracking bot branches that are not
+	// ancestors of the base, but whose version target is already satisfied
+	// there (equal or newer Go module / Actions pin).
+	RemoteBotSuperseded []string
+
 	// RemoteBotPending are origin remote-tracking bot branches that are not
-	// ancestors of the base — they may still be an open PR.
+	// ancestors of the base and still newer or not comparable — they may
+	// still be an open PR.
 	RemoteBotPending []string
 
 	// EnrichErr is a failure from collecting the extra facts above.

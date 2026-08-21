@@ -61,11 +61,11 @@ func setCleanupBranchTestGlobals(t *testing.T, baseBranch string) {
 	t.Helper()
 
 	orig := struct {
-		merged, stale, gone, dryRun, force, remote bool
-		protect, base                              string
-		quiet                                      bool
+		merged, stale, gone, superseded, dryRun, force, remote bool
+		protect, base                                          string
+		quiet                                                  bool
 	}{
-		cleanupBranchMerged, cleanupBranchStale, cleanupBranchGone,
+		cleanupBranchMerged, cleanupBranchStale, cleanupBranchGone, cleanupBranchSuperseded,
 		cleanupBranchDryRun, cleanupBranchForce, cleanupBranchRemote,
 		cleanupBranchProtect, cleanupBranchBaseBranch, quiet,
 	}
@@ -73,6 +73,7 @@ func setCleanupBranchTestGlobals(t *testing.T, baseBranch string) {
 	cleanupBranchMerged = true
 	cleanupBranchStale = false
 	cleanupBranchGone = false
+	cleanupBranchSuperseded = false
 	cleanupBranchDryRun = false
 	cleanupBranchForce = true
 	cleanupBranchRemote = false
@@ -81,7 +82,7 @@ func setCleanupBranchTestGlobals(t *testing.T, baseBranch string) {
 	quiet = false
 
 	t.Cleanup(func() {
-		cleanupBranchMerged, cleanupBranchStale, cleanupBranchGone = orig.merged, orig.stale, orig.gone
+		cleanupBranchMerged, cleanupBranchStale, cleanupBranchGone, cleanupBranchSuperseded = orig.merged, orig.stale, orig.gone, orig.superseded
 		cleanupBranchDryRun, cleanupBranchForce, cleanupBranchRemote = orig.dryRun, orig.force, orig.remote
 		cleanupBranchProtect, cleanupBranchBaseBranch, quiet = orig.protect, orig.base, orig.quiet
 	})
@@ -156,5 +157,31 @@ func TestCleanupBranchCountsDeletionsNotCandidates(t *testing.T) {
 		if !strings.Contains(stderr, name) {
 			t.Errorf("stderr does not name the failed branch %q:\n%s", name, stderr)
 		}
+	}
+}
+
+func TestCleanupBranchHelpMentionsSuperseded(t *testing.T) {
+	flag := cleanupBranchCmd.Flags().Lookup("superseded")
+	if flag == nil {
+		t.Fatal("missing --superseded flag")
+	}
+	if !strings.Contains(flag.Usage, "bot") {
+		t.Errorf("--superseded usage = %q, want it to mention bot remotes", flag.Usage)
+	}
+}
+
+func TestCleanupBranchRequiresTypeIncludingSuperseded(t *testing.T) {
+	setCleanupBranchTestGlobals(t, "master")
+	cleanupBranchMerged = false
+	cleanupBranchStale = false
+	cleanupBranchGone = false
+	cleanupBranchSuperseded = false
+
+	err := runCleanupBranch(cleanupBranchCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when no cleanup type is set")
+	}
+	if !strings.Contains(err.Error(), "--superseded") {
+		t.Errorf("error = %q, want it to list --superseded", err)
 	}
 }

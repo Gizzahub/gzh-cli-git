@@ -112,6 +112,12 @@ func TestApplyAutofixPolicy_NeverGrantsOnIrreversible(t *testing.T) {
 			Base:            BaseBranchInfo{Name: "master", Source: "heuristic"},
 			RemoteBotMerged: []string{"dependabot/go_modules/x"},
 		},
+		{ // REMOTE_BOT_BRANCH_SUPERSEDED -> leased remote delete is irreversible
+			Name:                "remote-bot-superseded",
+			Status:              &RepositoryStatusResult{Branch: "master", Upstream: "origin/master"},
+			Base:                BaseBranchInfo{Name: "master", Source: "heuristic"},
+			RemoteBotSuperseded: []string{"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0"},
+		},
 	}
 
 	for _, in := range inputs {

@@ -1,17 +1,20 @@
----
+______________________________________________________________________
+
 name: branch-cleanup
 description: |
-  Guide for cleaning up merged, stale, gone, and leftover bot remote
-  branches with gz-git. Use when:
-  - Cleaning up branches after PR merge
-  - Removing stale feature branches
-  - Bulk branch cleanup across multiple repos
-  - Identifying gone branches (remote deleted)
-  - Protecting important branches from deletion
-  - Reclaiming leftover Dependabot/Renovate/github-actions remotes
-  - Seeing REMOTE_BOT_BRANCH_RECLAIMABLE or REMOTE_BOT_BRANCH_PENDING
-allowed-tools: Bash, Read, Grep
----
+Guide for cleaning up merged, stale, gone, and leftover bot remote
+branches with gz-git. Use when:
+
+- Cleaning up branches after PR merge
+- Removing stale feature branches
+- Bulk branch cleanup across multiple repos
+- Identifying gone branches (remote deleted)
+- Protecting important branches from deletion
+- Reclaiming leftover Dependabot/Renovate/github-actions remotes
+- Seeing REMOTE_BOT_BRANCH_RECLAIMABLE, REMOTE_BOT_BRANCH_SUPERSEDED, or REMOTE_BOT_BRANCH_PENDING
+  allowed-tools: Bash, Read, Grep
+
+______________________________________________________________________
 
 # Branch Cleanup with gz-git
 
@@ -19,17 +22,18 @@ This skill covers branch cleanup operations using `gz-git cleanup branch`.
 
 ## Overview
 
-| Cleanup Type | Description                                    |
-| ------------ | ---------------------------------------------- |
-| `--merged`   | Branches fully merged into base branch         |
-| `--stale`    | Branches with no activity for N days           |
-| `--gone`     | Branches whose remote tracking branch deleted  |
+| Cleanup Type   | Description                                       |
+| -------------- | ------------------------------------------------- |
+| `--merged`     | Branches fully merged into base branch            |
+| `--stale`      | Branches with no activity for N days              |
+| `--gone`       | Branches whose remote tracking branch deleted     |
+| `--superseded` | Unmerged bot remotes whose version already landed |
 
-`--bots` is a name filter (`dependabot/` `renovate/` `github-actions/`), not a fourth type.
+`--bots` is a name filter (`dependabot/` `renovate/` `github-actions/`), not a cleanup type. `--superseded` only considers bot names.
 
 Single-repo unless a directory argument is given (that path is bulk). Bulk non-interactive delete needs `--force --yes`.
 
----
+______________________________________________________________________
 
 ## Safety First: Dry-Run Default
 
@@ -43,7 +47,7 @@ gz-git cleanup branch --merged
 gz-git cleanup branch --merged --force
 ```
 
----
+______________________________________________________________________
 
 ## Remote bot reclaim (LLM)
 
@@ -53,25 +57,28 @@ This is not `/git:dependabot-merge` (that *applies* the update).
 ```bash
 gz-git info --audit
 gz-git cleanup branch --bots --merged --remote --format json .
+gz-git cleanup branch --bots --superseded --remote --format json .
 # only when the user asked to delete:
 gz-git cleanup branch --bots --merged --remote --force --yes .
+gz-git cleanup branch --bots --superseded --remote --force --yes .
 ```
 
 On this command `-r` is `--remote`, not recursive (recursive has no short flag).
 
-| Audit code | Meaning | Autofix | Delete? |
-| ---------- | ------- | ------- | ------- |
-| `REMOTE_BOT_BRANCH_RECLAIMABLE` | tip is an ancestor of the base | false | yes, with `--force --yes` if the user asked |
-| `REMOTE_BOT_BRANCH_PENDING` | unmerged; may be an open PR | false | no |
+| Audit code                      | Meaning                                                             | Autofix | Delete?                                     |
+| ------------------------------- | ------------------------------------------------------------------- | ------- | ------------------------------------------- |
+| `REMOTE_BOT_BRANCH_RECLAIMABLE` | tip is an ancestor of the base                                      | false   | yes, with `--force --yes` if the user asked |
+| `REMOTE_BOT_BRANCH_SUPERSEDED`  | unmerged, but base already satisfies the bot version (not ancestry) | false   | yes, with `--force --yes` if the user asked |
+| `REMOTE_BOT_BRANCH_PENDING`     | unmerged; still newer or not comparable; may be an open PR          | false   | no                                          |
 
 - JSON schema: `gz-git.cleanup.branch/v1`
-- Remote delete only for ancestry-merged refs (`merge-base --is-ancestor`)
+- Remote delete only for ancestry-merged refs (`merge-base --is-ancestor`) or superseded bot refs (version comparison). Autofix is false; lease-delete after `--force --yes`.
 - `--stale` never deletes remote-only names
 - `--merged --remote` without `--bots` deletes **every** merged remote, not just bots
 - Protected: `main` `master` `develop` `development` `release/*` `hotfix/*`
 - Dry-run until `--force`. Bulk non-interactive delete also needs `--yes`
 
----
+______________________________________________________________________
 
 ## Quick Start
 
@@ -114,7 +121,7 @@ gz-git cleanup branch --merged --force --yes --include "api-*" .
 gz-git cleanup branch --merged --force --yes --exclude "legacy-*" .
 ```
 
----
+______________________________________________________________________
 
 ## Cleanup Types
 
@@ -136,9 +143,10 @@ gz-git cleanup branch --merged
 ```
 
 **Auto-detection**: Base branch is auto-detected from:
+
 1. `main` (if exists)
-2. `master` (if exists)
-3. Default branch from remote
+1. `master` (if exists)
+1. Default branch from remote
 
 ```bash
 # Override base branch
@@ -181,7 +189,7 @@ gz-git cleanup branch --gone
 
 **Common Scenario**: After merging a PR on GitHub/GitLab, the remote branch is deleted, but your local branch remains. `--gone` cleans these up.
 
----
+______________________________________________________________________
 
 ## Protected Branches
 
@@ -209,7 +217,7 @@ gz-git cleanup branch --merged --protect "staging,qa,prod" --force
 gz-git cleanup branch --merged --protect "env/*,deploy/*" --force
 ```
 
----
+______________________________________________________________________
 
 ## Remote Branch Deletion
 
@@ -236,17 +244,17 @@ gz-git cleanup branch --merged --remote
 gz-git cleanup branch --bots --merged --remote --format json .
 ```
 
----
+______________________________________________________________________
 
 ## Bulk Mode Options
 
-| Flag           | Default | Description                        |
-| -------------- | ------- | ---------------------------------- |
-| `-d, --scan-depth` | `1`  | Directory depth to scan            |
-| `-j, --parallel`   | `10` | Parallel operations                |
-| `--include`    | -       | Regex pattern to include repos     |
-| `--exclude`    | -       | Regex pattern to exclude repos     |
-| `--recursive`  | `false` | Include nested repos/submodules    |
+| Flag               | Default | Description                     |
+| ------------------ | ------- | ------------------------------- |
+| `-d, --scan-depth` | `1`     | Directory depth to scan         |
+| `-j, --parallel`   | `10`    | Parallel operations             |
+| `--include`        | -       | Regex pattern to include repos  |
+| `--exclude`        | -       | Regex pattern to exclude repos  |
+| `--recursive`      | `false` | Include nested repos/submodules |
 
 ```bash
 # Scan 2 levels deep
@@ -262,7 +270,7 @@ gz-git cleanup branch --merged --force --yes --exclude "vendor|third-party" .
 gz-git cleanup branch --merged --force --yes --recursive .
 ```
 
----
+______________________________________________________________________
 
 ## Interactive Wizard
 
@@ -278,7 +286,7 @@ gz-git cleanup wizard
 # ? Proceed with deletion? [y/N]
 ```
 
----
+______________________________________________________________________
 
 ## Common Workflows
 
@@ -322,7 +330,7 @@ gz-git cleanup branch --merged --force --yes -d 3 --recursive ~/monorepo
 gz-git cleanup branch --merged --force --yes --exclude "vendor|node_modules" .
 ```
 
----
+______________________________________________________________________
 
 ## Output Examples
 
@@ -371,7 +379,7 @@ Summary:
   Errors:                 0
 ```
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
@@ -419,34 +427,37 @@ gz-git cleanup branch --merged -v .
 gz-git cleanup branch --stale --stale-days 7 .
 ```
 
----
+______________________________________________________________________
 
 ## Quick Reference
 
-| Task                        | Command                                      |
-| --------------------------- | -------------------------------------------- |
-| Preview merged              | `cleanup branch --merged`                    |
-| Delete merged               | `cleanup branch --merged --force`            |
-| Preview stale (30d)         | `cleanup branch --stale`                     |
-| Delete stale (60d)          | `cleanup branch --stale --stale-days 60 --force` |
-| Preview gone                | `cleanup branch --gone`                      |
-| Delete gone                 | `cleanup branch --gone --force`              |
-| Preview leftover bot remotes | `cleanup branch --bots --merged --remote --format json .` |
-| Delete leftover bot remotes | `cleanup branch --bots --merged --remote --force --yes .` |
-| All types                   | `cleanup branch --merged --stale --gone`     |
-| Bulk mode                   | `cleanup branch --merged --force --yes .`          |
-| With remote                 | `cleanup branch --merged --remote --force`   |
-| Protect branches            | `--protect "staging,qa"`                     |
-| Custom base                 | `--base develop`                             |
-| Interactive                 | `cleanup wizard`                             |
+| Task                           | Command                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| Preview merged                 | `cleanup branch --merged`                                     |
+| Delete merged                  | `cleanup branch --merged --force`                             |
+| Preview stale (30d)            | `cleanup branch --stale`                                      |
+| Delete stale (60d)             | `cleanup branch --stale --stale-days 60 --force`              |
+| Preview gone                   | `cleanup branch --gone`                                       |
+| Delete gone                    | `cleanup branch --gone --force`                               |
+| Preview leftover bot remotes   | `cleanup branch --bots --merged --remote --format json .`     |
+| Delete leftover bot remotes    | `cleanup branch --bots --merged --remote --force --yes .`     |
+| Preview superseded bot remotes | `cleanup branch --bots --superseded --remote --format json .` |
+| Delete superseded bot remotes  | `cleanup branch --bots --superseded --remote --force --yes .` |
+| All types                      | `cleanup branch --merged --stale --gone`                      |
+| Bulk mode                      | `cleanup branch --merged --force --yes .`                     |
+| With remote                    | `cleanup branch --merged --remote --force`                    |
+| Protect branches               | `--protect "staging,qa"`                                      |
+| Custom base                    | `--base develop`                                              |
+| Interactive                    | `cleanup wizard`                                              |
 
----
+______________________________________________________________________
 
 ## Branch Types Summary
 
-| Type     | Condition                          | Safe to Delete?       |
-| -------- | ---------------------------------- | --------------------- |
-| Merged   | All commits in base branch         | ✓ Yes                 |
-| Stale    | No commits for N days              | ⚠ Review first        |
-| Gone     | Remote tracking deleted            | ✓ Usually yes         |
-| Protected| In protected list                  | ✗ Never auto-deleted  |
+| Type       | Condition                   | Safe to Delete?         |
+| ---------- | --------------------------- | ----------------------- |
+| Merged     | All commits in base branch  | ✓ Yes                   |
+| Stale      | No commits for N days       | ⚠ Review first          |
+| Gone       | Remote tracking deleted     | ✓ Usually yes           |
+| Superseded | Bot version already on base | ✓ After `--force --yes` |
+| Protected  | In protected list           | ✗ Never auto-deleted    |

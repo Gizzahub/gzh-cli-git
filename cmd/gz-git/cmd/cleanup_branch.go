@@ -23,6 +23,7 @@ var (
 	cleanupBranchMerged     bool
 	cleanupBranchStale      bool
 	cleanupBranchGone       bool
+	cleanupBranchSuperseded bool
 	cleanupBranchStaleDays  int
 	cleanupBranchDryRun     bool
 	cleanupBranchForce      bool
@@ -36,12 +37,15 @@ var (
 // cleanupBranchCmd represents the cleanup branch command.
 var cleanupBranchCmd = &cobra.Command{
 	Use:   "branch [directory]",
-	Short: "Clean up merged, stale, or gone branches",
+	Short: "Clean up merged, stale, gone, or superseded branches",
 	Long: cliutil.QuickStartHelp(`  # Preview merged branches in current repo
   gz-git cleanup branch --merged
 
   # Preview leftover Dependabot/Renovate remote branches
   gz-git cleanup branch --bots --merged -r
+
+  # Preview bot remotes whose version already landed on base
+  gz-git cleanup branch --bots --superseded -r
 
   # Machine-readable preview
   gz-git cleanup branch --bots --merged -r --format json
@@ -71,6 +75,7 @@ func init() {
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchMerged, "merged", false, "clean up fully merged branches")
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchStale, "stale", false, "clean up stale branches (no recent activity)")
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchGone, "gone", false, "clean up gone branches (remote deleted)")
+	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchSuperseded, "superseded", false, "clean up unmerged bot remotes whose version target is already on base")
 	cleanupBranchCmd.Flags().IntVar(&cleanupBranchStaleDays, "stale-days", 30, "days threshold for stale branches")
 	cleanupBranchCmd.Flags().BoolVarP(&cleanupBranchDryRun, "dry-run", "n", true, "preview changes without deleting (default: true)")
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchForce, "force", false, "actually delete branches (disables dry-run)")
@@ -92,8 +97,8 @@ func runCleanupBranch(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	// Require at least one cleanup type
-	if !cleanupBranchMerged && !cleanupBranchStale && !cleanupBranchGone {
-		return fmt.Errorf("specify at least one cleanup type: --merged, --stale, or --gone")
+	if !cleanupBranchMerged && !cleanupBranchStale && !cleanupBranchGone && !cleanupBranchSuperseded {
+		return fmt.Errorf("specify at least one cleanup type: --merged, --stale, --gone, or --superseded")
 	}
 
 	if err := validateBulkFormat(cleanupBranchBulkFlags.Format); err != nil {
@@ -135,14 +140,15 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 
 	// Analyze branches
 	analyzeOpts := branch.AnalyzeOptions{
-		IncludeMerged:  cleanupBranchMerged,
-		IncludeStale:   cleanupBranchStale,
-		StaleThreshold: time.Duration(cleanupBranchStaleDays) * 24 * time.Hour,
-		IncludeRemote:  cleanupBranchRemote,
-		IncludeGone:    cleanupBranchGone,
-		Exclude:        excludePatterns,
-		BaseBranch:     cleanupBranchBaseBranch,
-		BotsOnly:       cleanupBranchBots,
+		IncludeMerged:     cleanupBranchMerged,
+		IncludeStale:      cleanupBranchStale,
+		StaleThreshold:    time.Duration(cleanupBranchStaleDays) * 24 * time.Hour,
+		IncludeRemote:     cleanupBranchRemote,
+		IncludeGone:       cleanupBranchGone,
+		IncludeSuperseded: cleanupBranchSuperseded,
+		Exclude:           excludePatterns,
+		BaseBranch:        cleanupBranchBaseBranch,
+		BotsOnly:          cleanupBranchBots,
 	}
 
 	machine := cliutil.IsMachineFormat(cleanupBranchBulkFlags.Format)
@@ -246,6 +252,7 @@ func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns
 		IncludeMerged:     cleanupBranchMerged,
 		IncludeStale:      cleanupBranchStale,
 		IncludeGone:       cleanupBranchGone,
+		IncludeSuperseded: cleanupBranchSuperseded,
 		StaleThreshold:    time.Duration(cleanupBranchStaleDays) * 24 * time.Hour,
 		BaseBranch:        cleanupBranchBaseBranch,
 		DeleteRemote:      cleanupBranchRemote,
@@ -433,6 +440,13 @@ func printCleanupBranchReport(report *branch.CleanupReport, dryRun bool) {
 	if len(report.Orphaned) > 0 {
 		fmt.Printf("\n👻 Gone branches (%d):\n", len(report.Orphaned))
 		for _, b := range report.Orphaned {
+			fmt.Printf("   • %s\n", b.Name)
+		}
+	}
+
+	if len(report.Superseded) > 0 {
+		fmt.Printf("\n📦 Superseded bot branches (%d):\n", len(report.Superseded))
+		for _, b := range report.Superseded {
 			fmt.Printf("   • %s\n", b.Name)
 		}
 	}

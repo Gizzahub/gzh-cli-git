@@ -38,6 +38,10 @@ type BulkCleanupOptions struct {
 	// IncludeGone includes gone branches (remote deleted)
 	IncludeGone bool
 
+	// IncludeSuperseded includes unmerged bot remotes whose version target
+	// is already satisfied on the base. Only bot names are considered.
+	IncludeSuperseded bool
+
 	// StaleThreshold is the threshold for stale branches (default: 30 days)
 	StaleThreshold time.Duration
 
@@ -125,6 +129,9 @@ type RepositoryCleanupResult struct {
 
 	// GoneCount is the number of gone branches found/deleted
 	GoneCount int
+
+	// SupersededCount is the number of superseded bot remotes found/deleted
+	SupersededCount int
 
 	// ProtectedCount is the number of protected branches skipped
 	ProtectedCount int
@@ -216,7 +223,7 @@ func (c *client) BulkCleanup(ctx context.Context, opts BulkCleanupOptions) (*Bul
 	totalDeleted := 0
 	totalAnalyzed := 0
 	for _, r := range results {
-		totalDeleted += r.MergedCount + r.StaleCount + r.GoneCount
+		totalDeleted += r.MergedCount + r.StaleCount + r.GoneCount + r.SupersededCount
 		totalAnalyzed += r.TotalAnalyzed
 	}
 
@@ -334,7 +341,8 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		"path", result.RelativePath,
 		"merged", result.MergedCount,
 		"stale", result.StaleCount,
-		"gone", result.GoneCount)
+		"gone", result.GoneCount,
+		"superseded", result.SupersededCount)
 
 	return result
 }

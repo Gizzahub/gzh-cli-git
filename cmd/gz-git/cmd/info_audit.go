@@ -72,19 +72,20 @@ func buildAudit(
 		enr := enrichment[status.Path]
 
 		repos = append(repos, repository.EvaluateRepo(repository.AuditInput{
-			Name:              auditRepoName(status),
-			Path:              status.Path,
-			Status:            status,
-			Base:              enr.Base,
-			Worktrees:         enr.Worktrees,
-			PrunableWorktrees: enr.PrunableWorktrees,
-			MergedBranches:    enr.MergedBranches,
-			RemoteBotMerged:   enr.RemoteBotMerged,
-			RemoteBotPending:  enr.RemoteBotPending,
-			EnrichErr:         enr.Err,
-			StaleStashAfter:   defaultStaleStashAfter,
-			Now:               now,
-			AutofixPolicy:     policy,
+			Name:                auditRepoName(status),
+			Path:                status.Path,
+			Status:              status,
+			Base:                enr.Base,
+			Worktrees:           enr.Worktrees,
+			PrunableWorktrees:   enr.PrunableWorktrees,
+			MergedBranches:      enr.MergedBranches,
+			RemoteBotMerged:     enr.RemoteBotMerged,
+			RemoteBotSuperseded: enr.RemoteBotSuperseded,
+			RemoteBotPending:    enr.RemoteBotPending,
+			EnrichErr:           enr.Err,
+			StaleStashAfter:     defaultStaleStashAfter,
+			Now:                 now,
+			AutofixPolicy:       policy,
 		}))
 	}
 

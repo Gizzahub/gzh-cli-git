@@ -165,14 +165,15 @@ type RemoveOptions struct {
 
 // AnalyzeOptions configures branch cleanup analysis.
 type AnalyzeOptions struct {
-	IncludeMerged  bool          // Include fully merged branches
-	IncludeStale   bool          // Include stale branches (no activity)
-	StaleThreshold time.Duration // Threshold for stale (default: 30 days)
-	IncludeRemote  bool          // Include remote branches
-	IncludeGone    bool          // Include local branches whose upstream is gone
-	Exclude        []string      // Patterns to exclude
-	BaseBranch     string        // Base branch for merge detection (default: main/master)
-	BotsOnly       bool          // Restrict candidates to Dependabot/Renovate/github-actions prefixes
+	IncludeMerged     bool          // Include fully merged branches
+	IncludeStale      bool          // Include stale branches (no activity)
+	StaleThreshold    time.Duration // Threshold for stale (default: 30 days)
+	IncludeRemote     bool          // Include remote branches
+	IncludeGone       bool          // Include local branches whose upstream is gone
+	IncludeSuperseded bool          // Include unmerged bot remotes whose version already landed
+	Exclude           []string      // Patterns to exclude
+	BaseBranch        string        // Base branch for merge detection (default: main/master)
+	BotsOnly          bool          // Restrict candidates to Dependabot/Renovate/github-actions prefixes
 }
 
 // ExecuteOptions configures branch cleanup execution.
@@ -211,6 +212,10 @@ type CleanupReport struct {
 	// refs/heads, so deleting one removes only the local ref; the branch it used
 	// to track is already gone from the remote.
 	Orphaned []*Branch
+
+	// Superseded holds unmerged remote bot branches whose version target is
+	// already satisfied on the base. Comparison is versions, not ancestry.
+	Superseded []*Branch
 
 	Protected []*Branch // Protected (won't delete)
 	Total     int       // Total branches analyzed

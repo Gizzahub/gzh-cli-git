@@ -128,10 +128,12 @@ type Client interface {
 	MergedBranches(ctx context.Context, repo *Repository, base string) ([]string, error)
 
 	// BotRemoteBranches partitions origin remote-tracking refs with bot prefixes
-	// into those whose tips are ancestors of base vs those that are not.
-	// Names are returned without the remote prefix. Skips origin/HEAD and
-	// IsProtected names. Empty base returns nil, nil, nil.
-	BotRemoteBranches(ctx context.Context, repo *Repository, base string) (merged, pending []string, err error)
+	// into merged (tip is an ancestor of base), superseded (not an ancestor,
+	// but base already satisfies the bot's version target), and pending (not
+	// an ancestor and still newer or not comparable). Names are returned
+	// without the remote prefix. Skips origin/HEAD and IsProtected names.
+	// Empty base returns nil, nil, nil, nil.
+	BotRemoteBranches(ctx context.Context, repo *Repository, base string) (merged, superseded, pending []string, err error)
 }
 
 // Logger provides a logging interface for library consumers.

@@ -85,11 +85,12 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 	}
 
 	report := &CleanupReport{
-		Merged:    make([]*Branch, 0),
-		Stale:     make([]*Branch, 0),
-		Orphaned:  make([]*Branch, 0),
-		Protected: make([]*Branch, 0),
-		Total:     len(branches),
+		Merged:     make([]*Branch, 0),
+		Stale:      make([]*Branch, 0),
+		Orphaned:   make([]*Branch, 0),
+		Superseded: make([]*Branch, 0),
+		Protected:  make([]*Branch, 0),
+		Total:      len(branches),
 	}
 
 	// Ask git which branches it marks [gone] before the loop: the answer comes
@@ -103,8 +104,19 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 		}
 	}
 
+	superseded := map[string]bool{}
+	if opts.IncludeSuperseded {
+		_, names, _, classErr := repository.NewClient().BotRemoteBranches(ctx, repo, opts.BaseBranch)
+		if classErr != nil {
+			return nil, fmt.Errorf("failed to classify superseded bot remotes: %w", classErr)
+		}
+		for _, name := range names {
+			superseded[name] = true
+		}
+	}
+
 	for _, branch := range branches {
-		c.classifyCleanupBranch(ctx, repo, branch, opts, gone, report)
+		c.classifyCleanupBranch(ctx, repo, branch, opts, gone, superseded, report)
 	}
 
 	return report, nil
@@ -115,7 +127,7 @@ func (c *cleanupService) classifyCleanupBranch(
 	repo *repository.Repository,
 	branch *Branch,
 	opts AnalyzeOptions,
-	gone map[string]bool,
+	gone, superseded map[string]bool,
 	report *CleanupReport,
 ) {
 	if !normalizeCleanupBranch(branch) || branch.IsHead {
@@ -136,6 +148,10 @@ func (c *cleanupService) classifyCleanupBranch(
 			report.Merged = append(report.Merged, branch)
 			return
 		}
+	}
+	if opts.IncludeSuperseded && branch.IsRemote && superseded[branch.Name] {
+		report.Superseded = append(report.Superseded, branch)
+		return
 	}
 	// Stale stays local-only: an unmerged remote bot branch may be an open PR.
 	if opts.IncludeStale && !branch.IsRemote {
@@ -174,6 +190,7 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 	toDelete = append(toDelete, report.Merged...)
 	toDelete = append(toDelete, report.Stale...)
 	toDelete = append(toDelete, report.Orphaned...)
+	toDelete = append(toDelete, report.Superseded...)
 
 	result := &ExecuteResult{}
 
@@ -461,7 +478,7 @@ func (c *cleanupService) isProtectedBranch(branch string, additionalPatterns []s
 
 // CountBranches returns the total number of branches in the report.
 func (r *CleanupReport) CountBranches() int {
-	return len(r.Merged) + len(r.Stale) + len(r.Orphaned)
+	return len(r.Merged) + len(r.Stale) + len(r.Orphaned) + len(r.Superseded)
 }
 
 // IsEmpty checks if the report has no branches to clean up.
@@ -471,9 +488,10 @@ func (r *CleanupReport) IsEmpty() bool {
 
 // GetAllBranches returns all branches eligible for cleanup.
 func (r *CleanupReport) GetAllBranches() []*Branch {
-	all := make([]*Branch, 0, len(r.Merged)+len(r.Stale)+len(r.Orphaned))
+	all := make([]*Branch, 0, len(r.Merged)+len(r.Stale)+len(r.Orphaned)+len(r.Superseded))
 	all = append(all, r.Merged...)
 	all = append(all, r.Stale...)
 	all = append(all, r.Orphaned...)
+	all = append(all, r.Superseded...)
 	return all
 }

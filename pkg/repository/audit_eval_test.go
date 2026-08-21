@@ -298,6 +298,53 @@ func TestEvaluateRepo_RemoteBotReclaimableUsesCleanupCommand(t *testing.T) {
 	}
 }
 
+func TestEvaluateRepo_RemoteBotSupersededUsesCleanupCommand(t *testing.T) {
+	got := EvaluateRepo(AuditInput{
+		Name:                "r",
+		Status:              &RepositoryStatusResult{Branch: "master", Upstream: "origin/master"},
+		Base:                BaseBranchInfo{Name: "master", Source: "heuristic"},
+		RemoteBotSuperseded: []string{"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0"},
+		AutofixPolicy:       allowAll,
+	})
+
+	f := findingByCode(got, CodeRemoteBotSuperseded)
+	if f == nil {
+		t.Fatalf("no %s finding; got %v", CodeRemoteBotSuperseded, codes(got))
+	}
+	if findingByCode(got, CodeRemoteBotPending) != nil {
+		t.Errorf("superseded ref was also reported as pending: %v", codes(got))
+	}
+	if f.Severity != SeverityInfo {
+		t.Errorf("severity = %q, want %q", f.Severity, SeverityInfo)
+	}
+	if f.Fix == nil || f.Fix.Action != ActionDeleteRemoteBranch {
+		t.Fatalf("action = %v, want %s", f.Fix, ActionDeleteRemoteBranch)
+	}
+	want := []string{"gz-git", "cleanup", "branch", "--bots", "--superseded", "--remote", "--force", "--yes"}
+	if len(f.Fix.Command) != len(want) {
+		t.Fatalf("command = %v, want %v", f.Fix.Command, want)
+	}
+	for i := range want {
+		if f.Fix.Command[i] != want[i] {
+			t.Fatalf("command = %v, want %v", f.Fix.Command, want)
+		}
+	}
+	for _, arg := range f.Fix.Command {
+		if arg == "--delete" {
+			t.Errorf("audit must not suggest raw git push --delete: %v", f.Fix.Command)
+		}
+	}
+	if f.Fix.Reversible {
+		t.Error("remote delete must be marked irreversible")
+	}
+	if f.Fix.Autofix {
+		t.Error("autofix granted on superseded remote delete despite allowAll policy")
+	}
+	if f.Evidence["verified_by"] != "version comparison" {
+		t.Errorf("evidence must cite version comparison, not ancestry: %v", f.Evidence)
+	}
+}
+
 func TestEvaluateRepo_RemoteBotPendingHasNoDeleteCommand(t *testing.T) {
 	got := EvaluateRepo(AuditInput{
 		Name:             "r",

@@ -207,6 +207,26 @@ func evaluateRemoteBots(in AuditInput) []Finding {
 		})
 	}
 
+	if len(in.RemoteBotSuperseded) > 0 {
+		findings = append(findings, Finding{
+			Code:     CodeRemoteBotSuperseded,
+			Severity: SeverityInfo,
+			Message: fmt.Sprintf("%d remote bot branch(es) are superseded by versions already on %s",
+				len(in.RemoteBotSuperseded), in.Base.Name),
+			Evidence: map[string]any{
+				"branches":    in.RemoteBotSuperseded,
+				"base":        in.Base.Name,
+				"verified_by": "version comparison",
+			},
+			Fix: &Remediation{
+				Action:     ActionDeleteRemoteBranch,
+				Command:    []string{"gz-git", "cleanup", "branch", "--bots", "--superseded", "--remote", "--force", "--yes"},
+				Reversible: false,
+				Note:       "irreversible; the cleanup command leases the classified SHA so a newer remote tip is not deleted. Do not raw git push --delete",
+			},
+		})
+	}
+
 	if len(in.RemoteBotPending) > 0 {
 		findings = append(findings, Finding{
 			Code:     CodeRemoteBotPending,

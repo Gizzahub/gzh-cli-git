@@ -5,9 +5,11 @@ package repository
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
@@ -53,7 +55,7 @@ func TestBotRemoteBranches_PartitionsMergedAndPending(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	merged, pending, err := client.BotRemoteBranches(context.Background(), repo, "master")
+	merged, superseded, pending, err := client.BotRemoteBranches(context.Background(), repo, "master")
 	if err != nil {
 		t.Fatalf("BotRemoteBranches: %v", err)
 	}
@@ -65,11 +67,15 @@ func TestBotRemoteBranches_PartitionsMergedAndPending(t *testing.T) {
 		t.Errorf("merged = %v, want %v", merged, wantMerged)
 	}
 
+	if len(superseded) != 0 {
+		t.Errorf("superseded = %v, want none without a comparable version target", superseded)
+	}
+
 	if len(pending) != 1 || pending[0] != "dependabot/go_modules/unmerged" {
 		t.Errorf("pending = %v, want [dependabot/go_modules/unmerged]", pending)
 	}
 
-	for _, name := range append(append([]string{}, merged...), pending...) {
+	for _, name := range append(append(append([]string{}, merged...), superseded...), pending...) {
 		if name == "develop" || name == "HEAD" || name == "feat/done" {
 			t.Errorf("BotRemoteBranches leaked non-bot or protected name %q", name)
 		}
@@ -84,15 +90,15 @@ func TestBotRemoteBranches_EmptyBase(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	merged, pending, err := client.BotRemoteBranches(context.Background(), repo, "")
+	merged, superseded, pending, err := client.BotRemoteBranches(context.Background(), repo, "")
 	if err != nil {
 		t.Errorf("empty base returned error: %v", err)
 	}
-	if merged != nil || pending != nil {
-		t.Errorf("empty base = (%v, %v), want nil, nil", merged, pending)
+	if merged != nil || superseded != nil || pending != nil {
+		t.Errorf("empty base = (%v, %v, %v), want nil, nil, nil", merged, superseded, pending)
 	}
 
-	if _, _, err := client.BotRemoteBranches(context.Background(), nil, "master"); err == nil {
+	if _, _, _, err := client.BotRemoteBranches(context.Background(), nil, "master"); err == nil {
 		t.Error("BotRemoteBranches(nil) returned no error")
 	}
 }
@@ -154,6 +160,62 @@ func TestBulkCleanup_RemoteMergedDryRun(t *testing.T) {
 	}
 	if _, ok := got["feat/done"]; ok {
 		t.Error("--bots leaked a human topic branch")
+	}
+}
+
+func TestBulkCleanup_RemoteSupersededDryRun(t *testing.T) {
+	dir := botVersionRemoteFixture(
+		t,
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.40.0"),
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.41.1"),
+		"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0",
+	)
+	parent := filepath.Dir(dir)
+	client := NewClient()
+
+	result, err := client.BulkCleanup(context.Background(), BulkCleanupOptions{
+		Directory:         parent,
+		MaxDepth:          1,
+		DryRun:            true,
+		IncludeSuperseded: true,
+		DeleteRemote:      true,
+		BotsOnly:          true,
+		BaseBranch:        "master",
+	})
+	if err != nil {
+		t.Fatalf("BulkCleanup: %v", err)
+	}
+
+	var found *RepositoryCleanupResult
+	for i := range result.Repositories {
+		if result.Repositories[i].Path == dir {
+			found = &result.Repositories[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("repo %s not in results: %+v", dir, result.Repositories)
+	}
+	if found.Status != StatusWouldCleanup {
+		t.Errorf("status = %q, want %q", found.Status, StatusWouldCleanup)
+	}
+	if found.SupersededCount != 1 {
+		t.Errorf("SupersededCount = %d, want 1", found.SupersededCount)
+	}
+	got := map[string]CleanupBranchEntry{}
+	for _, b := range found.Branches {
+		got[b.Name] = b
+	}
+	entry, ok := got["dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0"]
+	if !ok {
+		t.Fatalf("missing superseded bot in %v", found.Branches)
+	}
+	if entry.Location != branchLocationRemote {
+		t.Errorf("location = %q, want remote", entry.Location)
+	}
+	if entry.Reason != "superseded" {
+		t.Errorf("reason = %q, want superseded", entry.Reason)
 	}
 }
 
@@ -293,6 +355,156 @@ func TestBulkCleanup_RemoteMergedLeaseRefusesMovedTip(t *testing.T) {
 	if classifiedSHA == newSHA {
 		t.Fatal("race did not move the tip")
 	}
+}
+
+func TestBotRemoteBranches_GoModuleSupersededWhenBaseAlreadyNewer(t *testing.T) {
+	dir := botVersionRemoteFixture(
+		t,
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.40.0"),
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.41.1"),
+		"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0",
+	)
+
+	merged, superseded, pending, err := openBotRemotes(t, dir)
+	if err != nil {
+		t.Fatalf("BotRemoteBranches: %v", err)
+	}
+	if len(merged) != 0 {
+		t.Errorf("merged = %v, want none: the bot tip is not an ancestor", merged)
+	}
+	if len(pending) != 0 {
+		t.Errorf("pending = %v, want none: base already has a newer module version", pending)
+	}
+	if len(superseded) != 1 || superseded[0] != "dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0" {
+		t.Errorf("superseded = %v, want the unmerged bot whose version already landed", superseded)
+	}
+}
+
+func TestBotRemoteBranches_GoModuleStillNewerStaysPending(t *testing.T) {
+	dir := botVersionRemoteFixture(
+		t,
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.41.1"),
+		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
+		"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.41.1",
+	)
+
+	merged, superseded, pending, err := openBotRemotes(t, dir)
+	if err != nil {
+		t.Fatalf("BotRemoteBranches: %v", err)
+	}
+	if len(merged) != 0 {
+		t.Errorf("merged = %v, want none", merged)
+	}
+	if len(superseded) != 0 {
+		t.Errorf("superseded = %v, want none: bot target is still newer", superseded)
+	}
+	if len(pending) != 1 || pending[0] != "dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.41.1" {
+		t.Errorf("pending = %v, want the still-newer bot", pending)
+	}
+}
+
+func TestBotRemoteBranches_ActionsMajorTagStaysPending(t *testing.T) {
+	dir := botVersionRemoteFixture(
+		t,
+		sampleWorkflow("actions/checkout", "v4"),
+		sampleWorkflow("actions/checkout", "v7"),
+		sampleWorkflow("actions/checkout", "v4"),
+		"dependabot/github_actions/actions/checkout-7",
+	)
+
+	merged, superseded, pending, err := openBotRemotes(t, dir)
+	if err != nil {
+		t.Fatalf("BotRemoteBranches: %v", err)
+	}
+	if len(merged) != 0 {
+		t.Errorf("merged = %v, want none", merged)
+	}
+	if len(superseded) != 0 {
+		t.Errorf("superseded = %v, want none: v4 vs v7 is a major-tag jump", superseded)
+	}
+	if len(pending) != 1 || pending[0] != "dependabot/github_actions/actions/checkout-7" {
+		t.Errorf("pending = %v, want the v7 actions bot", pending)
+	}
+}
+
+func TestBotRemoteBranches_ActionsBaseMajorNewerStaysPending(t *testing.T) {
+	dir := botVersionRemoteFixture(
+		t,
+		sampleWorkflow("actions/checkout", "v3"),
+		sampleWorkflow("actions/checkout", "v4"),
+		sampleWorkflow("actions/checkout", "v7"),
+		"dependabot/github_actions/actions/checkout-4",
+	)
+
+	merged, superseded, pending, err := openBotRemotes(t, dir)
+	if err != nil {
+		t.Fatalf("BotRemoteBranches: %v", err)
+	}
+	if len(merged) != 0 {
+		t.Errorf("merged = %v, want none", merged)
+	}
+	if len(superseded) != 0 {
+		t.Errorf("superseded = %v, want none: base v7 vs bot v4 is still a major-tag jump", superseded)
+	}
+	if len(pending) != 1 || pending[0] != "dependabot/github_actions/actions/checkout-4" {
+		t.Errorf("pending = %v, want the v4 actions bot", pending)
+	}
+}
+
+func openBotRemotes(t *testing.T, dir string) (merged, superseded, pending []string, err error) {
+	t.Helper()
+	client := NewClient()
+	repo, err := client.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return client.BotRemoteBranches(context.Background(), repo, "master")
+}
+
+func sampleGoMod(module, version string) string {
+	return "module example.com/app\n\ngo 1.22\n\nrequire " + module + " " + version + "\n"
+}
+
+func sampleWorkflow(action, version string) string {
+	return "name: ci\non: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + action + "@" + version + "\n"
+}
+
+// botVersionRemoteFixture plants an unmerged origin bot ref. start is committed
+// on master, bot is committed on a side branch, then master independently
+// receives landed — so the bot tip is not an ancestor of base.
+func botVersionRemoteFixture(t *testing.T, start, bot, landed, branch string) string {
+	t.Helper()
+	dir := testutil.TempGitRepoWithCommit(t)
+	runGit(t, dir, "branch", "-M", "master")
+	writeTreeFile(t, dir, start, branch)
+	runGit(t, dir, "checkout", "-b", "tmp-bot")
+	writeTreeFile(t, dir, bot, branch)
+	botSHA := gitOut(t, dir, "rev-parse", "HEAD")
+	runGit(t, dir, "checkout", "master")
+	if landed != start {
+		writeTreeFile(t, dir, landed, branch)
+	}
+	runGit(t, dir, "branch", "-D", "tmp-bot")
+	runGit(t, dir, "update-ref", "refs/remotes/origin/"+branch, botSHA)
+	return dir
+}
+
+func writeTreeFile(t *testing.T, dir, body, branch string) {
+	t.Helper()
+	path := "go.mod"
+	if strings.HasPrefix(botMatchName(branch), dependabotActionsPrefix) {
+		path = filepath.Join(".github", "workflows", "ci.yml")
+		if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o700); err != nil {
+			t.Fatalf("mkdir workflows: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, path), []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	runGit(t, dir, "add", path)
+	runGit(t, dir, "commit", "-m", "update "+path)
 }
 
 func botRemoteBareClone(t *testing.T) (origin, clone string) {

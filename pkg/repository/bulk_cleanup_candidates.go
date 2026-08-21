@@ -14,8 +14,10 @@ const (
 )
 
 // collectCleanupCandidates gathers local merged/stale/gone refs and, when
-// DeleteRemote && IncludeMerged, remote-only merged refs. Stale never
-// considers remote-only names: an unmerged remote bot branch may be an open PR.
+// DeleteRemote && IncludeMerged, remote-only merged refs. DeleteRemote &&
+// IncludeSuperseded adds unmerged bot remotes whose version target already
+// landed. Stale never considers remote-only names: an unmerged remote bot
+// branch may be an open PR.
 //
 //nolint:gocognit,gocyclo // three cleanup types plus remote-merged pairing
 func (c *client) collectCleanupCandidates(
@@ -91,6 +93,10 @@ func (c *client) collectCleanupCandidates(
 		toDelete = c.appendRemoteMerged(ctx, repoPath, remote, baseBranch, currentBranch, opts, result, toDelete)
 	}
 
+	if opts.DeleteRemote && opts.IncludeSuperseded {
+		toDelete = c.appendRemoteSuperseded(ctx, repoPath, remote, baseBranch, currentBranch, opts, result, toDelete)
+	}
+
 	return toDelete
 }
 
@@ -130,7 +136,7 @@ func (c *client) appendRemoteMerged(
 		if !c.isRefAncestor(ctx, repoPath, remote+"/"+b.name, baseBranch) {
 			continue
 		}
-		info, ok := c.remoteMergedCandidate(ctx, repoPath, remote, b.name)
+		info, ok := c.remoteDeleteCandidate(ctx, repoPath, remote, b.name, "merged")
 		if !ok {
 			continue
 		}
@@ -151,7 +157,7 @@ func (c *client) appendRemoteMerged(
 		if !c.isRefAncestor(ctx, repoPath, remote+"/"+name, baseBranch) {
 			continue
 		}
-		info, ok := c.remoteMergedCandidate(ctx, repoPath, remote, name)
+		info, ok := c.remoteDeleteCandidate(ctx, repoPath, remote, name, "merged")
 		if !ok {
 			continue
 		}
@@ -159,6 +165,38 @@ func (c *client) appendRemoteMerged(
 		result.MergedCount++
 	}
 
+	return toDelete
+}
+
+// appendRemoteSuperseded adds remote-tracking bot names whose tips are not
+// ancestors of base but whose version target is already on base. Human
+// topic branches are never included: BotRemoteBranches only returns bot names.
+func (c *client) appendRemoteSuperseded(
+	ctx context.Context,
+	repoPath, remote, baseBranch, currentBranch string,
+	opts BulkCleanupOptions,
+	result *RepositoryCleanupResult,
+	toDelete []branchInfo,
+) []branchInfo {
+	repo := &Repository{Path: repoPath}
+	_, superseded, _, err := c.BotRemoteBranches(ctx, repo, baseBranch)
+	if err != nil {
+		return toDelete
+	}
+	for _, name := range superseded {
+		if c.isProtectedBranch(name, currentBranch, opts.ProtectPatterns) {
+			continue
+		}
+		if containsBranch(toDelete, name, branchLocationRemote) {
+			continue
+		}
+		info, ok := c.remoteDeleteCandidate(ctx, repoPath, remote, name, "superseded")
+		if !ok {
+			continue
+		}
+		toDelete = append(toDelete, info)
+		result.SupersededCount++
+	}
 	return toDelete
 }
 
@@ -180,7 +218,7 @@ func (c *client) executeCleanupDeletes(
 	return deleted
 }
 
-func (c *client) remoteMergedCandidate(ctx context.Context, repoPath, remote, name string) (branchInfo, bool) {
+func (c *client) remoteDeleteCandidate(ctx context.Context, repoPath, remote, name, reason string) (branchInfo, bool) {
 	if remote == "" {
 		remote = defaultRemoteName
 	}
@@ -191,7 +229,7 @@ func (c *client) remoteMergedCandidate(ctx context.Context, repoPath, remote, na
 	if sha == "" {
 		return branchInfo{}, false
 	}
-	return branchInfo{name: name, reason: "merged", location: branchLocationRemote, sha: sha}, true
+	return branchInfo{name: name, reason: reason, location: branchLocationRemote, sha: sha}, true
 }
 
 func (c *client) fullRefSHA(ctx context.Context, repoPath, ref string) string {
@@ -246,7 +284,7 @@ func recordCleanupBranches(result *RepositoryCleanupResult, branches []branchInf
 // branchInfo holds branch name, deletion reason, and where the ref lives.
 type branchInfo struct {
 	name     string
-	reason   string // "merged", "stale", "gone"
+	reason   string // "merged", "stale", "gone", "superseded"
 	location string // "local", "remote"
 	sha      string // full classified tip; required to lease a remote delete
 }

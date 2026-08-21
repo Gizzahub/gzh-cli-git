@@ -44,26 +44,26 @@ docs/.claude-context/ # Context docs
 
 ## Main Commands
 
-| Command                 | Description                                                |
-| ----------------------- | ---------------------------------------------------------- |
-| **`sync` / `s`**        | **Smart sync: auto-init + sync (most used)**               |
-| `clone`                 | Parallel clone (--url, --file, -c config)                  |
-| `status`                | Health check (fetch + divergence + recommend)              |
-| `fetch` / `pull`        | Fetch/pull all repos                                       |
-| `push`                  | Push all repos (refspec: `develop:master`)                 |
-| `commit`                | Commit all dirty repos (**ALWAYS use `--json`**)           |
-| `handoff check`         | Can I walk away? Reports work that exists only here        |
-| `handoff end`           | Commit + push all movable work (screens for secrets)       |
-| `handoff start`         | Pull --rebase + prune all repos on arrival                 |
-| `branch name`           | Build a task's branch name for this device/agent           |
-| `cleanup branch`        | Merged/stale/gone. Bots: `--bots --merged --remote`. Audit `REMOTE_BOT_BRANCH_*` via `info --audit` (Autofix false). |
-| `forge from`            | Sync from GitHub/GitLab/Gitea org                          |
-| `forge config generate` | Generate config from Forge API                             |
-| `workspace init`        | Scan directory → generate config                           |
-| `workspace sync`        | Clone/update from config (detailed preview)                |
-| `config profile`        | Profile management (create/use/list)                       |
-| `config recommended`    | Audit/apply git settings for multi-device work (`--apply`) |
-| `doctor`                | Diagnose system, config, auth, forge health                |
+| Command                 | Description                                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`sync` / `s`**        | **Smart sync: auto-init + sync (most used)**                                                                                                                      |
+| `clone`                 | Parallel clone (--url, --file, -c config)                                                                                                                         |
+| `status`                | Health check (fetch + divergence + recommend)                                                                                                                     |
+| `fetch` / `pull`        | Fetch/pull all repos                                                                                                                                              |
+| `push`                  | Push all repos (refspec: `develop:master`)                                                                                                                        |
+| `commit`                | Commit all dirty repos (**ALWAYS use `--json`**)                                                                                                                  |
+| `handoff check`         | Can I walk away? Reports work that exists only here                                                                                                               |
+| `handoff end`           | Commit + push all movable work (screens for secrets)                                                                                                              |
+| `handoff start`         | Pull --rebase + prune all repos on arrival                                                                                                                        |
+| `branch name`           | Build a task's branch name for this device/agent                                                                                                                  |
+| `cleanup branch`        | Merged/stale/gone/superseded. Bots: `--bots --merged --remote` or `--bots --superseded --remote`. Audit `REMOTE_BOT_BRANCH_*` via `info --audit` (Autofix false). |
+| `forge from`            | Sync from GitHub/GitLab/Gitea org                                                                                                                                 |
+| `forge config generate` | Generate config from Forge API                                                                                                                                    |
+| `workspace init`        | Scan directory → generate config                                                                                                                                  |
+| `workspace sync`        | Clone/update from config (detailed preview)                                                                                                                       |
+| `config profile`        | Profile management (create/use/list)                                                                                                                              |
+| `config recommended`    | Audit/apply git settings for multi-device work (`--apply`)                                                                                                        |
+| `doctor`                | Diagnose system, config, auth, forge health                                                                                                                       |
 
 ## Configuration System
 

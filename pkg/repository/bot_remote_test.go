@@ -166,9 +166,9 @@ func TestBulkCleanup_RemoteMergedDryRun(t *testing.T) {
 func TestBulkCleanup_RemoteSupersededDryRun(t *testing.T) {
 	dir := botVersionRemoteFixture(
 		t,
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.40.0"),
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.41.1"),
+		sampleGoMod("v1.32.0"),
+		sampleGoMod("v1.40.0"),
+		sampleGoMod("v1.41.1"),
 		"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0",
 	)
 	parent := filepath.Dir(dir)
@@ -360,9 +360,9 @@ func TestBulkCleanup_RemoteMergedLeaseRefusesMovedTip(t *testing.T) {
 func TestBotRemoteBranches_GoModuleSupersededWhenBaseAlreadyNewer(t *testing.T) {
 	dir := botVersionRemoteFixture(
 		t,
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.40.0"),
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.41.1"),
+		sampleGoMod("v1.32.0"),
+		sampleGoMod("v1.40.0"),
+		sampleGoMod("v1.41.1"),
 		"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.40.0",
 	)
 
@@ -384,9 +384,9 @@ func TestBotRemoteBranches_GoModuleSupersededWhenBaseAlreadyNewer(t *testing.T) 
 func TestBotRemoteBranches_GoModuleStillNewerStaysPending(t *testing.T) {
 	dir := botVersionRemoteFixture(
 		t,
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.41.1"),
-		sampleGoMod("github.com/aws/aws-sdk-go-v2", "v1.32.0"),
+		sampleGoMod("v1.32.0"),
+		sampleGoMod("v1.41.1"),
+		sampleGoMod("v1.32.0"),
 		"dependabot/go_modules/github.com/aws/aws-sdk-go-v2-1.41.1",
 	)
 
@@ -408,9 +408,9 @@ func TestBotRemoteBranches_GoModuleStillNewerStaysPending(t *testing.T) {
 func TestBotRemoteBranches_ActionsMajorTagStaysPending(t *testing.T) {
 	dir := botVersionRemoteFixture(
 		t,
-		sampleWorkflow("actions/checkout", "v4"),
-		sampleWorkflow("actions/checkout", "v7"),
-		sampleWorkflow("actions/checkout", "v4"),
+		sampleWorkflow("v4"),
+		sampleWorkflow("v7"),
+		sampleWorkflow("v4"),
 		"dependabot/github_actions/actions/checkout-7",
 	)
 
@@ -432,9 +432,9 @@ func TestBotRemoteBranches_ActionsMajorTagStaysPending(t *testing.T) {
 func TestBotRemoteBranches_ActionsBaseMajorNewerStaysPending(t *testing.T) {
 	dir := botVersionRemoteFixture(
 		t,
-		sampleWorkflow("actions/checkout", "v3"),
-		sampleWorkflow("actions/checkout", "v4"),
-		sampleWorkflow("actions/checkout", "v7"),
+		sampleWorkflow("v3"),
+		sampleWorkflow("v4"),
+		sampleWorkflow("v7"),
 		"dependabot/github_actions/actions/checkout-4",
 	)
 
@@ -463,12 +463,12 @@ func openBotRemotes(t *testing.T, dir string) (merged, superseded, pending []str
 	return client.BotRemoteBranches(context.Background(), repo, "master")
 }
 
-func sampleGoMod(module, version string) string {
-	return "module example.com/app\n\ngo 1.22\n\nrequire " + module + " " + version + "\n"
+func sampleGoMod(version string) string {
+	return "module example.com/app\n\ngo 1.22\n\nrequire github.com/aws/aws-sdk-go-v2 " + version + "\n"
 }
 
-func sampleWorkflow(action, version string) string {
-	return "name: ci\non: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + action + "@" + version + "\n"
+func sampleWorkflow(version string) string {
+	return "name: ci\non: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@" + version + "\n"
 }
 
 // botVersionRemoteFixture plants an unmerged origin bot ref. start is committed

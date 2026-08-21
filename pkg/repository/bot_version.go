@@ -226,8 +226,8 @@ func actionsTargetSuperseded(branch string, baseWorkflows []string) bool {
 				continue
 			}
 			sawPin = true
-			rel, comparable := compareActionVersion(pin.version, botVer)
-			if !comparable || rel < 0 {
+			rel, ok := compareActionVersion(pin.version, botVer)
+			if !ok || rel < 0 {
 				return false
 			}
 		}

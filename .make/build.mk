@@ -42,7 +42,7 @@ endif
 # Build Targets
 # ==============================================================================
 
-.PHONY: build install test-install install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
+.PHONY: build install test-install test-install-audit install-git-plugin run bootstrap clean release-dry-run release-snapshot release-check deploy
 
 build: ## build golang binary
 	@printf "$(CYAN)Building %s...$(RESET)\n" "$(BINARY)"
@@ -63,7 +63,14 @@ install: build ## install golang binary
 	@printf "$(CYAN)Verifying installation...$(RESET)\n"
 	@"$(INSTALL_BINDIR)$(SEP)$(BINARY)" --version
 	@echo ""
+	@printf "$(CYAN)Auditing install path...$(RESET)\n"
+	@RECLAIM="$(RECLAIM)" INSTALL_AUDIT_WARN_ONLY="$(INSTALL_AUDIT_WARN_ONLY)" \
+		"$(CURDIR)$(SEP)scripts$(SEP)install-path-audit.sh" "$(BINARY)" "$(INSTALL_BINDIR)$(SEP)$(BINARY)"
+	@echo ""
 	@printf "$(GREEN)🎉 Installation complete! Run '$(BINARY) --help' to get started.$(RESET)\n"
+
+test-install-audit: ## verify the install path audit fails when it should
+	@"$(CURDIR)$(SEP)scripts$(SEP)test-install-path-audit.sh"
 
 test-install: ## verify install uses only BINDIR without touching user directories
 	@set -eu; \

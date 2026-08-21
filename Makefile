@@ -84,6 +84,7 @@ help-build: ## show build and deployment help
 	@echo -e "  $(CYAN)build$(RESET)              Build golang binary ($(executablename))"
 	@echo -e "  $(CYAN)install$(RESET)            Install golang binary to BINDIR, GOBIN, or GOPATH/bin"
 	@echo -e "  $(CYAN)test-install$(RESET)       Verify install uses only the selected binary directory"
+	@echo -e "  $(CYAN)test-install-audit$(RESET) Verify the install path audit fails when it should"
 	@echo -e "  $(CYAN)install-git-plugin$(RESET) Install as git plugin (git forge)"
 	@echo -e "  $(CYAN)run$(RESET)                Run the application"
 	@echo -e "  $(CYAN)bootstrap$(RESET)          Install build dependencies"

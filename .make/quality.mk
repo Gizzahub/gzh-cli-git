@@ -354,7 +354,7 @@ quality-build: ## build the application in a private temporary directory
 	test -x "$$quality_tmp/$(BINARY)"
 
 quality-check: export GOWORK := off
-quality-check: format-check lint-check security-code security-deps quality-build test-unit-quality test-integration-quality test-e2e-only ## run the canonical source-non-mutating quality gate
+quality-check: format-check lint-check security-code security-deps quality-build test-install-audit test-unit-quality test-integration-quality test-e2e-only ## run the canonical source-non-mutating quality gate
 	@echo -e "$(GREEN)✅ Canonical quality gate passed!$(RESET)"
 
 quality: quality-check ## compatibility alias for the canonical quality gate

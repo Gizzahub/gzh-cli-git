@@ -31,7 +31,7 @@ Root-level docs (`README.md`, `QUICK_START.md`, `CONTRIBUTING.md`, `ARCHITECTURE
 
 - Contributing: [CONTRIBUTING.md](../CONTRIBUTING.md)
 - Architecture: [ARCHITECTURE.md](../ARCHITECTURE.md) (overview) · [10-architecture/](10-architecture/README.md) (details)
-- Specifications (design/requirements-by-feature): [specs/](../specs/)
+- Specifications (design/requirements-by-feature): [docs/specs/](specs/)
 - Release notes (unreleased): [CHANGELOG.md](../CHANGELOG.md)
 - Release notes (archived, per release line): [docs/changelog/](changelog/)
 - Homebrew distribution notes: [docs/homebrew-setup.md](homebrew-setup.md)
@@ -44,10 +44,6 @@ Root-level docs (`README.md`, `QUICK_START.md`, `CONTRIBUTING.md`, `ARCHITECTURE
 
 - Agent instructions (root): [CLAUDE.md](../CLAUDE.md) (symlinked as `AGENTS.md`)
 - Expanded context docs: [docs/.claude-context/](.claude-context/)
-
-### Archives
-
-- Deprecated / historical docs (not maintained): [docs/\_deprecated/](./_deprecated/)
 
 ## Maintenance Policy
 

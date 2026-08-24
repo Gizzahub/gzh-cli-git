@@ -31,4 +31,5 @@ This document is intentionally short. Canonical agent guidance lives in `CLAUDE.
 
 ## Archived Context
 
-- Historical v0.3.0 snapshot: `docs/_deprecated/2026-01/LLM_CONTEXT_v0.3.0_2025-12-01.md`
+- Historical v0.3.0 snapshot: removed from the tree in `4e8325b`. Read it with
+  `git show 4e8325b^:docs/_deprecated/2026-01/LLM_CONTEXT_v0.3.0_2025-12-01.md`.

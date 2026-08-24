@@ -163,8 +163,8 @@ gzh-cli-gitforge/
 │
 ├── benchmarks/              # Performance benchmarks
 ├── examples/                # Usage examples
-├── docs/                    # User documentation
-└── specs/                   # Feature specifications
+└── docs/                    # Documentation
+    └── specs/               # Feature specifications
 ```
 
 ### Key Principles
@@ -646,7 +646,7 @@ ______________________________________________________________________
 1. **Code Documentation** - GoDoc comments
 1. **User Documentation** - `docs/` directory
 1. **API Reference** - pkg.go.dev (auto-generated)
-1. **Specifications** - `specs/` directory
+1. **Specifications** - `docs/specs/` directory
 
 ### Writing Documentation
 
@@ -769,7 +769,7 @@ Follow these conventions:
 - `cmd/` - CLI application
 - `tests/` - All test suites
 - `docs/` - User documentation
-- `specs/` - Technical specifications
+- `docs/specs/` - Technical specifications
 - `examples/` - Working code examples
 
 ### Build Artifacts

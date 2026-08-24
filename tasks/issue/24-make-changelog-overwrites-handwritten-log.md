@@ -1,6 +1,6 @@
 # ISSUE: `make changelog`가 수기 `CHANGELOG.md`를 통째로 덮어쓴다
 
-- status: open
+- status: done (2026-08-24 — 후보 A 채택. `.make/dev.mk`에서 타깃 제거)
 - priority: P2
 - category: build / tooling
 - created_at: 2026-08-24T23:40:00+09:00
@@ -26,9 +26,9 @@ changelog: ## generate changelog (requires git-chglog)
 
 두 가지 우연이 막고 있을 뿐이다.
 
-| 조건 | 현재 상태 |
-| ----------------------- | -------------------------------- |
-| `git-chglog` 설치 | **미설치** → 타깃이 `exit 1`로 죽는다 |
+| 조건                     | 현재 상태                                |
+| ------------------------ | ---------------------------------------- |
+| `git-chglog` 설치        | **미설치** → 타깃이 `exit 1`로 죽는다    |
 | `.chglog/` 설정 디렉터리 | **없음** → 설치해도 config 없이 실패한다 |
 
 즉 지금은 "동작하지 않는 타깃"이다. 문제는 이 둘 다 **누군가 친절을 베풀면 사라지는
@@ -42,17 +42,16 @@ changelog: ## generate changelog (requires git-chglog)
 ## 이슈 22와의 충돌
 
 [22-changelog-exceeds-doc-size-gate](22-changelog-exceeds-doc-size-gate.md)는 과거 릴리스를
-`docs/changelog/`로 옮기고 `CHANGELOG.md`에는 인덱스만 남기는 구조를 세운다. `git-chglog -o
-CHANGELOG.md`는 그 인덱스를 **전체 이력 재생성으로 대체**한다. 두 설계는 공존할 수 없다.
+`docs/changelog/`로 옮기고 `CHANGELOG.md`에는 인덱스만 남기는 구조를 세운다. `git-chglog -o CHANGELOG.md`는 그 인덱스를 **전체 이력 재생성으로 대체**한다. 두 설계는 공존할 수 없다.
 그래서 이 이슈가 22의 선행 조건이다.
 
 ## 후보 해법
 
-| 안 | 내용 | 평가 |
-| -- | ------------------------------------------- | ------------------------------------------------- |
-| A | 타깃 삭제 | 실제 규약(수기 관리)과 일치. 가장 단순 |
-| B | `.chglog/` 설정을 추가하고 생성형으로 전환 | 서술의 가치를 버린다. 이 파일의 강점이 바로 그것 |
-| C | 출력 경로를 `CHANGELOG.generated.md`로 변경 | 파괴는 막지만 아무도 안 쓰는 산출물이 하나 더 는다 |
+| 안  | 내용                                        | 평가                                               |
+| --- | ------------------------------------------- | -------------------------------------------------- |
+| A   | 타깃 삭제                                   | 실제 규약(수기 관리)과 일치. 가장 단순             |
+| B   | `.chglog/` 설정을 추가하고 생성형으로 전환  | 서술의 가치를 버린다. 이 파일의 강점이 바로 그것   |
+| C   | 출력 경로를 `CHANGELOG.generated.md`로 변경 | 파괴는 막지만 아무도 안 쓰는 산출물이 하나 더 는다 |
 
 **권장은 A.** 근거: (1) 설정도 도구도 없이 방치돼 실제로 쓰인 적이 없고, (2) 실행되면
 파괴적이며, (3) 기계적 릴리스 목록은 이미 `.goreleaser.yaml`의 `changelog.use: github`가
@@ -61,10 +60,10 @@ GitHub Release 노트로 생성하고 있어 **기능이 중복**이다. 생성�
 
 ## Acceptance Criteria
 
-- [ ] `make changelog`가 `CHANGELOG.md`를 덮어쓸 수 없다 (타깃 제거 또는 출력 경로 변경)
-- [ ] `make help` 출력에 오해를 부르는 항목이 남지 않는다
-- [ ] 릴리스 절차 문서가 있다면 `make changelog`를 참조하지 않는다
-- [ ] 기계적 릴리스 목록의 출처가 `.goreleaser.yaml`임이 문서에 남는다
+- [x] `make changelog`가 `CHANGELOG.md`를 덮어쓸 수 없다 (타깃 제거 또는 출력 경로 변경)
+- [x] `make help` 출력에 오해를 부르는 항목이 남지 않는다
+- [x] 릴리스 절차 문서가 있다면 `make changelog`를 참조하지 않는다
+- [x] 기계적 릴리스 목록의 출처가 `.goreleaser.yaml`임이 문서에 남는다
 
 ## 범위 경계
 
@@ -76,3 +75,29 @@ GitHub Release 노트로 생성하고 있어 **기능이 중복**이다. 생성�
 - `.make/dev.mk` — `changelog` 타깃
 - `.goreleaser.yaml` — `changelog.use: github`, `release.mode: replace`
 - 선행/후속: [22-changelog-exceeds-doc-size-gate](22-changelog-exceeds-doc-size-gate.md)
+
+## Resolution (2026-08-24)
+
+후보 **A(타깃 제거)** 를 적용했다. `.make/dev.mk`의 `changelog:` 타깃과 `.PHONY` 항목을
+지우고, 같은 자리에 **왜 없는지**를 남겼다. 빈자리는 다음 사람이 "체인지로그 타깃이 없네"
+하고 되살리기 쉬운 자리라, 제거보다 이유가 오래 간다.
+
+```make
+# No changelog target on purpose. CHANGELOG.md is written by hand — each entry
+# explains why a change was made, which a generator cannot produce — and
+# `git-chglog -o CHANGELOG.md` overwrites rather than appends. The mechanical
+# per-release list already comes from .goreleaser.yaml (changelog.use: github).
+# See tasks/issue/24-make-changelog-overwrites-handwritten-log.md
+```
+
+검증:
+
+| 확인                                              | 결과                                                             |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| `make help \| grep -ci changelog`                 | `0` — 오해를 부르는 항목 없음                                    |
+| `rg 'make changelog\|git-chglog'` (`tasks/` 제외) | 참조 0건 — 문서·CI·릴리스 절차 어디에서도 쓰이지 않았다          |
+| `.goreleaser.yaml`                                | 변경 없음. `changelog.use: github`가 그대로 기계 목록을 담당한다 |
+
+제거가 안전했던 이유는 애초에 **한 번도 연결된 적이 없어서**다. `.chglog/` 설정 디렉토리가
+없고 `git-chglog`도 설치돼 있지 않아, 이 타깃은 실행되면 즉시 에러로 끝나는 상태로만
+존재했다. 즉 잃은 기능은 없고 사라진 것은 파괴 경로뿐이다.

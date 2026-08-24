@@ -90,13 +90,13 @@ deps-graph: ## show module dependency graph
 # Documentation Generation
 # ==============================================================================
 
-.PHONY: changelog docs-serve docs-build godoc docs-check
+.PHONY: docs-serve docs-build godoc docs-check
 
-changelog: ## generate changelog (requires git-chglog)
-	@command -v git-chglog >/dev/null 2>&1 || { echo -e "$(RED)git-chglog not found. Install from: https://github.com/git-chglog/git-chglog$(RESET)"; exit 1; }
-	@echo -e "$(CYAN)Generating changelog...$(RESET)"
-	@git-chglog -o CHANGELOG.md
-	@echo -e "$(GREEN)✅ Changelog generated: CHANGELOG.md$(RESET)"
+# No changelog target on purpose. CHANGELOG.md is written by hand — each entry
+# explains why a change was made, which a generator cannot produce — and
+# `git-chglog -o CHANGELOG.md` overwrites rather than appends. The mechanical
+# per-release list already comes from .goreleaser.yaml (changelog.use: github).
+# See tasks/issue/24-make-changelog-overwrites-handwritten-log.md
 
 docs-serve: ## serve documentation locally (requires mkdocs)
 	@command -v mkdocs >/dev/null 2>&1 || { echo -e "$(RED)mkdocs not found. Install with: pip install mkdocs mkdocs-material$(RESET)"; exit 1; }

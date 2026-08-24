@@ -134,7 +134,8 @@ func foreignDiagnosticLocations(output string) []string {
 		if !ok {
 			continue
 		}
-		if strings.HasPrefix(strings.TrimPrefix(filepath.ToSlash(path), "./"), "../") {
+		cleaned := filepath.Clean(path)
+		if filepath.IsAbs(path) || filepath.IsAbs(cleaned) || strings.HasPrefix(filepath.ToSlash(cleaned), "../") {
 			out = append(out, match)
 		}
 	}

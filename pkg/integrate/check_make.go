@@ -49,6 +49,7 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "MAKELEVEL=0", "MAKEFLAGS=", "LC_ALL=C")
 	if lintCache != "" {
+		cmd.Env = withoutEnv(cmd.Env, "GOLANGCI_LINT_CACHE")
 		cmd.Env = append(cmd.Env, "GOLANGCI_LINT_CACHE="+lintCache)
 	}
 	var buf bytes.Buffer
@@ -76,6 +77,17 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 		probe.MissingCD = missing
 	}
 	return probe
+}
+
+func withoutEnv(env []string, key string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env))
+	for _, item := range env {
+		if !strings.HasPrefix(item, prefix) {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func isUndefinedMakeTarget(out, target string) bool {
@@ -120,11 +132,13 @@ func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe,
 	if !probe.Defined {
 		return CheckItem{Name: name, Status: checkSkip, Detail: "undefined"}
 	}
-	if err := foreignDiagnosticError("branch", probe.Output); err != nil {
-		return CheckItem{
-			Name:   name,
-			Status: checkFail,
-			Detail: err.Error(),
+	if probe.Target == "lint" {
+		if err := foreignDiagnosticError("branch", probe.Output); err != nil {
+			return CheckItem{
+				Name:   name,
+				Status: checkFail,
+				Detail: err.Error(),
+			}
 		}
 	}
 	if probe.MissingCD != "" {
@@ -167,8 +181,10 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	defer func() { _ = g.worktreeRemoveForce(ctx, wt) }()
 
 	baseProbe := runMakeTarget(ctx, wt, probe.Target)
-	if err := foreignDiagnosticError("baseline", baseProbe.Output); err != nil {
-		return BaselineResult{}, err
+	if probe.Target == "lint" {
+		if err := foreignDiagnosticError("baseline", baseProbe.Output); err != nil {
+			return BaselineResult{}, err
+		}
 	}
 	if baseProbe.Err == nil {
 		return BaselineResult{Status: BaselineFail, Reason: fmt.Sprintf("failed here (rc=%d) but target tip passes", probe.Code)}, nil

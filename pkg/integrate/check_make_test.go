@@ -17,7 +17,8 @@ func TestRunMakeTarget_LintUsesIsolatedTemporaryCache(t *testing.T) {
 	capture := filepath.Join(dir, "lint-cache")
 	writeRepoFile(t, dir, "Makefile", "lint:\n\t@test -n \"$$GOLANGCI_LINT_CACHE\"\n\t@printf '%s' \"$$GOLANGCI_LINT_CACHE\" > \"$$CAPTURE_FILE\"\ncheck:\n\t@test -z \"$$GOLANGCI_LINT_CACHE\"\n")
 	t.Setenv("CAPTURE_FILE", capture)
-	t.Setenv("GOLANGCI_LINT_CACHE", "")
+	inheritedCache := filepath.Join(dir, "inherited-lint-cache")
+	t.Setenv("GOLANGCI_LINT_CACHE", inheritedCache)
 
 	first := runMakeTarget(context.Background(), dir, "lint")
 	if first.Err != nil {
@@ -29,6 +30,9 @@ func TestRunMakeTarget_LintUsesIsolatedTemporaryCache(t *testing.T) {
 	}
 	if _, err := os.Stat(string(firstCache)); !os.IsNotExist(err) {
 		t.Fatalf("first cache %q must be removed after lint, stat err = %v", firstCache, err)
+	}
+	if string(firstCache) == inheritedCache {
+		t.Fatalf("lint reused inherited cache %q", inheritedCache)
 	}
 
 	second := runMakeTarget(context.Background(), dir, "lint")
@@ -46,15 +50,36 @@ func TestRunMakeTarget_LintUsesIsolatedTemporaryCache(t *testing.T) {
 		t.Fatalf("second cache %q must be removed after lint, stat err = %v", secondCache, err)
 	}
 
+	t.Setenv("GOLANGCI_LINT_CACHE", "")
 	check := runMakeTarget(context.Background(), dir, "check")
 	if check.Err != nil {
 		t.Fatalf("check must not receive lint cache: %v\n%s", check.Err, check.Output)
 	}
 }
 
+func TestRunMakeTarget_LintCleansCacheAfterFailure(t *testing.T) {
+	dir := t.TempDir()
+	capture := filepath.Join(dir, "lint-cache")
+	writeRepoFile(t, dir, "Makefile", "lint:\n\t@printf '%s' \"$$GOLANGCI_LINT_CACHE\" > \"$$CAPTURE_FILE\"\n\t@false\n")
+	t.Setenv("CAPTURE_FILE", capture)
+
+	probe := runMakeTarget(context.Background(), dir, "lint")
+	if probe.Err == nil {
+		t.Fatal("failing lint must return an error")
+	}
+	cache, err := os.ReadFile(capture)
+	if err != nil {
+		t.Fatalf("read lint cache: %v", err)
+	}
+	if _, err := os.Stat(string(cache)); !os.IsNotExist(err) {
+		t.Fatalf("failed lint cache %q must be removed, stat err = %v", cache, err)
+	}
+}
+
 func TestForeignDiagnosticLocations(t *testing.T) {
-	got := foreignDiagnosticLocations("../old-worktree/pkg/check.go:12: stale\n./local/file.go:3: allowed\nlocal/other.go:4: allowed\n")
-	if len(got) != 1 || got[0] != "../old-worktree/pkg/check.go:12" {
+	got := foreignDiagnosticLocations("../old-worktree/pkg/check.go:12: stale\n./local/file.go:3: allowed\nlocal/other.go:4: allowed\nsubdir/../../outside.go:8: stale\n././../other-outside.go:9: stale\n/absolute/path.go:10: stale\n")
+	want := []string{"../old-worktree/pkg/check.go:12", "././../other-outside.go:9", "/absolute/path.go:10", "subdir/../../outside.go:8"}
+	if !bytes.Equal([]byte(strings.Join(got, "\n")), []byte(strings.Join(want, "\n"))) {
 		t.Fatalf("foreign locations = %v", got)
 	}
 
@@ -72,6 +97,17 @@ func TestJudgeMake_ForeignBranchDiagnosticFailsDespiteSuccessfulExit(t *testing.
 	}, false)
 	if item.Status != checkFail || !strings.Contains(item.Detail, "branch diagnostics reference paths outside the repository") {
 		t.Fatalf("successful branch probe with foreign diagnostic = %+v", item)
+	}
+}
+
+func TestJudgeMake_CheckAllowsForeignDiagnosticOutput(t *testing.T) {
+	item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+		Target:  "check",
+		Defined: true,
+		Output:  "../other-worktree/pkg/check.go:12: diagnostic\n",
+	}, false)
+	if item.Status != checkPass {
+		t.Fatalf("check output must preserve existing behavior, got %+v", item)
 	}
 }
 

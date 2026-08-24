@@ -197,10 +197,10 @@ func displayUpdateResults(result *repository.BulkUpdateResult) {
 		})
 	}
 
-	issueStatuses := issueStatusSet("error", "dirty", "conflict", "base-blocked", "base-synced")
+	issueStatuses := issueStatusSet("error", "dirty", "conflict", "base-blocked", "base-failed", "base-synced")
 	if updateFlags.Format != "compact" {
 		issueStatuses = issueStatusSet(
-			"error", "dirty", "conflict", "base-blocked", "base-synced", "no-remote", "no-upstream",
+			"error", "dirty", "conflict", "base-blocked", "base-failed", "base-synced", "no-remote", "no-upstream",
 			"auth-required", "rebase-in-progress", "merge-in-progress",
 		)
 	}
@@ -260,7 +260,7 @@ func formatUpdateStatus(row BulkRenderRow) string {
 			return "skipped (dirty)"
 		}
 		return "skipped"
-	case "base-synced", "base-blocked":
+	case "base-synced", "base-blocked", "base-failed":
 		// The note names the ref and the distance, which is the whole point of
 		// the row. Fall back only if it is somehow empty, so the row is never
 		// blank about why it was shown.
@@ -344,6 +344,15 @@ func baseSyncNote(sync *repository.BaseSyncResult) string {
 		return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
 	case repository.BaseSyncBlocked:
 		return fmt.Sprintf("base %s blocked: %s", sync.Base, sync.Reason)
+	case repository.BaseSyncFailed:
+		// No "base %s" prefix: a sync that failed this early usually never
+		// resolved a base, and printing "base  sync failed" with a hole where
+		// the name goes is how the empty-repository row read before this
+		// existed.
+		if sync.Base == "" {
+			return fmt.Sprintf("base sync failed: %s", sync.Reason)
+		}
+		return fmt.Sprintf("base %s sync failed: %s", sync.Base, sync.Reason)
 	case repository.BaseSyncUpToDate, repository.BaseSyncSkipped:
 		// Silent by design. A run over thirty repositories where twenty-eight
 		// bases are already current should not print twenty-eight rows saying

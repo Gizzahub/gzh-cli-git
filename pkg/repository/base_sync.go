@@ -47,6 +47,15 @@ const (
 	// failure of the update.
 	BaseSyncBlocked BaseSyncAction = "blocked"
 
+	// BaseSyncFailed means the sync could not reach a decision at all — a git
+	// command failed, the repository is unreadable. It is deliberately not
+	// BaseSyncBlocked. Blocked is a verdict the policy reached on evidence and
+	// carries an instruction to the user ("push these commits, then run
+	// again"); failed carries none, because nothing was judged. Folding the two
+	// together puts rows nobody can act on into the one list whose entire value
+	// is that every row needs action.
+	BaseSyncFailed BaseSyncAction = "failed"
+
 	// BaseSyncCreated means no local base ref existed and one was created from
 	// the remote. Only reachable with BaseSyncOptions.CreateMissing: a
 	// repository deliberately kept without a local trunk is a legitimate
@@ -185,6 +194,15 @@ func (c *client) SyncBase(ctx context.Context, repoPath string, opts BaseSyncOpt
 
 	current, err := c.executor.RunOutput(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
+		// A repository with no commits has an unborn HEAD, which this call
+		// cannot resolve. That is not a failure worth reporting: such a
+		// repository has no base ref to sync and cannot have one until
+		// something is committed. Probed only on the error path, so the 113
+		// repositories that do have commits pay nothing for it.
+		if !c.hasCommits(ctx, repoPath) {
+			out.Reason = "repository has no commits"
+			return out, nil
+		}
 		return out, fmt.Errorf("failed to read current branch: %w", err)
 	}
 	current = strings.TrimSpace(current)
@@ -262,6 +280,17 @@ func (c *client) branchWorktree(ctx context.Context, repoPath, branch string) st
 	}
 
 	return ""
+}
+
+// hasCommits reports whether HEAD resolves to a commit.
+//
+// The question is "does this repository have any history", not "is HEAD
+// valid": a freshly initialized or freshly cloned-empty repository has a
+// perfectly well-formed HEAD pointing at a branch that does not exist yet, and
+// every command that wants a commit fails on it.
+func (c *client) hasCommits(ctx context.Context, repoPath string) bool {
+	result, err := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", "--quiet", "HEAD")
+	return err == nil && result.ExitCode == 0
 }
 
 // syncResolvedBase is the half of SyncBase that runs once a base branch is

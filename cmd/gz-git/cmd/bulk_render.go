@@ -18,13 +18,13 @@ type BulkRenderRow struct {
 	// own; a command surfaces it through its own FormatStatus. It exists because
 	// Message reaches JSON output only, so a text-mode finding needs somewhere
 	// to live that does not change what every other bulk command prints.
-	Note string
-	Err  error
-	Duration                              time.Duration
-	CommitsAhead, CommitsBehind           int
-	PushedCommits                         int
-	UncommittedFiles, UntrackedFiles      int
-	Stashed, HasUncommittedChanges        bool
+	Note                             string
+	Err                              error
+	Duration                         time.Duration
+	CommitsAhead, CommitsBehind      int
+	PushedCommits                    int
+	UncommittedFiles, UntrackedFiles int
+	Stashed, HasUncommittedChanges   bool
 }
 
 // BulkRenderInput is the aggregate bulk result view for rendering.

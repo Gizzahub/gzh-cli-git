@@ -588,3 +588,45 @@ func refPresent(t *testing.T, dir, ref string) bool {
 	t.Helper()
 	return exec.CommandContext(t.Context(), "git", "-C", dir, "rev-parse", "--verify", "--quiet", ref).Run() == nil
 }
+
+// TestSyncBase_EmptyRepositoryIsSkippedNotBlocked pins the case the real run
+// exposed: a clone of an empty remote has no commits, so there is no base ref
+// to sync and nothing a person can do about it.
+//
+// Before this guard, `rev-parse --abbrev-ref HEAD` failed on the unborn HEAD,
+// the error was absorbed into the blocked verdict, and the run reported one
+// repository as needing attention with a note that had a hole where the base
+// name belonged. Skipped is the right verdict because the operation is not
+// applicable here, not because it went wrong.
+func TestSyncBase_EmptyRepositoryIsSkippedNotBlocked(t *testing.T) {
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	runGit(t, root, "init", "--bare", "--initial-branch=master", origin)
+
+	work := filepath.Join(root, "work")
+	runGit(t, root, "clone", origin, work)
+
+	// The fixture only means anything while HEAD really is unborn: a well-formed
+	// symbolic ref pointing at a branch that does not exist yet.
+	if refPresent(t, work, "HEAD") {
+		t.Fatal("fixture has commits: HEAD is not unborn")
+	}
+
+	client := NewClient()
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Fetch: true, DryRun: false,
+	})
+	if err != nil {
+		t.Fatalf("SyncBase: %v", err)
+	}
+
+	// Asserting Skipped also asserts it is not Blocked and not Failed, which is
+	// the entire point: the blocked list is a list of repositories a person must
+	// act on, and this is not one of them.
+	if got.Action != BaseSyncSkipped {
+		t.Errorf("Action = %q (%s), want %q", got.Action, got.Reason, BaseSyncSkipped)
+	}
+	if !strings.Contains(got.Reason, "no commits") {
+		t.Errorf("Reason = %q, want it to say the repository has no commits", got.Reason)
+	}
+}

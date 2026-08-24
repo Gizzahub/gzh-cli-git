@@ -59,6 +59,14 @@ const (
 	// needs to look at, and a row that renders as "up-to-date" is not looked at.
 	StatusBaseBlocked = "base-blocked"
 
+	// StatusBaseFailed indicates the base sync could not run to a decision, as
+	// opposed to reaching one the user must act on. It is separate from
+	// StatusBaseBlocked so the blocked list stays a list of repositories that
+	// need a person: a row saying "git failed here" is real, but nobody clears
+	// it by pushing commits, and counting it alongside the ones they can clear
+	// makes the count lie about how much work is outstanding.
+	StatusBaseFailed = "base-failed"
+
 	// StatusBaseSynced indicates a local base ref was advanced to its remote.
 	// Moving a ref is a write to the user's repository, and a write reported as
 	// "up-to-date" is a write the user never sees. This status exists so the row

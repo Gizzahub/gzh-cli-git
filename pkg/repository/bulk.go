@@ -1164,7 +1164,12 @@ func (c *client) applyBaseSync(ctx context.Context, repoPath string, opts BulkUp
 		CreateMissing: opts.CreateMissingBase,
 	})
 	if err != nil {
-		baseSync.Action = BaseSyncBlocked
+		// Failed, not Blocked. Absorbing the error is still right — a base-ref
+		// problem must not downgrade a pull the user actually asked for — but
+		// the value it is absorbed into has to be one the user can read
+		// correctly, and "blocked" tells them to go push commits that do not
+		// exist.
+		baseSync.Action = BaseSyncFailed
 		baseSync.Reason = err.Error()
 		logger.Debug("base sync failed", "path", result.RelativePath, "error", err)
 	}
@@ -1191,6 +1196,13 @@ func (c *client) applyBaseSync(ctx context.Context, repoPath string, opts BulkUp
 		// would hide the more urgent of the two.
 		if isBenignUpdateStatus(result.Status) {
 			result.Status = StatusBaseBlocked
+		}
+	case BaseSyncFailed:
+		// Promoted on the same terms, and still shown: a base sync that could
+		// not run is worth a row. It just is not worth a row in the list of
+		// things the user can fix by pushing.
+		if isBenignUpdateStatus(result.Status) {
+			result.Status = StatusBaseFailed
 		}
 	case BaseSyncUpToDate, BaseSyncSkipped:
 	}

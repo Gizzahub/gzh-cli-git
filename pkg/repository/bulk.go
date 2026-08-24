@@ -1863,21 +1863,56 @@ func (c *client) populatePullDirtyStatus(ctx context.Context, repo *Repository, 
 	result.UntrackedFiles = len(status.UntrackedFiles)
 }
 
+// gitStderrSummary collapses a git command's stderr into a single line.
+//
+// Git writes multi-line diagnostics — a rejected push emits "ERROR: Permission
+// to org/repo.git denied to user.", then "fatal: Could not read from remote
+// repository.", then a hint paragraph. The bulk result table prints one
+// "    Error: ..." line per repository and does not indent continuations, so a
+// raw dump breaks the alignment that makes a 100-repository summary readable.
+// Blank lines are dropped and the rest joined, which keeps every line's content
+// while spending a single row. Nothing is truncated: git puts the actionable
+// part last as often as first, so a length cap would be a coin flip.
+func gitStderrSummary(stderr string) string {
+	var lines []string
+	for _, line := range strings.Split(stderr, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			lines = append(lines, trimmed)
+		}
+	}
+	return strings.Join(lines, " ")
+}
+
+// buildGitCommandError constructs an informative error from a failed git
+// command. It prefers stderr, which carries git's own diagnosis, over the
+// exec.ExitError, which only restates the exit code the message already has.
+// op names the git subcommand so every caller reports failures the same way.
+func buildGitCommandError(op string, execErr error, exitCode int, stderr string, cmdErr error) error {
+	if execErr != nil {
+		return execErr
+	}
+	if summary := gitStderrSummary(stderr); summary != "" {
+		return fmt.Errorf("%s exited with code %d: %s", op, exitCode, summary)
+	}
+	if cmdErr != nil {
+		return fmt.Errorf("%s exited with code %d: %w", op, exitCode, cmdErr)
+	}
+	return fmt.Errorf("%s exited with code %d", op, exitCode)
+}
+
 // buildPullError constructs an informative error from a failed pull command.
 // Includes stderr content when available to help diagnose issues like
 // "cannot pull with rebase: You have unstaged changes" (exit code 128).
 func buildPullError(execErr error, exitCode int, stderr string, cmdErr error) error {
-	if execErr != nil {
-		return execErr
-	}
-	stderrTrimmed := strings.TrimSpace(stderr)
-	if stderrTrimmed != "" {
-		return fmt.Errorf("pull exited with code %d: %s", exitCode, stderrTrimmed)
-	}
-	if cmdErr != nil {
-		return fmt.Errorf("pull exited with code %d: %w", exitCode, cmdErr)
-	}
-	return fmt.Errorf("pull exited with code %d", exitCode)
+	return buildGitCommandError("pull", execErr, exitCode, stderr, cmdErr)
+}
+
+// buildPushError constructs an informative error from a failed push command.
+// Includes stderr content when available to help diagnose issues like
+// "Permission to org/repo.git denied" or a non-fast-forward rejection, both of
+// which exit 128 with nothing but "exit status 128" in the command error.
+func buildPushError(execErr error, exitCode int, stderr string, cmdErr error) error {
+	return buildGitCommandError("push", execErr, exitCode, stderr, cmdErr)
 }
 
 // calculatePullSummary creates a summary of pull results by status.
@@ -2419,7 +2454,7 @@ func (c *client) pushToRemote(ctx context.Context, repoPath, remote, branch stri
 		if isAuthenticationError(pushResult.Stderr) {
 			return ErrAuthRequired
 		}
-		return fmt.Errorf("push exited with code %d: %w", pushResult.ExitCode, pushResult.Error)
+		return buildPushError(nil, pushResult.ExitCode, pushResult.Stderr, pushResult.Error)
 	}
 
 	return nil

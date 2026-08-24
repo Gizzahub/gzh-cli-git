@@ -1131,3 +1131,86 @@ func TestBulkPush_RefspecInvalidFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPushError(t *testing.T) {
+	t.Run("returns execErr when non-nil", func(t *testing.T) {
+		execErr := errors.New("process start failed")
+		got := buildPushError(execErr, 128, "some stderr", nil)
+		if !errors.Is(got, execErr) {
+			t.Errorf("expected execErr returned directly, got %v", got)
+		}
+	})
+
+	// Regression: a rejected push exits 128 with the reason only in stderr,
+	// while the command error is a bare "exit status 128". Reporting the
+	// command error alone produced "push exited with code 128: exit status
+	// 128", which restates the code and drops git's diagnosis entirely.
+	t.Run("prefers stderr over the bare exit status", func(t *testing.T) {
+		stderr := "ERROR: Permission to iheanyi/tasuku.git denied to archmagece.\n" +
+			"fatal: Could not read from remote repository.\n"
+		got := buildPushError(nil, 128, stderr, errors.New("exit status 128"))
+		if strings.Contains(got.Error(), "exit status 128") {
+			t.Errorf("bare exit status should not survive when stderr explains the failure, got %q", got.Error())
+		}
+		if !strings.Contains(got.Error(), "Permission to iheanyi/tasuku.git denied") {
+			t.Errorf("expected git's diagnosis in message, got %q", got.Error())
+		}
+	})
+
+	t.Run("collapses multi-line stderr onto one line", func(t *testing.T) {
+		stderr := "ERROR: Permission denied.\nfatal: Could not read from remote repository.\n"
+		got := buildPushError(nil, 128, stderr, nil)
+		if strings.Contains(got.Error(), "\n") {
+			t.Errorf("bulk output prints one line per repo, got %q", got.Error())
+		}
+		want := "push exited with code 128: ERROR: Permission denied. fatal: Could not read from remote repository."
+		if got.Error() != want {
+			t.Errorf("expected %q, got %q", want, got.Error())
+		}
+	})
+
+	t.Run("falls back to cmdErr when stderr empty", func(t *testing.T) {
+		cmdErr := errors.New("exit status 1")
+		got := buildPushError(nil, 1, "", cmdErr)
+		if !errors.Is(got, cmdErr) {
+			t.Errorf("expected cmdErr wrapped, got %v", got)
+		}
+		if !strings.Contains(got.Error(), "code 1") {
+			t.Errorf("expected exit code in message, got %q", got.Error())
+		}
+	})
+
+	t.Run("returns exit code only when nothing else available", func(t *testing.T) {
+		got := buildPushError(nil, 128, "", nil)
+		want := "push exited with code 128"
+		if got.Error() != want {
+			t.Errorf("expected %q, got %q", want, got.Error())
+		}
+	})
+}
+
+func TestGitStderrSummary(t *testing.T) {
+	tests := []struct {
+		name   string
+		stderr string
+		want   string
+	}{
+		{"empty", "", ""},
+		{"whitespace only", "  \n\t\n  ", ""},
+		{"single line trimmed", "  fatal: no upstream  \n", "fatal: no upstream"},
+		{
+			"blank lines dropped",
+			"ERROR: denied.\n\nfatal: could not read.\n\nPlease check access.\n",
+			"ERROR: denied. fatal: could not read. Please check access.",
+		},
+		{"carriage returns trimmed", "remote: rejected\r\nfatal: failed\r\n", "remote: rejected fatal: failed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gitStderrSummary(tt.stderr); got != tt.want {
+				t.Errorf("gitStderrSummary(%q) = %q, want %q", tt.stderr, got, tt.want)
+			}
+		})
+	}
+}

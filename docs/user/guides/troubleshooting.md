@@ -99,6 +99,27 @@ gz-git pull -d3; echo "EXIT=$?"
 `--dry-run` reports the same scan without touching anything, which is the
 cheapest way to confirm the command is finding your repositories at all.
 
+## `integrate check` reports a lint baseline that is not there
+
+The lint gate can report hundreds of issues under a directory that no longer
+exists — typically the worktree a previous `integrate run` just reclaimed:
+
+```text
+../../../worktrees/.../claude__mst__fix__push-stderr/pkg/repository/bulk_switch.go:318:92: ...
+237 issues:
+```
+
+golangci-lint caches analysis results keyed by absolute path, and the cache
+outlives the directory. The next branch's gate then reads a clean tree as a
+"baseline failure, non-worsening" warning. Clear the cache and re-run:
+
+```bash
+golangci-lint cache clean && GOWORK=off make lint
+```
+
+`GOWORK=off` matters inside a worktree: the tracked `go.work` names sibling
+modules by relative path, and those do not resolve from a worktree checkout.
+
 ## See also
 
 - [FAQ](faq.md) — what `gz-git` is and how it differs from `git`

@@ -9,6 +9,7 @@ Root-level docs (`README.md`, `QUICK_START.md`, `CONTRIBUTING.md`, `ARCHITECTURE
 - 5-minute quick start (Korean): [QUICK_START.md](../QUICK_START.md)
 - Command reference (curated): [docs/commands/README.md](commands/README.md)
 - FAQ: [docs/user/guides/faq.md](user/guides/faq.md)
+- Troubleshooting (symptom-first): [docs/user/guides/troubleshooting.md](user/guides/troubleshooting.md)
 - Go library usage: [docs/user/getting-started/library-usage.md](user/getting-started/library-usage.md)
 
 ## Documentation Map

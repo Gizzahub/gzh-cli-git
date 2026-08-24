@@ -236,8 +236,12 @@ func getBulkStatusIcon(status string, changesCount int) string {
 	case "would-fetch", "would-pull", "would-push", "would-update", "would-clean":
 		return "→"
 
+	// Base-ref repair states
+	case "base-synced":
+		return "✓"
+
 	// Warning states
-	case "no-remote", "no-upstream":
+	case "no-remote", "no-upstream", "base-blocked":
 		return "⚠"
 
 	// Authentication required

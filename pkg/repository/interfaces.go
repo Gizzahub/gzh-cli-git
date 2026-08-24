@@ -134,6 +134,14 @@ type Client interface {
 	// without the remote prefix. Skips origin/HEAD and IsProtected names.
 	// Empty base returns nil, nil, nil, nil.
 	BotRemoteBranches(ctx context.Context, repo *Repository, base string) (merged, superseded, pending []string, err error)
+
+	// SyncBase fast-forwards a repository's local base ref to its
+	// remote-tracking counterpart without checking it out. `git fetch` updates
+	// refs/remotes/* and `git pull` updates only the checked-out branch, so a
+	// base branch nobody checks out is updated by neither and drifts silently.
+	// candidates is the same ordered list ResolveBase takes, so the branch this
+	// repairs is the branch `info` reports on. See BaseSyncResult.
+	SyncBase(ctx context.Context, repoPath, remote string, candidates []string, fetch, dryRun bool) (BaseSyncResult, error)
 }
 
 // Logger provides a logging interface for library consumers.

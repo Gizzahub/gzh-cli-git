@@ -52,6 +52,20 @@ const (
 	// StatusNoUpstream indicates no upstream branch is configured.
 	StatusNoUpstream = "no-upstream"
 
+	// StatusBaseBlocked indicates the repository's own branch updated cleanly
+	// but its local base ref diverged from the remote and was left untouched.
+	// It is a distinct status rather than a note on a success because a base ref
+	// holding commits the remote has never seen is exactly the state a user
+	// needs to look at, and a row that renders as "up-to-date" is not looked at.
+	StatusBaseBlocked = "base-blocked"
+
+	// StatusBaseSynced indicates a local base ref was advanced to its remote.
+	// Moving a ref is a write to the user's repository, and a write reported as
+	// "up-to-date" is a write the user never sees. This status exists so the row
+	// survives the renderer's issue filter and can say which ref moved and by how
+	// much, rather than repairing refs invisibly.
+	StatusBaseSynced = "base-synced"
+
 	// StatusWouldUpdate indicates the operation would update (dry-run mode).
 	StatusWouldUpdate = "would-update"
 
@@ -119,7 +133,7 @@ func IsSuccessStatus(status string) bool {
 		StatusFetched, StatusPulled, StatusPushed,
 		StatusCloned, StatusRebased, StatusReset,
 		StatusSwitched, StatusAlreadyOnBranch, StatusBranchCreated,
-		StatusCleaned, StatusNothingToClean:
+		StatusCleaned, StatusNothingToClean, StatusBaseSynced:
 		return true
 	default:
 		return false

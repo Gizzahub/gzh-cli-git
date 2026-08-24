@@ -14,7 +14,12 @@ import (
 // BulkRenderRow is the normalized per-repo view used by the shared bulk renderer.
 type BulkRenderRow struct {
 	Path, Branch, Status, Message, Remote string
-	Err                                   error
+	// Note is a command-specific detail the shared renderer never prints on its
+	// own; a command surfaces it through its own FormatStatus. It exists because
+	// Message reaches JSON output only, so a text-mode finding needs somewhere
+	// to live that does not change what every other bulk command prints.
+	Note string
+	Err  error
 	Duration                              time.Duration
 	CommitsAhead, CommitsBehind           int
 	PushedCommits                         int

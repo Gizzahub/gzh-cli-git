@@ -1,0 +1,128 @@
+// Copyright (c) 2025 Gizzahub
+// SPDX-License-Identifier: MIT
+
+package cmd
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
+)
+
+func TestBaseSyncNote(t *testing.T) {
+	tests := []struct {
+		name string
+		sync *repository.BaseSyncResult
+		want string
+	}{
+		{
+			// nil means --sync-base was never asked for. Printing "up to date"
+			// here would answer a question nobody posed.
+			name: "flag off",
+			sync: nil,
+			want: "",
+		},
+		{
+			name: "fast-forward",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Action: repository.BaseSyncFastForward, Advanced: 1275,
+			},
+			want: "base master +1275",
+		},
+		{
+			name: "adopted is marked, not silently equated to a fast-forward",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Action: repository.BaseSyncAdopted, Advanced: 3,
+			},
+			want: "base master +3 (adopted)",
+		},
+		{
+			name: "blocked carries the reason",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Action: repository.BaseSyncBlocked, Reason: "2 local commit(s)",
+			},
+			want: "base master blocked: 2 local commit(s)",
+		},
+		{
+			name: "up-to-date is silent",
+			sync: &repository.BaseSyncResult{Base: "master", Action: repository.BaseSyncUpToDate},
+			want: "",
+		},
+		{
+			name: "skipped is silent",
+			sync: &repository.BaseSyncResult{Base: "master", Action: repository.BaseSyncSkipped},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := baseSyncNote(tt.sync); got != tt.want {
+				t.Errorf("baseSyncNote() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestUpdateRendersMovedBaseRef pins the reason base-synced is its own status.
+//
+// A base sync writes to the user's repository. Before this status existed the
+// pull verdict stayed "up-to-date", the row fell outside the issue filter, and
+// a run that advanced a local ref by a thousand commits printed nothing at all
+// about the one repository it changed.
+func TestUpdateRendersMovedBaseRef(t *testing.T) {
+	in := BulkRenderInput{
+		TotalScanned:   2,
+		TotalProcessed: 2,
+		Duration:       1400 * time.Millisecond,
+		Summary:        map[string]int{"up-to-date": 1, "base-synced": 1},
+		Rows: []BulkRenderRow{
+			{Path: "quiet-repo", Branch: "develop", Status: "up-to-date"},
+			{
+				Path: "repaired-repo", Branch: "develop",
+				Status: repository.StatusBaseSynced, Note: "base master +1275",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	RenderBulkResults(&buf, BulkRenderConfig{
+		Verb:          "Updated",
+		Format:        "compact",
+		IssueStatuses: issueStatusSet("error", "dirty", "conflict", "base-blocked", "base-synced"),
+		FormatStatus:  formatUpdateStatus,
+		ChangesCount:  func(row BulkRenderRow) int { return row.CommitsBehind },
+	}, in)
+
+	out := buf.String()
+	if !strings.Contains(out, "repaired-repo") {
+		t.Errorf("the repository whose ref moved is missing from the output:\n%s", out)
+	}
+	if !strings.Contains(out, "base master +1275") {
+		t.Errorf("output does not say which ref moved or how far:\n%s", out)
+	}
+	// The census stays suppressed: only the exception earns a line.
+	if strings.Contains(out, "quiet-repo") {
+		t.Errorf("an untouched repository should not be listed:\n%s", out)
+	}
+}
+
+func TestFormatUpdateStatusBaseRows(t *testing.T) {
+	blocked := BulkRenderRow{
+		Status: repository.StatusBaseBlocked,
+		Note:   "base master blocked: 2 local commit(s)",
+	}
+	if got := formatUpdateStatus(blocked); got != blocked.Note {
+		t.Errorf("formatUpdateStatus(blocked) = %q, want the note %q", got, blocked.Note)
+	}
+
+	// A row shown without a note would be a row with no stated reason for being
+	// shown, so the fallback still names the finding.
+	noteless := BulkRenderRow{Status: repository.StatusBaseBlocked}
+	if got := formatUpdateStatus(noteless); got == "" {
+		t.Error("a base-blocked row rendered as an empty status")
+	}
+}

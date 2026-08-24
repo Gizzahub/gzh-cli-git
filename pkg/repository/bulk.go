@@ -635,6 +635,17 @@ type BulkUpdateOptions struct {
 
 	// ProgressCallback is called for each processed repository
 	ProgressCallback func(current, total int, repo string)
+
+	// SyncBase additionally fast-forwards each repository's local base ref to
+	// its remote-tracking counterpart, even when the base is not checked out.
+	// Off by default: it writes to a ref the user did not ask about.
+	SyncBase bool
+
+	// BaseCandidates is the ordered integration-branch list handed to
+	// ResolveBase, normally EffectiveConfig.Branch.DefaultBranch. Empty lets
+	// ResolveBase fall back to its own heuristic rather than this option
+	// inventing an order.
+	BaseCandidates []string
 }
 
 // BulkUpdateResult contains the results of a bulk update operation.
@@ -698,6 +709,11 @@ type RepositoryUpdateResult struct {
 
 	// HasUncommittedChanges indicates if there are local changes
 	HasUncommittedChanges bool
+
+	// BaseSync reports what happened to the local base ref, or nil when
+	// BulkUpdateOptions.SyncBase was off. Nil and "nothing to do" are different
+	// answers and the renderer needs to tell them apart.
+	BaseSync *BaseSyncResult
 }
 
 // GetStatus returns the status for summary calculation.
@@ -1110,6 +1126,71 @@ func (c *client) processRepositories(ctx context.Context, rootDir string, repos 
 
 // processRepository processes a single repository.
 func (c *client) processRepository(ctx context.Context, rootDir, repoPath string, opts BulkUpdateOptions, logger Logger) RepositoryUpdateResult {
+	result := c.pullRepository(ctx, rootDir, repoPath, opts, logger)
+
+	// Deliberately outside pullRepository's early returns. Those exits — dirty
+	// tree, already current, no upstream — describe the checked-out branch, and
+	// none of them says anything about a base ref that nothing is checked out
+	// on. Skipping the base sync there would skip it in precisely the
+	// repositories where the base has drifted furthest.
+	if opts.SyncBase {
+		c.applyBaseSync(ctx, repoPath, opts, &result, logger)
+	}
+
+	return result
+}
+
+// applyBaseSync runs SyncBase and folds its outcome into an already-computed
+// update result. A base-sync failure never downgrades a successful pull: the
+// pull is what the user asked for, and the base ref is a repair we offered.
+func (c *client) applyBaseSync(ctx context.Context, repoPath string, opts BulkUpdateOptions, result *RepositoryUpdateResult, logger Logger) {
+	remote := result.Remote
+	if remote == "" {
+		remote = defaultRemoteName
+	}
+
+	baseSync, err := c.SyncBase(ctx, repoPath, remote, opts.BaseCandidates, !opts.NoFetch, opts.DryRun)
+	if err != nil {
+		baseSync.Action = BaseSyncBlocked
+		baseSync.Reason = err.Error()
+		logger.Debug("base sync failed", "path", result.RelativePath, "error", err)
+	}
+	result.BaseSync = &baseSync
+
+	switch baseSync.Action {
+	case BaseSyncFastForward, BaseSyncAdopted:
+		logger.Info("base ref advanced",
+			"path", result.RelativePath, "base", baseSync.Base, "commits", baseSync.Advanced)
+		// A moved ref has to reach the user. Left as "up-to-date" the row is
+		// filtered out of the default output entirely, so the one repository
+		// this run actually changed is the one it says nothing about.
+		if baseSync.Advanced > 0 && isBenignUpdateStatus(result.Status) {
+			result.Status = StatusBaseSynced
+		}
+	case BaseSyncBlocked:
+		// Only promote the row when the pull itself found nothing worth
+		// reporting. Overwriting a real conflict or error with "base-blocked"
+		// would hide the more urgent of the two.
+		if isBenignUpdateStatus(result.Status) {
+			result.Status = StatusBaseBlocked
+		}
+	case BaseSyncUpToDate, BaseSyncSkipped:
+	}
+}
+
+// isBenignUpdateStatus reports whether a status means "nothing here needs the
+// user's attention", and is therefore safe to replace with a base-ref finding.
+func isBenignUpdateStatus(status string) bool {
+	switch status {
+	case StatusSuccess, StatusUpToDate, StatusPulled, StatusUpdated:
+		return true
+	default:
+		return false
+	}
+}
+
+// pullRepository updates a single repository's checked-out branch.
+func (c *client) pullRepository(ctx context.Context, rootDir, repoPath string, opts BulkUpdateOptions, logger Logger) RepositoryUpdateResult {
 	startTime := time.Now()
 
 	result := RepositoryUpdateResult{

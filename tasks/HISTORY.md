@@ -4,6 +4,30 @@
 
 ______________________________________________________________________
 
+## 완료 (2026-08-24)
+
+| #   | 태스크                                                                                                     | 우선순위 | 요지                                                                                                                                        |
+| --- | ---------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 23  | [golangci-cache-reports-removed-worktree-paths](issue/23-golangci-cache-reports-removed-worktree-paths.md) | P2       | 파일링 시점에 이미 해결돼 있었다 — `e7f631f`가 lint 타깃에 per-run `GOLANGCI_LINT_CACHE`를 주고 `052325e`가 저장소 밖 진단을 실패로 승격 ✅ |
+| 22  | [changelog-exceeds-doc-size-gate](issue/22-changelog-exceeds-doc-size-gate.md)                             | P1       | 과거 릴리스를 `docs/changelog/{0.7,0.6,0.4,0.3,0.2,0.1}.md`로 분할하고 71커밋 백로그를 `[Unreleased]`에 주제별로 기록 ✅                    |
+| 24  | [make-changelog-overwrites-handwritten-log](issue/24-make-changelog-overwrites-handwritten-log.md)         | P2       | `.make/dev.mk`의 `changelog:` 타깃 제거 — `git-chglog -o CHANGELOG.md`는 추가가 아니라 덮어쓰기였다 ✅                                      |
+
+검증·범위 메모: 유령 237건이 계속 보인 이유는 캐시가 아니라 **설치 바이너리 지연**이었다.
+`integrate check`는 소스 트리가 아니라 `~/go/bin/gz-git`이 실행하므로, 게이트 수정은
+`make install` 뒤에야 판정에 반영된다. 같은 날 23:02 설치 이후 실행부터 `PASS make lint — ok`.
+사람이 직접 실행하는 `make lint`는 여전히 전역 캐시를 쓰므로
+`docs/user/guides/troubleshooting.md`의 `golangci-lint cache clean` 안내는 계속 유효하다.
+
+이슈 22 범위 메모: 본문은 요약·삭제 없이 위치만 옮겼다. 백로그는 실측 71건(이슈 본문에는
+68건으로 적혀 있었다)이며 각 diff가 아니라 커밋 이력에서 역구성한 것이라 파일 안에 그 사실을
+주석으로 남겼다. 분할만으로도 원래 기준(46080B / prose 500줄)을 만족하지만 여유가 2줄뿐이라
+`<!-- size-limit: 700 -->`로 예산을 선언했다 — 이 마커는 prose가 아니라 전체 줄로 세며,
+100으로 낮춰 exit 1을 확인한 뒤 되돌려 동작을 검증했다. 면제가 아니라 예산인 이유는 압력
+부재가 63KB까지 자란 원인이었기 때문이다. 근본 해법인 릴리스 컷은 메인테이너 결정이라
+범위 밖으로 남긴다.
+
+______________________________________________________________________
+
 ## 완료 (2026-08-14 — quality-debt follow-up)
 
 | #   | 태스크                                                                                     | 우선순위 | 요지                                                                                                                |

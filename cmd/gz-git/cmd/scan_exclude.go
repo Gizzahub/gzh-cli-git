@@ -32,6 +32,9 @@ import (
 // in the returned regex so filterRepositories refuses to scan. Failing closed
 // matters more than a tidy error path — an exclusion that quietly stops applying
 // is the exact failure this key exists to prevent.
+//
+// The one pattern that is *not* left in is the empty string, which fails open in
+// both directions rather than closed. See dropEmptyPatterns.
 func resolveScanExclude(directory, flagExclude string) string {
 	patterns := loadScanExcludePatterns(directory)
 	if len(patterns) == 0 {
@@ -62,15 +65,68 @@ func resolveScanExclude(directory, flagExclude string) string {
 // inside a single pattern cannot swallow the ones after it: without the group,
 // `a|b` followed by `c` would compile as `a|bc`, silently dropping the `c`
 // exclusion and letting a repository through.
+//
+// Empty patterns are skipped rather than grouped, because `(?:)` is a valid
+// regex that matches the empty string and therefore every repository name. One
+// empty branch anywhere in the alternation would exclude the entire scan. The
+// caller already drops them; this is the guard that makes such a regex
+// impossible to build here at all, whatever the caller does.
 func combineExcludePatterns(patterns []string) string {
-	if len(patterns) == 1 {
-		return patterns[0]
-	}
-	grouped := make([]string, 0, len(patterns))
+	nonEmpty := make([]string, 0, len(patterns))
 	for _, p := range patterns {
+		if p == "" {
+			continue
+		}
+		nonEmpty = append(nonEmpty, p)
+	}
+	if len(nonEmpty) == 0 {
+		return ""
+	}
+	if len(nonEmpty) == 1 {
+		return nonEmpty[0]
+	}
+	grouped := make([]string, 0, len(nonEmpty))
+	for _, p := range nonEmpty {
 		grouped = append(grouped, "(?:"+p+")")
 	}
 	return strings.Join(grouped, "|")
+}
+
+// dropEmptyPatterns removes empty entries from a configured exclusion list,
+// reporting each one.
+//
+// An empty entry cannot express an exclusion, but it is not inert, and what it
+// does depends on how many siblings it has — which is the worst property a
+// config value can have. Alongside another pattern it becomes `(?:vendor)|(?:)`,
+// which matches every repository and silently empties the scan. Alone it is
+// returned verbatim as "", which filterRepositories reads as "no exclude filter"
+// and ignores. So the same slip either excludes everything or nothing, and
+// neither is reported as an error anywhere downstream: an empty string is a
+// syntactically valid regex, so the compile check upstream never fires.
+//
+// A trailing blank list item is an ordinary YAML slip:
+//
+//	exclude:
+//	  - vendor
+//	  -          # <- this is ""
+//
+// They are dropped rather than made fatal because an empty entry never carried
+// an exclusion that could be lost. The run proceeds under exactly the patterns
+// that were actually written, and the operator is told which entry was ignored.
+// Whitespace-only entries are left alone: " " is a real regex that matches a
+// space, and second-guessing a pattern the user did write is a different bug.
+func dropEmptyPatterns(patterns []string) []string {
+	kept := make([]string, 0, len(patterns))
+	for i, p := range patterns {
+		if p == "" {
+			fmt.Fprintf(os.Stderr,
+				"error: defaults.scan.exclude entry %d is empty and was ignored; "+
+					"an empty pattern matches every repository\n", i+1)
+			continue
+		}
+		kept = append(kept, p)
+	}
+	return kept
 }
 
 // loadScanExcludePatterns reads defaults.scan.exclude from the config hierarchy
@@ -100,7 +156,7 @@ func loadScanExcludePatterns(directory string) []string {
 	if cfg == nil {
 		return nil
 	}
-	return cfg.GetScanExcludePatterns()
+	return dropEmptyPatterns(cfg.GetScanExcludePatterns())
 }
 
 // reportScanExclude announces the active exclusions on stderr.

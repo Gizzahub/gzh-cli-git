@@ -106,3 +106,71 @@ func TestConfigExcludeBeatsIncludeFlag(t *testing.T) {
 		t.Errorf("--include resurrected a config-excluded repository: %v", result.Paths)
 	}
 }
+
+// TestCombineExcludePatternsSkipsEmpty pins the failure an empty entry would
+// otherwise cause. `(?:)` is a valid regex matching the empty string, so a
+// single empty branch in the alternation matches every repository — turning one
+// declared exclusion into a scan that silently finds nothing.
+func TestCombineExcludePatternsSkipsEmpty(t *testing.T) {
+	got := combineExcludePatterns([]string{"vendor", ""})
+	if got != "vendor" {
+		t.Fatalf("combineExcludePatterns = %q, want %q", got, "vendor")
+	}
+	re := regexp.MustCompile(got)
+	if re.MatchString("totally-unrelated-repo") {
+		t.Errorf("pattern %q excludes every repository", got)
+	}
+	if !re.MatchString("vendor") {
+		t.Errorf("pattern %q lost the exclusion that was actually written", got)
+	}
+}
+
+func TestCombineExcludePatternsAllEmptyIsNoFilter(t *testing.T) {
+	// "" is what filterRepositories reads as "no exclude filter", which is the
+	// right outcome when no pattern was actually written. The dangerous shape is
+	// the one above — an empty branch joined to a real one.
+	if got := combineExcludePatterns([]string{"", ""}); got != "" {
+		t.Errorf("combineExcludePatterns all-empty = %q, want empty", got)
+	}
+}
+
+// TestResolveScanExcludeIgnoresEmptyConfigEntry runs the slip end to end: a
+// trailing blank list item must not convert a one-repository exclusion into a
+// scan that returns nothing.
+func TestResolveScanExcludeIgnoresEmptyConfigEntry(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"app", "mirror-repo"} {
+		if err := os.MkdirAll(filepath.Join(root, name, ".git"), 0o750); err != nil {
+			t.Fatalf("create fake repo: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gz-git.yaml"),
+		[]byte("defaults:\n  scan:\n    exclude:\n      - mirror-repo\n      - \"\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	result, err := repository.NewClient().ScanRepositories(t.Context(), repository.ScanOptions{
+		Directory:      root,
+		MaxDepth:       1,
+		ExcludePattern: resolveScanExclude(root, ""),
+	})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(result.Paths) != 1 || filepath.Base(result.Paths[0]) != "app" {
+		t.Errorf("empty exclude entry changed the scan: got %v, want only app", result.Paths)
+	}
+}
+
+func TestResolveScanExcludeOnlyEmptyEntryFallsBackToFlag(t *testing.T) {
+	// The opposite half of the same slip: alone, an empty entry used to be
+	// returned verbatim and then read downstream as "no filter". Dropping it
+	// reaches the same outcome deliberately, and says so on stderr.
+	dir := writeScanConfig(t, "defaults:\n  scan:\n    exclude:\n      - \"\"\n")
+	if got := resolveScanExclude(dir, "scratch"); got != "scratch" {
+		t.Errorf("resolveScanExclude = %q, want the flag value %q", got, "scratch")
+	}
+	if got := resolveScanExclude(dir, ""); got != "" {
+		t.Errorf("resolveScanExclude = %q, want empty so the scanner skips filtering", got)
+	}
+}

@@ -1,8 +1,18 @@
-<!-- size-limit: 700 -->
+<!-- size-limit: 1000 -->
 
 <!-- A changelog is an append-only record, not a guide read front to back, so the
-     default 500-line document budget models the wrong genre. 700 is still a ceiling:
-     when it is reached, cut a release and move that line into docs/changelog/. -->
+     default 500-line document budget models the wrong genre.
+
+     1000 is a ceiling, not an exemption, and it is sized from measurement: the
+     2026-08 backlog was 460 lines across 78 entries, so one release's worth of
+     changes fits in the headroom above the current length. Hitting it therefore
+     means a release is overdue, not that this file needs trimming — cut the
+     release and move that line into docs/changelog/.
+
+     Do not shrink the budget to a value a single batch can exhaust mid-write.
+     Exceeding it is a hard error that blocks edits to this file, and the remedy
+     is itself an edit to this file — that is how the 2026-08-07 to 2026-08-24
+     gap happened, when 71 commits went unrecorded behind a 45KB limit. -->
 
 # Changelog
 

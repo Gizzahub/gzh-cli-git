@@ -34,14 +34,33 @@ git -C <repo> rev-list --left-right --count HEAD...master        # BASE axis
 
 ### Why `BASE` is often large
 
-The base is resolved to a **local** ref and `gz-git` never moves it. On a
-develop-based workflow the local `master` stays wherever it was at clone time,
-so `BASE ↑1275` means "develop holds 1275 commits your stale local master
-lacks", not "1275 unpushed commits". Fast-forward it without checking it out:
+The base is resolved to a **local** ref, and nothing moves it on its own:
+`git fetch` updates `refs/remotes/*`, `git pull` updates the branch you are
+standing on, and a base you never check out is neither. On a develop-based
+workflow the local `master` stays wherever it was at clone time, so
+`BASE ↑1275` means "develop holds 1275 commits your stale local master lacks",
+not "1275 unpushed commits".
+
+Repair it in bulk, without checking it out and without touching the branch you
+are on:
+
+```bash
+gz-git update --sync-base -d 2 ~/projects
+```
+
+This fast-forwards each stale base ref and reports which ones moved. A base
+that holds commits its remote lacks is **not** fast-forwarded — it is reported
+as `base <name> blocked: ...` and left alone, because that is either work that
+was never pushed or a ref parked on a task branch, and neither is something a
+bulk command should decide for you. Preview with `--dry-run` first.
+
+For a single repository the equivalent by hand is:
 
 ```bash
 git -C <repo> fetch origin master:master
 ```
+
+The missing `+` is the safety net: that refspec refuses a non-fast-forward.
 
 Resolution order: the `branch.defaultBranch` candidates from config, first one
 that exists as a local ref; otherwise `main`, `master`, `develop`,

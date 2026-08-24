@@ -101,7 +101,13 @@ gz-git update [directory] [flags]
 gz-git update -d 2 ~/projects
 gz-git update --no-fetch ~/projects
 gz-git update --watch --interval 5m -d 2 ~/projects
+gz-git update --sync-base -d 2 ~/projects
 ```
+
+`--sync-base` also fast-forwards each repository's local base ref (the one
+`info` reports `BASE` against) without checking it out. A base that diverged
+from its remote is reported, not moved. See
+[troubleshooting](../user/guides/troubleshooting.md#why-base-is-often-large).
 
 ### diff
 

@@ -129,6 +129,9 @@ func renderInfoTable(
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, summarizeInfoScan(result, attention))
+	if legend := infoLegend(headers); legend != "" {
+		fmt.Fprintln(w, legend)
+	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, renderInfoHeader(headers, widths))
 
@@ -264,6 +267,35 @@ func hoistUniformBase(headers []string, rows []infoRow) []string {
 		cell.text = strings.TrimSpace(strings.TrimPrefix(cell.text, only))
 	}
 	return out
+}
+
+// infoLegend names the ref each column's arrows are measured against.
+//
+// BRANCH and BASE both render divergence with the same ↑↓, because both are
+// divergence and a second notation for the same idea would cost more than it
+// explains. What differs is the ref on the other side of the comparison: the
+// upstream for BRANCH, the integration branch for BASE. Only BRANCH is what
+// push and pull move, so without that stated a large BASE ↑ reads as unpushed
+// work and a clean push looks like it silently did nothing.
+//
+// Clauses follow the surviving columns, since --compact drops columns that came
+// back empty everywhere. With only one of the two on screen there is no pair to
+// confuse, and the line is omitted rather than explaining a distinction the
+// table is not currently drawing.
+func infoLegend(headers []string) string {
+	var parts []string
+	for _, header := range headers {
+		switch {
+		case header == "BRANCH":
+			parts = append(parts, "BRANCH ↑↓ = vs upstream")
+		case strings.HasPrefix(header, "BASE"):
+			parts = append(parts, "BASE ↑↓ = vs base branch")
+		}
+	}
+	if len(parts) < 2 {
+		return ""
+	}
+	return cliutil.ColorGray + strings.Join(parts, "  ·  ") + cliutil.ColorReset
 }
 
 // summarizeInfoScan is the one-line preamble.

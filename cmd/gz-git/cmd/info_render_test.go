@@ -656,3 +656,74 @@ func TestRenderInfoCompact_NoRepositories(t *testing.T) {
 		t.Errorf("unexpected empty-scan output: %q", buf.String())
 	}
 }
+
+// TestInfoLegend_NamesBothComparisons guards the distinction that made a clean
+// push look like a no-op: BRANCH and BASE draw the same ↑↓ against different
+// refs, and only BRANCH is the one push and pull move.
+func TestInfoLegend_NamesBothComparisons(t *testing.T) {
+	withColors(t, false)
+
+	tests := []struct {
+		name    string
+		headers []string
+		want    string
+	}{
+		{
+			name:    "both columns present",
+			headers: infoColumns,
+			want:    "BRANCH ↑↓ = vs upstream  ·  BASE ↑↓ = vs base branch",
+		},
+		{
+			name:    "hoisted base header still matches",
+			headers: []string{"REPOSITORY", "BRANCH", "BASE(master)"},
+			want:    "BRANCH ↑↓ = vs upstream  ·  BASE ↑↓ = vs base branch",
+		},
+		{
+			// Nothing to disambiguate with one column on screen, and a legend
+			// for a column --compact dropped points at nothing.
+			name:    "base dropped by compact",
+			headers: []string{"REPOSITORY", "BRANCH"},
+			want:    "",
+		},
+		{
+			name:    "branch dropped by compact",
+			headers: []string{"REPOSITORY", "BASE(master)"},
+			want:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stripANSI(infoLegend(tt.headers)); got != tt.want {
+				t.Errorf("infoLegend(%v) = %q, want %q", tt.headers, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRenderInfoTable_LegendPrecedesHeader checks the legend lands where it can
+// be read before the table it explains, and that --compact dropping the BASE
+// column takes the legend with it rather than explaining an absent comparison.
+func TestRenderInfoTable_LegendPrecedesHeader(t *testing.T) {
+	withColors(t, false)
+
+	out, _ := cleanRepoTable(t, false)
+	legendAt := strings.Index(out, "BRANCH ↑↓ = vs upstream")
+	if legendAt < 0 {
+		t.Fatalf("legend missing:\n%s", out)
+	}
+	if headerAt := strings.Index(out, "REPOSITORY"); legendAt > headerAt {
+		t.Errorf("legend must precede the header row:\n%s", out)
+	}
+	if strings.Count(out, "BRANCH ↑↓ = vs upstream") != 1 {
+		t.Errorf("legend must print once:\n%s", out)
+	}
+
+	compactOut, _ := cleanRepoTable(t, true)
+	if strings.Contains(compactOut, "BASE") {
+		t.Fatalf("test assumes --compact drops BASE for a clean repo:\n%s", compactOut)
+	}
+	if strings.Contains(compactOut, "vs base branch") {
+		t.Errorf("legend must not explain a column --compact dropped:\n%s", compactOut)
+	}
+}

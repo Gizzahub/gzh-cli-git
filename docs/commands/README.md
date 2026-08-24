@@ -268,15 +268,48 @@ gz-git tag auto [directory] --bump=patch
 gz-git tag push [directory]
 ```
 
-## History & Info (Single repo)
+## Info (Bulk)
 
 ### info
 
+One row per repository: branch, divergence, working-tree state, remotes and
+stray branches. Bulk like the rest — `-d/--scan-depth` applies.
+
 ```bash
-gz-git info [path]
-gz-git info
-gz-git info /path/to/repo
+gz-git info                       # current directory, depth 1
+gz-git info -d 3 ~/projects       # scan 3 levels deep
+gz-git info --compact             # drop columns nothing has anything to report in
+gz-git info --full                # per-repository detail block instead of the table
+gz-git info --audit               # machine-readable branch audit (JSON)
 ```
+
+#### Two divergence axes
+
+`BRANCH` and `BASE` both render as `↑ahead ↓behind`, but they compare against
+different refs. Reading one as the other is the usual source of "`info` says I
+have unpushed commits but `push` says up-to-date":
+
+| Column   | Compares HEAD against                        | Moved by           |
+| -------- | -------------------------------------------- | ------------------ |
+| `BRANCH` | its upstream (`@{upstream}`)                 | `push` / `pull`    |
+| `BASE`   | the **local** base branch (`master`, `main`)  | `merge` / `rebase` |
+
+A legend under the summary line names both. `push` acts on the `BRANCH` axis
+only, so a repository with a blank `BRANCH` and a large `BASE` is genuinely
+up-to-date with its remote. The base is a local ref that `gz-git` never moves —
+a stale local `master` inflates the column on its own. Base resolution order:
+`branch.defaultBranch` candidates from config, first that exists locally, else
+`main`, `master`, `develop`, `development`.
+
+Other columns: `WT` linked worktrees · `DIRTY` as `+staged ~unstaged ?untracked`
+(or `REBASING` / `MERGING` / `conflict:N`, which outrank the counts) · `REMOTE`
+· `OTHER BRANCHES` · `REMOTE ONLY`. Row markers: `🔸` needs attention, `🔻`
+blocked (mid-rebase/merge, conflicts, or a scan error).
+
+See [troubleshooting](../user/guides/troubleshooting.md) for the diagnostic
+recipes.
+
+## History (Single repo)
 
 ### history
 

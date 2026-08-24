@@ -131,3 +131,38 @@ func IsNotRepository(err error) bool {
     return false
 }
 ```
+
+### 7.4 Bulk Operation Error Surfacing
+
+Every bulk operation reduces a failed repository to **one table row**, so the
+error it stores is the only thing the user will ever see about that failure.
+The contract for building it:
+
+1. **Prefer git's stderr over the exit status.** `exit status 128` is the same
+   string for a permission denial, a rejected non-fast-forward and a missing
+   remote. git already wrote the distinguishing text; discarding it makes the
+   three indistinguishable.
+1. **Collapse, never truncate.** stderr is joined onto a single line because a
+   newline would break the row alignment of the bulk table. No content is
+   dropped.
+1. **Fall back in a fixed order** — execution error → stderr summary → wrapped
+   command error → bare exit code — so a repository always reports *something*
+   more specific than "failed".
+
+All bulk git invocations share one builder rather than formatting errors at
+each call site, which is what let `push` drift from `pull` and report only its
+exit status:
+
+```go
+// pkg/repository/bulk.go
+func buildGitCommandError(op string, execErr error, exitCode int, stderr string, cmdErr error) error
+func buildPullError(execErr error, exitCode int, stderr string, cmdErr error) error // op = "pull"
+func buildPushError(execErr error, exitCode int, stderr string, cmdErr error) error // op = "push"
+```
+
+**Boundary with auth detection.** `isAuthenticationError(stderr)` /
+`ErrAuthRequired` exist so bulk ops never block on a credential prompt
+(`GIT_TERMINAL_PROMPT=0`). It answers "can we authenticate at all", not "may
+this identity write here". `Permission ... denied` is an *authorization*
+failure against a valid identity, so it stays on the generic path and reaches
+the user carrying git's own text.

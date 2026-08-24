@@ -11,3 +11,4 @@ User-facing guides for using `gz-git` and the `gzh-cli-gitforge` Go library.
 ## Guides
 
 - FAQ: [docs/user/guides/faq.md](guides/faq.md)
+- Troubleshooting: [docs/user/guides/troubleshooting.md](guides/troubleshooting.md)

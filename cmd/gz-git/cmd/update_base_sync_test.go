@@ -36,8 +36,37 @@ func TestBaseSyncNote(t *testing.T) {
 			name: "adopted is marked, not silently equated to a fast-forward",
 			sync: &repository.BaseSyncResult{
 				Base: "master", Action: repository.BaseSyncAdopted, Advanced: 3,
+				Reason: "2 local commit(s) already pushed elsewhere",
 			},
-			want: "base master +3 (adopted)",
+			want: "base master +3 (adopted: 2 local commit(s) already pushed elsewhere)",
+		},
+		{
+			// Advanced is zero on a dry run because nothing moved. Falling
+			// through to the "+%d" form would print "base master +0" for the
+			// case the dry run exists to preview.
+			name: "dry-run fast-forward reports what would happen, not +0",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Action: repository.BaseSyncFastForward,
+				Reason: "would advance 1275 commits",
+			},
+			want: "base master would advance 1275 commits",
+		},
+		{
+			name: "dry-run adoption likewise",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Action: repository.BaseSyncAdopted,
+				Reason: "would adopt remote tip (3 local commit(s) already pushed elsewhere)",
+			},
+			want: "base master would adopt remote tip (3 local commit(s) already pushed elsewhere)",
+		},
+		{
+			// A created branch has an Advanced of zero for a different reason:
+			// there was no earlier position to advance from.
+			name: "created names the commit it was created at",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Action: repository.BaseSyncCreated, Reason: "created at 5b4ef22a",
+			},
+			want: "base master created at 5b4ef22a",
 		},
 		{
 			name: "blocked carries the reason",

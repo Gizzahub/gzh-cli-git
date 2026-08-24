@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	updateFlags    BulkCommandFlags
-	updateNoFetch  bool
-	updateSyncBase bool
+	updateFlags      BulkCommandFlags
+	updateNoFetch    bool
+	updateSyncBase   bool
+	updateCreateBase bool
 )
 
 // updateCmd represents the update command for multi-repository operations.
@@ -33,6 +34,9 @@ var updateCmd = &cobra.Command{
   # Also fast-forward each repo's base branch, which nothing checks out
   gz-git update --sync-base
 
+  # ...and create it in repos that only ever checked out a develop branch
+  gz-git update --sync-base --create-missing-base
+
   # Detailed output
   gz-git update --verbose`) + cliutil.ExitCodesBulkHelp(),
 	Args: cobra.MaximumNArgs(1),
@@ -47,6 +51,9 @@ func init() {
 	updateCmd.Flags().BoolVar(&updateSyncBase, "sync-base", false,
 		"also fast-forward each repository's base branch ref, even when it is not checked out")
 
+	updateCmd.Flags().BoolVar(&updateCreateBase, "create-missing-base", false,
+		"with --sync-base, create the base branch locally in repositories that lack it")
+
 	updateCmd.Flags().BoolVar(&updateNoFetch, "no-fetch", false, "deprecated: use --skip-fetch")
 	if err := updateCmd.Flags().MarkDeprecated("no-fetch", "use --skip-fetch instead"); err != nil {
 		panic(err)
@@ -55,6 +62,13 @@ func init() {
 
 func runUpdate(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+
+	// Rejected rather than treated as implying --sync-base. Implying it would
+	// mean a flag whose name promises only to create something absent also
+	// starts moving refs that are already present, in every scanned repository.
+	if updateCreateBase && !updateSyncBase {
+		return fmt.Errorf("--create-missing-base requires --sync-base")
+	}
 
 	var baseCandidates []string
 
@@ -104,6 +118,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		ProgressCallback:  createProgressCallback("Updating", updateFlags.Format, quiet),
 		SyncBase:          updateSyncBase,
 		BaseCandidates:    baseCandidates,
+		CreateMissingBase: updateCreateBase,
 	}
 
 	// Watch mode: continuously update at intervals
@@ -300,9 +315,21 @@ func baseSyncNote(sync *repository.BaseSyncResult) string {
 
 	switch sync.Action {
 	case repository.BaseSyncFastForward:
+		// Advanced is zero on a dry run, where the ref has not moved and Reason
+		// carries the "would advance N commits" wording instead. Printing the
+		// "+%d" form there would render "base master +0" for the very case the
+		// dry run exists to preview.
+		if sync.Advanced == 0 {
+			return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
+		}
 		return fmt.Sprintf("base %s +%d", sync.Base, sync.Advanced)
 	case repository.BaseSyncAdopted:
-		return fmt.Sprintf("base %s +%d (adopted)", sync.Base, sync.Advanced)
+		if sync.Advanced == 0 {
+			return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
+		}
+		return fmt.Sprintf("base %s +%d (adopted: %s)", sync.Base, sync.Advanced, sync.Reason)
+	case repository.BaseSyncCreated:
+		return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
 	case repository.BaseSyncBlocked:
 		return fmt.Sprintf("base %s blocked: %s", sync.Base, sync.Reason)
 	case repository.BaseSyncUpToDate, repository.BaseSyncSkipped:

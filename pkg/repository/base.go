@@ -181,4 +181,10 @@ const (
 	baseSourceConfigPrefix = "config.defaultBranch["
 	baseSourceHeuristic    = "heuristic"
 	baseSourceNone         = "none"
+
+	// baseSourceRemote marks a base that exists only as a remote-tracking ref.
+	// ResolveBase never produces it — it is set by the opt-in create path in
+	// SyncBase, and it exists so a created branch is distinguishable in output
+	// from one the repository already had.
+	baseSourceRemote = "remote"
 )

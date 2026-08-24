@@ -46,11 +46,45 @@ const (
 	// failure of the update.
 	BaseSyncBlocked BaseSyncAction = "blocked"
 
+	// BaseSyncCreated means no local base ref existed and one was created from
+	// the remote. Only reachable with BaseSyncOptions.CreateMissing: a
+	// repository deliberately kept without a local trunk is a legitimate
+	// choice, so materializing one is opt-in rather than a repair.
+	BaseSyncCreated BaseSyncAction = "created"
+
 	// BaseSyncSkipped means there was nothing to sync: no base resolved, no
 	// remote-tracking counterpart, or the base is the checked-out branch and
 	// the normal pull path already owns it.
 	BaseSyncSkipped BaseSyncAction = "skipped"
 )
+
+// BaseSyncOptions configures one SyncBase call.
+//
+// This is a struct rather than a parameter list because the flags are all
+// booleans: SyncBase(ctx, path, remote, candidates, true, false, true) states
+// nothing about what those positions mean, and the compiler cannot catch two of
+// them being swapped.
+type BaseSyncOptions struct {
+	// Remote is the remote whose base ref is the target. Required.
+	Remote string
+
+	// Candidates is the base-branch search order, typically
+	// EffectiveConfig.Branch.DefaultBranch. Empty falls back to the heuristic
+	// list ResolveBase already uses.
+	Candidates []string
+
+	// Fetch refreshes the base's remote-tracking ref before comparing.
+	Fetch bool
+
+	// DryRun reports the decision without writing any ref.
+	DryRun bool
+
+	// CreateMissing materializes a local base ref from the remote when the
+	// repository has none. Off by default: absence of a local trunk is often
+	// intentional on a develop-only clone, and creating a branch the user never
+	// asked for is a different act than repairing one that fell behind.
+	CreateMissing bool
+}
 
 // BaseDivergence counts how a local base ref and its remote-tracking
 // counterpart differ. The three numbers answer three different questions and
@@ -111,22 +145,23 @@ type BaseSyncResult struct {
 // The base branch is resolved with ResolveBase, deliberately: `info` reports
 // divergence against that branch, and a command that repaired a *different*
 // branch than the one being reported on would leave the report unchanged and
-// look broken. candidates is the same list `info` passes — typically
+// look broken. opts.Candidates is the same list `info` passes — typically
 // EffectiveConfig.Branch.DefaultBranch.
 //
-// When fetch is true the base ref is refreshed from the remote first. That is
-// not redundant with the pull the caller may have just run: the pull path exits
-// early on a dirty tree, on an already-current branch, and on a missing
+// When opts.Fetch is true the base ref is refreshed from the remote first. That
+// is not redundant with the pull the caller may have just run: the pull path
+// exits early on a dirty tree, on an already-current branch, and on a missing
 // upstream, so in exactly the repositories most likely to have a stale base
 // there was no fetch at all.
 //
 // Nothing here touches the working tree or the checked-out branch. A dirty
 // worktree is not a reason to skip: updating a ref that nothing is checked out
 // on cannot disturb uncommitted work.
-func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidates []string, fetch, dryRun bool) (BaseSyncResult, error) {
+func (c *client) SyncBase(ctx context.Context, repoPath string, opts BaseSyncOptions) (BaseSyncResult, error) {
+	remote := strings.TrimSpace(opts.Remote)
 	out := BaseSyncResult{Remote: remote, Action: BaseSyncSkipped}
 
-	if strings.TrimSpace(remote) == "" {
+	if remote == "" {
 		out.Reason = "no remote configured"
 		return out, nil
 	}
@@ -136,9 +171,9 @@ func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidat
 		return out, fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	base, err := c.ResolveBase(ctx, repo, candidates)
+	base, err := c.resolveSyncBase(ctx, repo, repoPath, remote, opts)
 	if err != nil {
-		return out, fmt.Errorf("failed to resolve base branch: %w", err)
+		return out, err
 	}
 	if base.Name == "" {
 		out.Reason = "no base branch resolved"
@@ -159,7 +194,7 @@ func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidat
 		return out, nil
 	}
 
-	if fetch && !dryRun {
+	if opts.Fetch && !opts.DryRun {
 		// Refresh only this one ref rather than the whole remote. The leading +
 		// is not a force in any meaningful sense — a remote-tracking ref exists
 		// to mirror the remote, and that is precisely what the default fetch
@@ -183,9 +218,17 @@ func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidat
 
 	localRef := "refs/heads/" + base.Name
 	localSHA, err := c.executor.RunOutput(ctx, repoPath, "rev-parse", "--verify", "--quiet", localRef)
-	if err != nil || localSHA == "" {
-		out.Reason = "no local " + base.Name
-		return out, nil //nolint:nilerr // ResolveBase found it by name; a race that removed it is not our error to raise
+	if err != nil || localSHA == "" { //nolint:nilerr // an absent ref is a state to report, not an error to raise
+		if !opts.CreateMissing {
+			out.Reason = "no local " + base.Name
+			return out, nil
+		}
+		action, reason, err := c.createLocalBase(ctx, repoPath, localRef, base.Name, remoteSHA, opts.DryRun)
+		if err != nil {
+			return out, err
+		}
+		out.Action, out.Reason = action, reason
+		return out, nil
 	}
 
 	if localSHA == remoteSHA {
@@ -203,7 +246,7 @@ func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidat
 		// Strict ancestor: the only possible outcome of moving the pointer is
 		// that it catches up. This is the case that covers essentially every
 		// repository where the base was simply never checked out.
-		if dryRun {
+		if opts.DryRun {
 			out.Action = BaseSyncFastForward
 			out.Reason = fmt.Sprintf("would advance %d commits", div.RemoteOnly)
 			return out, nil
@@ -224,7 +267,7 @@ func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidat
 		return out, nil
 	}
 
-	if dryRun {
+	if opts.DryRun {
 		out.Action = BaseSyncAdopted
 		out.Reason = fmt.Sprintf("would adopt remote tip (%s)", reason)
 		return out, nil
@@ -259,11 +302,119 @@ func (c *client) SyncBase(ctx context.Context, repoPath, remote string, candidat
 //     already pushed under some other branch name, so moving the pointer loses
 //     no history.
 //
-// TODO(archmagece): implement the policy. The conservative default below keeps
-// the build and tests honest until then — it blocks every divergence, which is
-// correct but noisy.
+// The policy is therefore: adopt when nothing would be stranded, block when
+// anything would. It is not a heuristic about how likely the commits are to
+// matter — it is the difference between a pointer that can be recreated from
+// origin and one that cannot.
+//
+// Note what this does NOT do: it never inspects the reflog, and it never treats
+// "recoverable from the reflog" as safe. A 90-day expiry that the user has to
+// know to reach into is a recovery procedure, not a guarantee, and a tool that
+// silently relies on it has moved the cost of its decision onto the user.
 func decideBaseDivergence(d BaseDivergence) (action BaseSyncAction, reason string) {
-	return BaseSyncBlocked, fmt.Sprintf("%d local commit(s) not on %s", d.LocalOnly, "the remote base")
+	if d.Stranded > 0 {
+		// Deliberately reports Stranded and not LocalOnly. LocalOnly is often much
+		// larger and mostly harmless, and a message that says "47 local commits"
+		// when 2 are actually at risk teaches the user to dismiss it.
+		return BaseSyncBlocked, fmt.Sprintf("%d commit(s) exist only here", d.Stranded)
+	}
+	return BaseSyncAdopted, fmt.Sprintf("%d local commit(s) already pushed elsewhere", d.LocalOnly)
+}
+
+// resolveSyncBase picks the branch this sync will act on.
+//
+// ResolveBase looks only at refs/heads, which is right for reporting: a branch
+// that does not exist locally cannot be what local work diverged from. The
+// consequence is that a clone which only ever checked out develop does not
+// resolve to "no base" — it falls through ResolveBase's heuristic list and
+// lands on develop, the branch that *is* checked out, so the sync hands off to
+// the pull path and never repairs anything. Those are exactly the repositories
+// a base sync would help most.
+//
+// So the create path is not conditioned on "nothing resolved". It asks a
+// different question: is a preferred base present on the remote and absent
+// here? Config-declared bases that do resolve locally are left alone —
+// overriding an explicit configuration would be this flag deciding it knows the
+// repository's trunk better than the repository does.
+func (c *client) resolveSyncBase(ctx context.Context, repo *Repository, repoPath, remote string, opts BaseSyncOptions) (BaseBranchInfo, error) {
+	base, err := c.ResolveBase(ctx, repo, opts.Candidates)
+	if err != nil {
+		return base, fmt.Errorf("failed to resolve base branch: %w", err)
+	}
+	if !opts.CreateMissing || strings.HasPrefix(base.Source, baseSourceConfigPrefix) {
+		return base, nil
+	}
+	if name := c.missingLocalBase(ctx, repoPath, remote, opts.Candidates); name != "" {
+		base.Name = name
+		base.Source = baseSourceRemote
+	}
+	return base, nil
+}
+
+// createLocalBase materializes a base ref the repository does not have.
+//
+// Empty oldSHA is update-ref's "the ref must not exist" guard, the same
+// compare-and-swap the move path uses and for the same reason: between the read
+// that found no ref and this write, another process may have created the
+// branch, and creating it here would then overwrite a ref this run never
+// looked at.
+func (c *client) createLocalBase(ctx context.Context, repoPath, localRef, baseName, remoteSHA string, dryRun bool) (BaseSyncAction, string, error) {
+	if dryRun {
+		return BaseSyncCreated, fmt.Sprintf("would create %s at %s", baseName, shortSHA(remoteSHA)), nil
+	}
+	if err := c.moveBaseRef(ctx, repoPath, localRef, remoteSHA, ""); err != nil {
+		return BaseSyncSkipped, "", err
+	}
+	return BaseSyncCreated, "created at " + shortSHA(remoteSHA), nil
+}
+
+// missingLocalBase returns the first base candidate that exists on remote but
+// not in refs/heads, or "" when every candidate is either already local or not
+// on the remote either.
+//
+// Config candidates are consulted before the heuristic list for the same reason
+// ResolveBase does it: a repository that declares its trunk should not have one
+// guessed for it. The heuristic pass is what covers the repositories that
+// declare nothing, which is most of them.
+//
+// This is deliberately separate from firstExistingBranch rather than a flag on
+// it: ResolveBase feeds `info`'s BASE column and MergedBranches, and widening
+// its notion of "exists" would change what every base-relative reading in the
+// tool means.
+func (c *client) missingLocalBase(ctx context.Context, repoPath, remote string, candidates []string) string {
+	for _, list := range [][]string{candidates, heuristicBaseCandidates} {
+		for _, candidate := range list {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "" {
+				continue
+			}
+			if c.refExists(ctx, repoPath, "refs/heads/"+candidate) {
+				continue
+			}
+			if c.refExists(ctx, repoPath, "refs/remotes/"+remote+"/"+candidate) {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+// refExists reports whether a fully-qualified ref resolves. A non-zero exit from
+// rev-parse --verify --quiet is git's way of saying "absent", not "failed".
+func (c *client) refExists(ctx context.Context, repoPath, ref string) bool {
+	result, _ := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", "--quiet", ref) //nolint:errcheck // exit≠0 means ref missing
+	return result.ExitCode == 0
+}
+
+// shortSHA abbreviates a commit for display. Fixed-width rather than git's
+// ambiguity-aware abbreviation: this appears in a table column, and a width that
+// varies per repository would make the column ragged for no gain.
+func shortSHA(sha string) string {
+	sha = strings.TrimSpace(sha)
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
 }
 
 // baseDivergence counts how the local and remote base refs differ.
@@ -312,6 +463,9 @@ func (c *client) baseDivergence(ctx context.Context, repoPath, localRef, remoteR
 // repositories concurrently and a user may be working in one of them; without
 // the guard, a ref that moved between the read and the write would be silently
 // overwritten with a decision made about a state that no longer exists.
+//
+// An empty oldSHA is git's spelling of "and the ref must not exist yet", so the
+// create path gets the same guarantee without a second code path.
 func (c *client) moveBaseRef(ctx context.Context, repoPath, ref, newSHA, oldSHA string) error {
 	result, err := c.executor.Run(ctx, repoPath, "update-ref", ref, newSHA, oldSHA)
 	if err != nil {

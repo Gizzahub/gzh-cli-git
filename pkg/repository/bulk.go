@@ -646,6 +646,13 @@ type BulkUpdateOptions struct {
 	// ResolveBase fall back to its own heuristic rather than this option
 	// inventing an order.
 	BaseCandidates []string
+
+	// CreateMissingBase creates a local base ref from the remote in
+	// repositories that have none. Requires SyncBase. Off by default and kept
+	// separate from it because the two are different acts: SyncBase repairs a
+	// pointer the repository already has, this one adds a branch the user never
+	// created.
+	CreateMissingBase bool
 }
 
 // BulkUpdateResult contains the results of a bulk update operation.
@@ -1149,7 +1156,13 @@ func (c *client) applyBaseSync(ctx context.Context, repoPath string, opts BulkUp
 		remote = defaultRemoteName
 	}
 
-	baseSync, err := c.SyncBase(ctx, repoPath, remote, opts.BaseCandidates, !opts.NoFetch, opts.DryRun)
+	baseSync, err := c.SyncBase(ctx, repoPath, BaseSyncOptions{
+		Remote:        remote,
+		Candidates:    opts.BaseCandidates,
+		Fetch:         !opts.NoFetch,
+		DryRun:        opts.DryRun,
+		CreateMissing: opts.CreateMissingBase,
+	})
 	if err != nil {
 		baseSync.Action = BaseSyncBlocked
 		baseSync.Reason = err.Error()
@@ -1158,13 +1171,18 @@ func (c *client) applyBaseSync(ctx context.Context, repoPath string, opts BulkUp
 	result.BaseSync = &baseSync
 
 	switch baseSync.Action {
-	case BaseSyncFastForward, BaseSyncAdopted:
-		logger.Info("base ref advanced",
-			"path", result.RelativePath, "base", baseSync.Base, "commits", baseSync.Advanced)
-		// A moved ref has to reach the user. Left as "up-to-date" the row is
+	case BaseSyncFastForward, BaseSyncAdopted, BaseSyncCreated:
+		logger.Info("base ref changed", "path", result.RelativePath,
+			"base", baseSync.Base, "action", string(baseSync.Action), "commits", baseSync.Advanced)
+		// A changed ref has to reach the user. Left as "up-to-date" the row is
 		// filtered out of the default output entirely, so the one repository
 		// this run actually changed is the one it says nothing about.
-		if baseSync.Advanced > 0 && isBenignUpdateStatus(result.Status) {
+		//
+		// Promote on a dry run too, even though Advanced is zero there and
+		// nothing was written. A preview whose whole purpose is to show which
+		// refs would move, and which hides exactly those rows, is worse than no
+		// preview at all.
+		if isBenignUpdateStatus(result.Status) {
 			result.Status = StatusBaseSynced
 		}
 	case BaseSyncBlocked:

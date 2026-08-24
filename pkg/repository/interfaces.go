@@ -139,9 +139,9 @@ type Client interface {
 	// remote-tracking counterpart without checking it out. `git fetch` updates
 	// refs/remotes/* and `git pull` updates only the checked-out branch, so a
 	// base branch nobody checks out is updated by neither and drifts silently.
-	// candidates is the same ordered list ResolveBase takes, so the branch this
-	// repairs is the branch `info` reports on. See BaseSyncResult.
-	SyncBase(ctx context.Context, repoPath, remote string, candidates []string, fetch, dryRun bool) (BaseSyncResult, error)
+	// opts.Candidates is the same ordered list ResolveBase takes, so the branch
+	// this repairs is the branch `info` reports on. See BaseSyncResult.
+	SyncBase(ctx context.Context, repoPath string, opts BaseSyncOptions) (BaseSyncResult, error)
 }
 
 // Logger provides a logging interface for library consumers.

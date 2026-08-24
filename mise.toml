@@ -1,2 +1,12 @@
 [tools]
 go = "1.26.6"
+# Kept in step with GOLANGCI_LINT_VERSION in .make/tools.mk, whose comment
+# already says to prefer a mise-managed binary — until now there was no mise pin
+# for it to prefer. .golangci.yml is in the v2 config format and a v1 binary
+# refuses it outright, so the version is a correctness requirement, not a
+# preference.
+#
+# This pin alone does not settle which binary a recipe runs: mise exports its
+# directory onto PATH, but anything earlier on PATH still wins. `make
+# install-golangci-lint` is what reconciles a stale GOPATH/bin copy.
+golangci-lint = "2.12.2"

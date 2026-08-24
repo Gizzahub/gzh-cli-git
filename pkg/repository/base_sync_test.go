@@ -5,6 +5,7 @@ package repository
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -60,7 +61,9 @@ func TestSyncBase_FastForwardsUncheckedOutBase(t *testing.T) {
 	developBefore := gitOut(t, work, "rev-parse", "develop")
 
 	client := NewClient()
-	got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, false)
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
 	if err != nil {
 		t.Fatalf("SyncBase: %v", err)
 	}
@@ -102,7 +105,9 @@ func TestSyncBase_SkipsCheckedOutBase(t *testing.T) {
 	runGit(t, work, "checkout", "master")
 
 	client := NewClient()
-	got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, false)
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
 	if err != nil {
 		t.Fatalf("SyncBase: %v", err)
 	}
@@ -122,7 +127,9 @@ func TestSyncBase_UpToDateIsNotAWrite(t *testing.T) {
 	before := gitOut(t, work, "rev-parse", "master")
 
 	client := NewClient()
-	got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, false)
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
 	if err != nil {
 		t.Fatalf("SyncBase: %v", err)
 	}
@@ -143,7 +150,9 @@ func TestSyncBase_DryRunWritesNothing(t *testing.T) {
 	before := gitOut(t, work, "rev-parse", "master")
 
 	client := NewClient()
-	got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, true)
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: true,
+	})
 	if err != nil {
 		t.Fatalf("SyncBase: %v", err)
 	}
@@ -155,10 +164,10 @@ func TestSyncBase_DryRunWritesNothing(t *testing.T) {
 	}
 }
 
-// TestSyncBase_BlocksDivergenceByDefault pins the conservative default in
-// decideBaseDivergence: when the local base holds commits the remote base does
-// not, nothing is written until a policy says it may be.
-func TestSyncBase_BlocksDivergenceByDefault(t *testing.T) {
+// TestSyncBase_BlocksUnpushedDivergence pins the half of decideBaseDivergence
+// that refuses: the local base holds a commit that exists on no remote ref, so
+// moving the pointer would leave it reachable only from the reflog.
+func TestSyncBase_BlocksUnpushedDivergence(t *testing.T) {
 	work := syncBaseFixture(t, 2)
 	runGit(t, work, "fetch", "origin")
 
@@ -171,7 +180,9 @@ func TestSyncBase_BlocksDivergenceByDefault(t *testing.T) {
 	before := gitOut(t, work, "rev-parse", "master")
 
 	client := NewClient()
-	got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, false)
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
 	if err != nil {
 		t.Fatalf("SyncBase: %v", err)
 	}
@@ -205,7 +216,9 @@ func TestSyncBase_StrandedDistinguishesPushedFromUnpushed(t *testing.T) {
 		runGit(t, work, "checkout", "develop")
 
 		client := NewClient()
-		got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, true)
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: true,
+		})
 		if err != nil {
 			t.Fatalf("SyncBase: %v", err)
 		}
@@ -227,7 +240,9 @@ func TestSyncBase_StrandedDistinguishesPushedFromUnpushed(t *testing.T) {
 		runGit(t, work, "checkout", "develop")
 
 		client := NewClient()
-		got, err := client.SyncBase(context.Background(), work, "origin", []string{"master"}, true, true)
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: true,
+		})
 		if err != nil {
 			t.Fatalf("SyncBase: %v", err)
 		}
@@ -245,11 +260,169 @@ func TestSyncBase_NoBaseIsReportedNotGuessed(t *testing.T) {
 	runGit(t, work, "branch", "-D", "master")
 
 	client := NewClient()
-	got, err := client.SyncBase(context.Background(), work, "origin", []string{"nonexistent"}, true, false)
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"nonexistent"}, Fetch: true, DryRun: false,
+	})
 	if err != nil {
 		t.Fatalf("SyncBase: %v", err)
 	}
 	if got.Action != BaseSyncSkipped {
 		t.Errorf("Action = %q, want %q", got.Action, BaseSyncSkipped)
 	}
+}
+
+// TestSyncBase_AdoptsWhenNothingWouldBeStranded pins the other half of the
+// policy, and it is the half that makes the feature usable. A base ref parked
+// on a task-branch tip diverges from origin/master forever; blocking it means a
+// warning that can never be cleared, and a warning that never clears stops
+// being read. Adopting is safe here for one specific reason: origin holds every
+// commit the local ref would move off.
+func TestSyncBase_AdoptsWhenNothingWouldBeStranded(t *testing.T) {
+	work := syncBaseFixture(t, 2)
+	runGit(t, work, "fetch", "origin")
+
+	runGit(t, work, "checkout", "master")
+	commitFile(t, work, "pushed-elsewhere.txt")
+	runGit(t, work, "push", "origin", "HEAD:refs/heads/dev/x/feat/parked")
+	runGit(t, work, "fetch", "origin")
+	runGit(t, work, "checkout", "develop")
+
+	parked := gitOut(t, work, "rev-parse", "master")
+
+	client := NewClient()
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
+	if err != nil {
+		t.Fatalf("SyncBase: %v", err)
+	}
+	if got.Action != BaseSyncAdopted {
+		t.Fatalf("Action = %q (%s), want %q", got.Action, got.Reason, BaseSyncAdopted)
+	}
+	if got.Divergence.Stranded != 0 {
+		t.Errorf("Stranded = %d, want 0", got.Divergence.Stranded)
+	}
+
+	want := gitOut(t, work, "rev-parse", "refs/remotes/origin/master")
+	if after := gitOut(t, work, "rev-parse", "master"); after != want {
+		t.Errorf("master = %s, want origin/master %s", after, want)
+	}
+
+	// The commit the ref moved off must still be reachable from origin, not
+	// merely from the reflog. That distinction is the entire safety argument.
+	if out := gitOut(t, work, "branch", "-r", "--contains", parked); out == "" {
+		t.Errorf("adopted away commit %s is on no remote branch", parked)
+	}
+}
+
+// TestSyncBase_CreateMissingBase covers the repositories that motivated the
+// flag: cloned, switched to develop, and never once checking out master, so
+// refs/heads/master does not exist at all.
+//
+// The assertion that matters is not just that master appears — it is that
+// nothing happens without the opt-in, and that the branch created points where
+// origin points.
+func TestSyncBase_CreateMissingBase(t *testing.T) {
+	newFixture := func(t *testing.T) string {
+		t.Helper()
+		work := syncBaseFixture(t, 2)
+		runGit(t, work, "fetch", "origin")
+		// The state a develop-only clone is actually in: one local branch.
+		runGit(t, work, "branch", "-D", "master")
+		return work
+	}
+
+	t.Run("off by default", func(t *testing.T) {
+		work := newFixture(t)
+
+		client := NewClient()
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+		})
+		if err != nil {
+			t.Fatalf("SyncBase: %v", err)
+		}
+		if got.Action == BaseSyncCreated {
+			t.Fatal("created a base branch without CreateMissing")
+		}
+		if refPresent(t, work, "refs/heads/master") {
+			t.Error("refs/heads/master exists after a run that should not have created it")
+		}
+	})
+
+	t.Run("creates at the remote tip", func(t *testing.T) {
+		work := newFixture(t)
+
+		client := NewClient()
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+			CreateMissing: true,
+		})
+		if err != nil {
+			t.Fatalf("SyncBase: %v", err)
+		}
+		if got.Action != BaseSyncCreated {
+			t.Fatalf("Action = %q (%s), want %q", got.Action, got.Reason, BaseSyncCreated)
+		}
+		if got.Base != "master" {
+			t.Errorf("Base = %q, want master", got.Base)
+		}
+
+		want := gitOut(t, work, "rev-parse", "refs/remotes/origin/master")
+		if after := gitOut(t, work, "rev-parse", "refs/heads/master"); after != want {
+			t.Errorf("created master at %s, want origin/master %s", after, want)
+		}
+	})
+
+	t.Run("dry run creates nothing", func(t *testing.T) {
+		work := newFixture(t)
+
+		client := NewClient()
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: true,
+			CreateMissing: true,
+		})
+		if err != nil {
+			t.Fatalf("SyncBase: %v", err)
+		}
+		if got.Action != BaseSyncCreated {
+			t.Fatalf("Action = %q, want %q — a dry run still reports the verdict", got.Action, BaseSyncCreated)
+		}
+		if refPresent(t, work, "refs/heads/master") {
+			t.Error("dry run created refs/heads/master")
+		}
+	})
+
+	t.Run("leaves an explicitly configured local base alone", func(t *testing.T) {
+		// master exists locally and is config-declared, while origin also has a
+		// main. Nothing is missing, so nothing is created — the flag must not
+		// second-guess a repository that states its own trunk.
+		work := syncBaseFixture(t, 2)
+		runGit(t, work, "fetch", "origin")
+		runGit(t, work, "push", "origin", "refs/remotes/origin/master:refs/heads/main")
+		runGit(t, work, "fetch", "origin")
+
+		client := NewClient()
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: true,
+			CreateMissing: true,
+		})
+		if err != nil {
+			t.Fatalf("SyncBase: %v", err)
+		}
+		if got.Base != "master" {
+			t.Errorf("Base = %q, want master — config declared it and it exists locally", got.Base)
+		}
+		if got.Action == BaseSyncCreated {
+			t.Error("created a branch when the configured base was already present")
+		}
+	})
+}
+
+// refPresent reports whether a ref exists. Unlike gitOut it does not fail the
+// test on a non-zero exit, because in the cases below the ref being absent is
+// the assertion rather than a broken fixture.
+func refPresent(t *testing.T, dir, ref string) bool {
+	t.Helper()
+	return exec.CommandContext(t.Context(), "git", "-C", dir, "rev-parse", "--verify", "--quiet", ref).Run() == nil
 }

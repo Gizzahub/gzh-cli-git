@@ -48,13 +48,47 @@ are on:
 gz-git update --sync-base -d 2 ~/projects
 ```
 
-This fast-forwards each stale base ref and reports which ones moved. A base
-that holds commits its remote lacks is **not** fast-forwarded — it is reported
-as `base <name> blocked: ...` and left alone, because that is either work that
-was never pushed or a ref parked on a task branch, and neither is something a
-bulk command should decide for you. Preview with `--dry-run` first.
+This fast-forwards each stale base ref and reports which ones moved. Preview
+with `--dry-run` first.
 
-For a single repository the equivalent by hand is:
+### When the base holds commits the remote lacks
+
+That is not a fast-forward, so the ref cannot simply catch up — and the two
+situations it can mean are opposites:
+
+- The base is parked on the tip of a task branch that **was** pushed. Every
+  commit exists on the remote under another name, so moving the pointer loses
+  nothing. This is adopted: `base master +12 (adopted: 2 local commit(s)
+  already pushed elsewhere)`.
+- The base carries commits that exist **nowhere else** — never pushed, on no
+  branch the remote has. Moving the pointer would leave them reachable only
+  from the reflog. This is refused: `base master blocked: 2 commit(s) exist
+  only here`.
+
+The count that decides is "commits on the local base reachable from no
+remote-tracking ref", not "commits the remote base lacks". A blocked base is
+reported and left exactly as it was; resolve it by pushing the commits
+somewhere, then run again.
+
+### Repositories with no local base branch at all
+
+A clone that was switched to `develop` on day one may have no `refs/heads/
+master`. The base then resolves to `develop` — the branch you are standing on —
+and the sync hands off to the normal pull path, so nothing is ever repaired and
+`info`'s `BASE` column stays meaningless. Opt in to fixing it:
+
+```bash
+gz-git update --sync-base --create-missing-base -d 2 ~/projects
+```
+
+This creates the branch locally at the remote's tip. It requires `--sync-base`
+and is off by default, because a repository deliberately kept without a local
+trunk is a legitimate choice and creating a branch is not a repair. A base your
+config declares and that already exists locally is never overridden.
+
+### Doing it by hand
+
+For a single repository:
 
 ```bash
 git -C <repo> fetch origin master:master

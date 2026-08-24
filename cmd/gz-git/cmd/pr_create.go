@@ -98,7 +98,7 @@ func runPRCreate(cmd *cobra.Command, args []string) error {
 		MaxDepth:          prCreateFlags.Depth,
 		IncludeSubmodules: prCreateFlags.IncludeSubmodules,
 		IncludePattern:    prCreateFlags.Include,
-		ExcludePattern:    prCreateFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, prCreateFlags.Exclude),
 	})
 	if err != nil {
 		return cliutil.NewExitError(cliutil.ExitToolError, err)

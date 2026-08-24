@@ -491,6 +491,12 @@ func mergeParentDefaults(child, parent *Config) {
 		if child.Defaults.Scan.Depth == 0 {
 			child.Defaults.Scan.Depth = parent.Defaults.Scan.Depth
 		}
+		// Exclusions accumulate instead of being overridden. A child that
+		// declares its own exclusion is adding one, not revoking the parent's:
+		// a parent excludes a vendored mirror precisely so no descendant can
+		// write to it by forgetting to repeat the rule.
+		child.Defaults.Scan.Exclude = mergeExcludePatterns(
+			parent.Defaults.Scan.Exclude, child.Defaults.Scan.Exclude)
 	}
 
 	// Merge Output defaults
@@ -862,4 +868,30 @@ func GetParentChain(config *Config) []*Config {
 		current = current.ParentConfig
 	}
 	return chain
+}
+
+// mergeExcludePatterns concatenates parent and child exclusion patterns,
+// dropping duplicates and preserving first-seen order with the parent first.
+//
+// Order is not merely cosmetic: the patterns are joined into one alternation
+// and reported back to the user verbatim, so a stable order makes the message
+// identical between runs and diffable in a log.
+func mergeExcludePatterns(parent, child []string) []string {
+	if len(parent) == 0 {
+		return child
+	}
+	if len(child) == 0 {
+		return parent
+	}
+
+	merged := make([]string, 0, len(parent)+len(child))
+	seen := make(map[string]struct{}, len(parent)+len(child))
+	for _, p := range append(append([]string{}, parent...), child...) {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		merged = append(merged, p)
+	}
+	return merged
 }

@@ -176,7 +176,7 @@ func prepareCommitRun(cmd *cobra.Command, args []string) (commitRunConfig, error
 		IncludeSubmodules: commitFlags.IncludeSubmodules,
 		AllowConflicted:   commitAllowConflicted,
 		IncludePattern:    commitFlags.Include,
-		ExcludePattern:    commitFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, commitFlags.Exclude),
 		Logger:            createBulkLogger(verbose),
 		ProgressCallback:  createProgressCallback("Analyzing", commitFlags.Format, quiet),
 	}

@@ -35,6 +35,14 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ### Added
 
+- `defaults.scan.exclude` keeps a repository out of the local directory scan that every
+  bulk command runs, so a vendored mirror or a reference clone can be declared off-limits
+  once instead of being protected by remembering `--exclude` on every invocation.
+  Forgetting the flag used to fail silently — the repository simply appeared as another
+  success row. Configured exclusions accumulate with the flag rather than being replaced
+  by it, survive a `--include` naming the same repository, accumulate down the config
+  hierarchy, and are printed to stderr on every run so nothing drops out unannounced.
+
 - `gz-git integrate check` and `integrate run` land a task branch on the configured
   integration branch: `check` is read-only and reports every gate, `run` performs the
   merge and then reclaims the worktree, the local branch and the remote branch in the
@@ -42,23 +50,30 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
   `integrate queue` lists what is waiting. Configuration gains `integrationBranch` and
   `taskPattern`, declared at the repository root so `dev/*/*/*` is recognized as a task
   namespace instead of an ordinary branch.
+
   - Gates fail closed: a repository with no check gate is refused rather than passed,
     `make` probe targets must be on an allowlist before launch, and a remote delete is
     leased to the SHA that actually landed, so a branch that moved after the merge is
     not deleted. Without a declared integration branch, `origin/HEAD` is followed.
+
 - `gz-git pr create` opens a pull or merge request on GitHub, GitLab and Gitea.
+
 - `gz-git update --sync-base` repairs local base refs that have fallen behind their
   remote, which is what makes the BASE divergence column trustworthy.
+
 - `gz-git info` prints one line per repository as a table. `--audit` reports diagnostic
   codes with a per-code autofix policy, `--compact` drops columns (the default now keeps
   them), and the BRANCH column folds in upstream divergence. Both arrow columns name what
   they compare: BRANCH is HEAD against `@{upstream}`, BASE is HEAD against the local base
   branch — a repository fully pushed can still show BASE arrows, which is not a push
   failure.
+
 - `gz-git cleanup branch` reclaims merged remote bot branches and classifies superseded
   bot remotes, so an abandoned automation branch is distinguishable from a live one.
+
 - `gz-git install --audit` reports shadowed and duplicated binaries on the install path —
   the case where a fix is committed but the binary being run is still the old one.
+
 - `repository.ResolveBase` resolves a base branch config-first, and
   `cliutil.ExitReclaimIncomplete` gives callers a distinct exit code for that state.
 

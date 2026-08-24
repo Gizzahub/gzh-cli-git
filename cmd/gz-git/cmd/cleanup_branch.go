@@ -260,7 +260,7 @@ func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns
 		ProtectPatterns:   excludePatterns,
 		IncludeSubmodules: cleanupBranchBulkFlags.IncludeSubmodules,
 		IncludePattern:    cleanupBranchBulkFlags.Include,
-		ExcludePattern:    cleanupBranchBulkFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, cleanupBranchBulkFlags.Exclude),
 		Logger:            repository.NewNoopLogger(),
 	}
 

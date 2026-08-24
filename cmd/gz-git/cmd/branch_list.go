@@ -68,7 +68,7 @@ func runBulkBranchList(ctx context.Context, directory string) error {
 		MaxDepth:       branchListFlags.Depth,
 		All:            branchListAll,
 		IncludePattern: branchListFlags.Include,
-		ExcludePattern: branchListFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, branchListFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 

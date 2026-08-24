@@ -141,7 +141,7 @@ func runBulkStashSave(ctx context.Context, directory string) error {
 		Message:          stashMessage,
 		IncludeUntracked: stashIncludeUntrack,
 		IncludePattern:   stashSaveBulkFlags.Include,
-		ExcludePattern:   stashSaveBulkFlags.Exclude,
+		ExcludePattern:   resolveScanExclude(directory, stashSaveBulkFlags.Exclude),
 		Logger:           repository.NewNoopLogger(),
 	}
 
@@ -181,7 +181,7 @@ func runBulkStashList(ctx context.Context, directory string) error {
 		MaxDepth:       stashListBulkFlags.Depth,
 		Operation:      "list",
 		IncludePattern: stashListBulkFlags.Include,
-		ExcludePattern: stashListBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, stashListBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 
@@ -222,7 +222,7 @@ func runBulkStashPop(ctx context.Context, directory string) error {
 		DryRun:         stashPopBulkFlags.DryRun,
 		Operation:      "pop",
 		IncludePattern: stashPopBulkFlags.Include,
-		ExcludePattern: stashPopBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, stashPopBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 
@@ -263,7 +263,7 @@ func runBulkStashApply(ctx context.Context, directory string) error {
 		DryRun:         stashApplyBulkFlags.DryRun,
 		Operation:      "apply",
 		IncludePattern: stashApplyBulkFlags.Include,
-		ExcludePattern: stashApplyBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, stashApplyBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 

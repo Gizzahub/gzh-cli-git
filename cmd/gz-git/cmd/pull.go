@@ -121,7 +121,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 		Stash:             pullStash,
 		IncludeSubmodules: pullFlags.IncludeSubmodules,
 		IncludePattern:    pullFlags.Include,
-		ExcludePattern:    pullFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, pullFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Pulling", pullFlags.Format, quiet),
 	}

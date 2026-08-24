@@ -113,7 +113,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		NoFetch:           skipFetch,
 		IncludeSubmodules: updateFlags.IncludeSubmodules,
 		IncludePattern:    updateFlags.Include,
-		ExcludePattern:    updateFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, updateFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Updating", updateFlags.Format, quiet),
 		SyncBase:          updateSyncBase,

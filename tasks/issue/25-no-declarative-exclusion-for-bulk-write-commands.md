@@ -1,11 +1,12 @@
 # ISSUE: bulk write 명령을 저장소 단위로 막을 선언형 수단이 없다
 
-- status: open
+- status: done (2026-08-25)
 - priority: P2
 - category: config / safety
 - created_at: 2026-08-25T00:20:00+09:00
 - affects: `push`, `commit`, `clean`, `cleanup branch`, `stash`, `tag create`, `pr create`, `switch`, `update`, `exec` — 매 실행마다 `--exclude`를 기억해야만 특정 저장소를 건드리지 않는다
 - spawned_from: flow-taskchain-devbox의 `tasuku-repo` 제외 처리를 검토하다 발견
+- resolved_by: A(`defaults.scan.exclude`) + C(문서 범위 명시). B(저장소 단위 readOnly)는 채택하지 않음
 
 ## 요약
 
@@ -125,11 +126,66 @@ A/B와 별개로 즉시 해야 한다. 현재 문서는 이 키가 forge 목록 
 
 ## 수용 기준
 
-- [ ] `push`가 설정으로 선언된 제외 대상을 스캔 결과에서 뺀다 (A 또는 B)
-- [ ] 같은 규칙이 최소한 `commit`, `clean`, `cleanup branch`에도 적용된다
-- [ ] 제외된 저장소가 `--dry-run` 출력에 "제외됨"으로 보고된다 (조용한 성공 금지)
-- [ ] `defaults.filter`의 적용 범위가 `docs/usage/workspace-command.md`에 명시된다 (C)
-- [ ] 설정 제외와 `--include` 플래그가 충돌할 때의 우선순위가 테스트로 고정된다
+- [x] `push`가 설정으로 선언된 제외 대상을 스캔 결과에서 뺀다 (A)
+- [x] 같은 규칙이 최소한 `commit`, `clean`, `cleanup branch`에도 적용된다 —
+  실제로는 `ExcludePattern`을 채우던 24개 호출부 전부에 적용
+- [~] 제외된 저장소가 출력에 "제외됨"으로 보고된다 (조용한 성공 금지) —
+  **패턴 단위로** 보고한다. 아래 "구현 노트" 참고
+- [x] `defaults.filter`의 적용 범위가 `docs/usage/workspace-command.md`에 명시된다 (C)
+- [x] 설정 제외와 `--include` 플래그가 충돌할 때의 우선순위가 테스트로 고정된다 —
+  `TestConfigExcludeBeatsIncludeFlag`
+
+## 구현 노트 (2026-08-25)
+
+### 키 이름: `scan.exclude`가 아니라 `defaults.scan.exclude`
+
+제안서는 최상위 `scan:`을 썼지만 `defaults.scan.depth`가 이미 존재하는
+로컬 스캔 네임스페이스라 그 아래에 뒀다. 최상위에 새 네임스페이스를 만들면
+"스캔 설정이 두 군데"라는 문제를 하나 더 만든다.
+
+### 적용 지점: `cmd/` — pkg/repository가 아님
+
+`pkg/config`가 이미 `pkg/repository`를 import한다(`pkg/config/types.go:21`).
+따라서 스캐너가 설정을 읽으면 import cycle이다. CLI 계층이 둘을 잇는
+유일한 지점이라 `cmd/gz-git/cmd/scan_exclude.go`에 뒀다.
+
+### 우선순위는 코드가 아니라 기존 순서에서 나온다
+
+`filterRepositories`(`pkg/repository/bulk.go:1085-1095`)가 include보다
+exclude를 **먼저** 평가한다. 설정 제외를 exclude 정규식에 합치기만 하면
+"`--include`로 되살아나지 않는다"는 요구가 추가 코드 없이 충족된다.
+
+### 보고는 패턴 단위 (수용 기준 3의 부분 충족)
+
+"어떤 저장소가 제외됐는지"를 이름으로 나열하려면 스캔 결과를 필터 전후로
+비교해야 하고, 그러려면 `ScanOptions`/`BulkUpdateOptions` 등 옵션 구조체
+전부에 필드를 하나씩 추가해 `bulkOperationCommon`까지 배선해야 한다.
+그 비용에 비해 얻는 것이 "이름 나열"뿐이라 하지 않았다.
+
+대신 적용 중인 패턴을 **매 실행마다** stderr에 출력한다:
+
+```console
+$ gz-git push
+Excluding repositories matching defaults.scan.exclude: mirror-repo
+```
+
+`--dry-run`뿐 아니라 실제 실행에서도 나온다 — push에서 조용히 빠진 저장소는
+preview에서 빠진 것만큼 놀랍기 때문이다. stdout이 아니라 stderr인 이유는
+`--format json/llm` 출력을 파싱하는 도구를 깨뜨리지 않기 위해서다.
+`-q`로 억제된다.
+
+### 잘못된 regex는 fail-closed
+
+`defaults.scan.exclude`의 패턴이 컴파일되지 않으면 경고만 출력하고 넘어가지
+않는다. 패턴을 그대로 결합 정규식에 남겨 `filterRepositories`가 스캔을
+거부하게 한다. 제외가 조용히 풀린 채 bulk write가 도는 것이 이 이슈가
+막으려던 실패 그 자체다.
+
+### 파생 발견 — `defaults.scan.depth`도 죽은 키다
+
+`GetScanDepth()`(`pkg/config/types.go:983`)의 소비처가 저장소 전체에 없다.
+`defaults.filter`와 정확히 같은 부류의 결함이라 별도 카드로 분리했다:
+`tasks/issue/26-defaults-scan-depth-is-a-dead-config-key.md`
 
 ## 참고
 

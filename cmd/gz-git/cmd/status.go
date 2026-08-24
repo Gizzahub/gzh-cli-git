@@ -127,7 +127,7 @@ func runDiagnosticStatus(ctx context.Context, client repository.Client, director
 		MaxDepth:          statusFlags.Depth,
 		IncludeSubmodules: statusFlags.IncludeSubmodules,
 		IncludePattern:    statusFlags.Include,
-		ExcludePattern:    statusFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, statusFlags.Exclude),
 		Logger:            logger,
 	})
 	if err != nil {

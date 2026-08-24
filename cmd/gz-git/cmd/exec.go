@@ -102,7 +102,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 		DryRun:            execFlags.DryRun,
 		IncludeSubmodules: execFlags.IncludeSubmodules,
 		IncludePattern:    execFlags.Include,
-		ExcludePattern:    execFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, execFlags.Exclude),
 		Logger:            logger,
 		Command:           cmdArgs[0],
 		Args:              cmdArgs[1:],

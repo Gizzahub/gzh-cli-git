@@ -184,6 +184,18 @@ type SyncDefaults struct {
 // ScanDefaults holds scan-related default settings.
 type ScanDefaults struct {
 	Depth int `yaml:"depth,omitempty"` // Default scan depth for bulk operations
+
+	// Exclude holds regex patterns removed from the *local directory scan*
+	// that every bulk command runs. It exists because the only way to keep a
+	// repository out of `push`/`commit` used to be remembering `--exclude` on
+	// every invocation, and forgetting it failed silently: the repository just
+	// appeared as another success row.
+	//
+	// This is deliberately not `defaults.filter.exclude`. That key filters the
+	// repository list a forge API returns to `workspace sync` and has never
+	// affected the local scan, so reusing it would have made one name mean two
+	// scopes. See GetScanExcludePatterns.
+	Exclude []string `yaml:"exclude,omitempty"`
 }
 
 // OutputDefaults holds output-related default settings.
@@ -1003,7 +1015,23 @@ func (c *Config) GetFormat() string {
 	return ""
 }
 
+// GetScanExcludePatterns returns regex patterns from defaults.scan.exclude.
+//
+// These apply to the local directory scan shared by every bulk command, unlike
+// GetExcludePatterns, which applies only to the forge API listing in
+// `workspace sync`.
+func (c *Config) GetScanExcludePatterns() []string {
+	if c.Defaults != nil && c.Defaults.Scan != nil {
+		return c.Defaults.Scan.Exclude
+	}
+	return nil
+}
+
 // GetIncludePatterns returns include patterns from defaults.filter.include.
+//
+// Scope: the forge API repository listing in `workspace sync` only. It does not
+// filter the local directory scan that bulk commands run — see
+// GetScanExcludePatterns for that.
 func (c *Config) GetIncludePatterns() []string {
 	if c.Defaults != nil && c.Defaults.Filter != nil {
 		return c.Defaults.Filter.Include
@@ -1012,6 +1040,10 @@ func (c *Config) GetIncludePatterns() []string {
 }
 
 // GetExcludePatterns returns exclude patterns from defaults.filter.exclude.
+//
+// Scope: the forge API repository listing in `workspace sync` only. Setting it
+// does not keep a repository out of `push`, `commit`, or any other bulk
+// command — use defaults.scan.exclude for that.
 func (c *Config) GetExcludePatterns() []string {
 	if c.Defaults != nil && c.Defaults.Filter != nil {
 		return c.Defaults.Filter.Exclude

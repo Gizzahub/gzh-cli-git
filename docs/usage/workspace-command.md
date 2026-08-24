@@ -4,14 +4,14 @@
 
 ## 서브커맨드
 
-| 커맨드 | 설명 |
-|--------|------|
-| `init` | 디렉토리 스캔 → config 생성 |
-| `sync` | Config 기반 clone/update |
-| `status` | Workspace health check |
-| `add` | Config에 repo 추가 |
-| `validate` | Config 파일 검증 |
-| `generate-config` | Forge API → config 생성 |
+| 커맨드            | 설명                        |
+| ----------------- | --------------------------- |
+| `init`            | 디렉토리 스캔 → config 생성 |
+| `sync`            | Config 기반 clone/update    |
+| `status`          | Workspace health check      |
+| `add`             | Config에 repo 추가          |
+| `validate`        | Config 파일 검증            |
+| `generate-config` | Forge API → config 생성     |
 
 ## init
 
@@ -45,21 +45,21 @@ gz-git workspace init . -o myworkspace.yaml
 
 ### Kind 옵션
 
-| Kind | 설명 | 형식 |
-|------|------|------|
-| `workspace` | 계층적 구조 (기본값) | `workspaces:` map |
-| `repositories` | 단순 목록 | `repositories:` array |
+| Kind           | 설명                 | 형식                  |
+| -------------- | -------------------- | --------------------- |
+| `workspace`    | 계층적 구조 (기본값) | `workspaces:` map     |
+| `repositories` | 단순 목록            | `repositories:` array |
 
 **주의**: `workspaces` (복수형)도 지원되지만 deprecated 경고가 표시됩니다.
 
 ### Strategy 옵션
 
-| Strategy | 설명 |
-|----------|------|
-| `reset` | git fetch + reset --hard (기본값) |
-| `pull` | git pull |
-| `fetch` | git fetch만 |
-| `skip` | 기존 repo 건너뛰기 |
+| Strategy | 설명                              |
+| -------- | --------------------------------- |
+| `reset`  | git fetch + reset --hard (기본값) |
+| `pull`   | git pull                          |
+| `fetch`  | git fetch만                       |
+| `skip`   | 기존 repo 건너뛰기                |
 
 ### 생성되는 config
 
@@ -152,12 +152,12 @@ Proceed with sync? (y/N)
 
 ### Flag 동작 매트릭스
 
-| Flags | Preview | Prompt | Execute |
-|-------|---------|--------|---------|
-| (기본) | ✓ | ✗ | ✓ |
-| `--interactive` | ✓ | ✓ | 'y' 입력시 |
-| `--dry-run` | ✓ | ✗ | ✗ |
-| `--dry-run --interactive` | ✓ | ✗ | ✗ |
+| Flags                     | Preview | Prompt | Execute    |
+| ------------------------- | ------- | ------ | ---------- |
+| (기본)                    | ✓       | ✗      | ✓          |
+| `--interactive`           | ✓       | ✓      | 'y' 입력시 |
+| `--dry-run`               | ✓       | ✗      | ✗          |
+| `--dry-run --interactive` | ✓       | ✗      | ✗          |
 
 **참고**: CI 환경 (non-TTY)에서는 interactive prompt가 비활성화됩니다.
 
@@ -172,12 +172,12 @@ Proceed with sync? (y/N)
 
 ### Strategy
 
-| Strategy | 동작 |
-|----------|------|
-| `pull` | git pull (기본값) |
-| `reset` | git fetch + reset --hard |
-| `skip` | 기존 repo 건너뛰기 |
-| `rebase` | git pull --rebase |
+| Strategy | 동작                     |
+| -------- | ------------------------ |
+| `pull`   | git pull (기본값)        |
+| `reset`  | git fetch + reset --hard |
+| `skip`   | 기존 repo 건너뛰기       |
+| `rebase` | git pull --rebase        |
 
 ## status
 
@@ -244,6 +244,7 @@ gz-git workspace validate --verbose
 ### 검증 항목
 
 **Errors (필수 수정)**:
+
 - `kind` 필드 누락
 - 잘못된 `kind` 값
 - 잘못된 `strategy` 값
@@ -251,10 +252,12 @@ gz-git workspace validate --verbose
 - 중복 name 검사
 
 **Warnings (권장 수정)**:
+
 - Deprecated kind 사용 (`repository` → `repositories`, `workspaces` → `workspace`)
 - kind와 실제 구조 불일치 (`kind: workspace`인데 `repositories:` 사용)
 
 **Suggestions (개선 권장)**:
+
 - `version` 필드 추가 권장
 - `strategy` 필드 추가 권장
 
@@ -295,21 +298,21 @@ No issues found.
 
 ### Kind 값
 
-| 값 | 상태 | 설명 |
-|---|---|---|
-| `workspace` | 권장 | 계층적 구조 (`workspaces:` map) |
-| `repositories` | 권장 | 단순 목록 (`repositories:` array) |
-| `workspaces` | deprecated | `workspace` 사용 권장 |
-| `repository` | deprecated | `repositories` 사용 권장 |
+| 값             | 상태       | 설명                              |
+| -------------- | ---------- | --------------------------------- |
+| `workspace`    | 권장       | 계층적 구조 (`workspaces:` map)   |
+| `repositories` | 권장       | 단순 목록 (`repositories:` array) |
+| `workspaces`   | deprecated | `workspace` 사용 권장             |
+| `repository`   | deprecated | `repositories` 사용 권장          |
 
 ### Strategy 값
 
-| 값 | 설명 |
-|---|---|
+| 값      | 설명                     |
+| ------- | ------------------------ |
 | `reset` | git fetch + reset --hard |
-| `pull` | git pull |
-| `fetch` | git fetch만 |
-| `skip` | 기존 repo 건너뛰기 |
+| `pull`  | git pull                 |
+| `fetch` | git fetch만              |
+| `skip`  | 기존 repo 건너뛰기       |
 
 ## generate-config
 
@@ -375,15 +378,34 @@ workspaces:
       - "^platform/services/"
 ```
 
+#### 적용 범위 — forge API 목록에만 적용됩니다
+
+`defaults.filter`는 **forge API가 돌려준 저장소 목록**을 거를 때만 쓰입니다.
+`push`, `commit`, `clean`, `cleanup branch` 등 bulk 명령은 설정에 선언된 목록이
+아니라 **로컬 디렉터리를 스캔**해서 대상을 정하므로, 이 키를 설정해도 그 명령들의
+대상은 전혀 줄어들지 않습니다. `defaults.`라는 이름 때문에 전역 기본값으로 읽히기
+쉬우니 주의하세요.
+
+로컬 스캔에서 저장소를 빼려면 [`defaults.scan.exclude`](config-command.md#%EB%A1%9C%EC%BB%AC-%EC%8A%A4%EC%BA%94-%EC%A0%9C%EC%99%B8-defaultsscanexclude)를
+사용합니다.
+
+```yaml
+defaults:
+  filter:
+    exclude: ["archive"]      # workspace sync 의 forge 목록에만 적용
+  scan:
+    exclude: ["mirror-repo"]  # 모든 bulk 명령의 로컬 스캔에 적용
+```
+
 ### Repository 필드
 
-| 필드 | 설명 | 필수 |
-|------|------|------|
-| `name` | 디렉토리 이름 | URL에서 추출 |
-| `url` | Git URL | Yes |
-| `branch` | Checkout branch | No |
-| `assumePresent` | Clone 스킵 | No |
-| `path` | 상대 경로 | No |
+| 필드            | 설명            | 필수         |
+| --------------- | --------------- | ------------ |
+| `name`          | 디렉토리 이름   | URL에서 추출 |
+| `url`           | Git URL         | Yes          |
+| `branch`        | Checkout branch | No           |
+| `assumePresent` | Clone 스킵      | No           |
+| `path`          | 상대 경로       | No           |
 
 ## 워크플로우 예제
 
@@ -433,11 +455,12 @@ gz-git workspace sync
 
 ## workspace vs sync 차이
 
-| 명령 | 용도 | 데이터 소스 |
-|------|------|------------|
-| `workspace` | 로컬 config 관리 | `.gz-git.yaml` 파일 |
-| `sync` | Forge API 직접 호출 | GitHub/GitLab/Gitea API |
+| 명령        | 용도                | 데이터 소스             |
+| ----------- | ------------------- | ----------------------- |
+| `workspace` | 로컬 config 관리    | `.gz-git.yaml` 파일     |
+| `sync`      | Forge API 직접 호출 | GitHub/GitLab/Gitea API |
 
 일반적인 워크플로우:
+
 1. `forge config generate` → config 생성
-2. `workspace sync` → config 기반 동기화
+1. `workspace sync` → config 기반 동기화

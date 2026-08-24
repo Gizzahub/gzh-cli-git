@@ -110,7 +110,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		Tags:              fetchTags,
 		IncludeSubmodules: fetchFlags.IncludeSubmodules,
 		IncludePattern:    fetchFlags.Include,
-		ExcludePattern:    fetchFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, fetchFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Fetching", fetchFlags.Format, quiet),
 	}

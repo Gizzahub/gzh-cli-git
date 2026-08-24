@@ -197,7 +197,7 @@ func runBulkTagCreate(ctx context.Context, directory, tagName string) error {
 		Message:        tagMessage,
 		Force:          tagForce,
 		IncludePattern: tagCreateBulkFlags.Include,
-		ExcludePattern: tagCreateBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, tagCreateBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 
@@ -278,7 +278,7 @@ func runBulkTagList(ctx context.Context, directory string) error {
 		MaxDepth:       tagListBulkFlags.Depth,
 		Operation:      "list",
 		IncludePattern: tagListBulkFlags.Include,
-		ExcludePattern: tagListBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, tagListBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 
@@ -351,7 +351,7 @@ func runBulkTagPush(ctx context.Context, directory string) error {
 		Operation:      "push",
 		PushAll:        tagPushAll,
 		IncludePattern: tagPushBulkFlags.Include,
-		ExcludePattern: tagPushBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, tagPushBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 
@@ -388,7 +388,7 @@ func runTagStatus(cmd *cobra.Command, args []string) error {
 		MaxDepth:       tagStatusBulkFlags.Depth,
 		Operation:      "status",
 		IncludePattern: tagStatusBulkFlags.Include,
-		ExcludePattern: tagStatusBulkFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, tagStatusBulkFlags.Exclude),
 		Logger:         repository.NewNoopLogger(),
 	}
 

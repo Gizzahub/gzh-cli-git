@@ -113,7 +113,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		Verbose:           verbose,
 		IncludeSubmodules: diffFlags.IncludeSubmodules,
 		IncludePattern:    diffFlags.Include,
-		ExcludePattern:    diffFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, diffFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Scanning", diffFlags.Format, quiet),
 	}

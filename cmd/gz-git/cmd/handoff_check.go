@@ -97,7 +97,7 @@ func assessHandoff(ctx context.Context, directory string, flags BulkCommandFlags
 		MaxDepth:          flags.Depth,
 		IncludeSubmodules: flags.IncludeSubmodules,
 		IncludePattern:    flags.Include,
-		ExcludePattern:    flags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, flags.Exclude),
 		Verbose:           verbose,
 		Logger:            createBulkLogger(verbose),
 	})

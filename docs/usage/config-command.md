@@ -4,12 +4,12 @@ Profile 및 설정 관리.
 
 ## 서브커맨드
 
-| 커맨드 | 설명 |
-|--------|------|
-| `init` | Config 디렉토리 초기화 |
-| `profile` | Profile 관리 (create/use/list/show/delete) |
-| `show` | 현재 설정 표시 |
-| `hierarchy` | Config 계층 트리 표시 |
+| 커맨드      | 설명                                       |
+| ----------- | ------------------------------------------ |
+| `init`      | Config 디렉토리 초기화                     |
+| `profile`   | Profile 관리 (create/use/list/show/delete) |
+| `show`      | 현재 설정 표시                             |
+| `hierarchy` | Config 계층 트리 표시                      |
 
 ## init
 
@@ -152,10 +152,10 @@ Config Hierarchy:
 높은 우선순위 → 낮은 우선순위:
 
 1. **Command flags** (`--provider gitlab`)
-2. **Project config** (`.gz-git.yaml`)
-3. **Active profile** (`~/.config/gz-git/profiles/work.yaml`)
-4. **Global config** (`~/.config/gz-git/config.yaml`)
-5. **Built-in defaults**
+1. **Project config** (`.gz-git.yaml`)
+1. **Active profile** (`~/.config/gz-git/profiles/work.yaml`)
+1. **Global config** (`~/.config/gz-git/config.yaml`)
+1. **Built-in defaults**
 
 ## Profile 파일 형식
 
@@ -196,6 +196,42 @@ metadata:
   team: backend
   repository: https://gitlab.company.com/backend/myproject
 ```
+
+## 로컬 스캔 제외 (defaults.scan.exclude)
+
+bulk 명령(`push`, `commit`, `clean`, `cleanup branch`, `stash`, `tag`, `exec`,
+`switch`, `update`, `pr create` …)은 설정에 선언된 목록이 아니라 **디렉터리를
+스캔**해서 대상을 정합니다. 읽기만 하고 절대 쓰지 않아야 할 저장소(vendored 사본,
+upstream 미러, 참조용 clone)를 영구히 빼두려면 `defaults.scan.exclude`에
+regex를 선언합니다.
+
+```yaml
+defaults:
+  scan:
+    exclude:
+      - mirror-repo
+      - ^vendor/
+```
+
+동작 규칙:
+
+| 규칙                              | 설명                                                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 플래그와 **합쳐집니다**           | `--exclude`는 설정을 덮어쓰지 않고 제외 대상을 더합니다. 선언한 제외가 플래그를 잊었다고 사라지면 의미가 없기 때문입니다.                           |
+| `--include`로 되살아나지 않습니다 | 스캐너가 include보다 exclude를 먼저 평가합니다. `--include mirror-repo`를 줘도 제외 상태가 유지됩니다.                                              |
+| 상위 설정과 **누적됩니다**        | 부모 `.gz-git.yaml`의 제외는 자식이 자기 제외를 선언해도 유지됩니다. 부모가 미러를 막아둔 이유가 자식의 누락으로 풀리면 안 되기 때문입니다.         |
+| 매 실행마다 보고됩니다            | 적용 중인 패턴을 stderr에 출력합니다(`-q`로 억제). 조용히 빠지는 저장소가 없도록 하기 위함입니다. `--format json/llm`의 stdout은 오염되지 않습니다. |
+| regex가 잘못되면 **실패합니다**   | 패턴이 컴파일되지 않으면 명령이 중단됩니다. 제외가 조용히 풀린 채 실행되는 것보다 안전합니다.                                                       |
+
+```console
+$ gz-git push
+Excluding repositories matching defaults.scan.exclude: mirror-repo
+...
+```
+
+> `defaults.filter.include/exclude`는 이것과 **다른 키**입니다. 그쪽은
+> `workspace sync`가 forge API에서 받아 온 목록을 거를 때만 쓰이며 로컬 스캔에는
+> 영향이 없습니다. [workspace-command.md](workspace-command.md#%EC%A0%81%EC%9A%A9-%EB%B2%94%EC%9C%84--forge-api-%EB%AA%A9%EB%A1%9D%EC%97%90%EB%A7%8C-%EC%A0%81%EC%9A%A9%EB%90%A9%EB%8B%88%EB%8B%A4) 참고.
 
 ## 환경변수
 

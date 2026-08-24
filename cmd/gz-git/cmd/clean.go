@@ -129,7 +129,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 		ExcludePatterns:   cleanExclude,
 		IncludeSubmodules: cleanFlags.IncludeSubmodules,
 		IncludePattern:    cleanFlags.Include,
-		ExcludePattern:    cleanFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, cleanFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Cleaning", cleanFlags.Format, quiet),
 	}

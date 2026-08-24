@@ -145,7 +145,7 @@ func runBulkWorktreeList(ctx context.Context, directory string) error {
 		Directory:      directory,
 		MaxDepth:       worktreeListFlags.Depth,
 		IncludePattern: worktreeListFlags.Include,
-		ExcludePattern: worktreeListFlags.Exclude,
+		ExcludePattern: resolveScanExclude(directory, worktreeListFlags.Exclude),
 	})
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)

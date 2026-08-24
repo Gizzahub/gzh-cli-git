@@ -97,7 +97,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		Force:             switchForce,
 		IncludeSubmodules: switchFlags.IncludeSubmodules,
 		IncludePattern:    switchFlags.Include,
-		ExcludePattern:    switchFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, switchFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Switching", switchFlags.Format, quiet),
 	}

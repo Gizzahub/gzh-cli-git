@@ -143,7 +143,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 		Identity:          guards.identity,
 		IncludeSubmodules: pushFlags.IncludeSubmodules,
 		IncludePattern:    pushFlags.Include,
-		ExcludePattern:    pushFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, pushFlags.Exclude),
 		Logger:            logger,
 		ProgressCallback:  createProgressCallback("Pushing", pushFlags.Format, quiet),
 	}

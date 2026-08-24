@@ -124,7 +124,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 		Verbose:           verbose,
 		IncludeSubmodules: infoFlags.IncludeSubmodules,
 		IncludePattern:    infoFlags.Include,
-		ExcludePattern:    infoFlags.Exclude,
+		ExcludePattern:    resolveScanExclude(directory, infoFlags.Exclude),
 		Logger:            logger,
 	}
 

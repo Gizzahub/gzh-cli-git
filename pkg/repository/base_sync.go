@@ -282,15 +282,31 @@ func (c *client) branchWorktree(ctx context.Context, repoPath, branch string) st
 	return ""
 }
 
-// hasCommits reports whether HEAD resolves to a commit.
+// hasCommits reports whether any ref in the repository reaches a commit.
 //
-// The question is "does this repository have any history", not "is HEAD
-// valid": a freshly initialized or freshly cloned-empty repository has a
-// perfectly well-formed HEAD pointing at a branch that does not exist yet, and
-// every command that wants a commit fails on it.
+// The question is "does this repository have any history", not "does HEAD
+// resolve", and the two come apart exactly where it matters. An unborn HEAD is
+// not proof of an empty repository: `git checkout --orphan gh-pages` leaves a
+// repository full of commits whose HEAD points at a branch that does not exist
+// yet, and it answers `rev-parse --verify HEAD` identically to a clone of an
+// empty remote. Reading that as "no commits" would skip a base ref that is
+// genuinely stale, silently — the one outcome this whole change exists to
+// prevent.
+//
+// Walking refs answers the real question. An empty `--all` also means no base
+// branch can exist, which is the same conclusion by a route that cannot be
+// wrong for the orphan case.
 func (c *client) hasCommits(ctx context.Context, repoPath string) bool {
-	result, err := c.executor.Run(ctx, repoPath, "rev-parse", "--verify", "--quiet", "HEAD")
-	return err == nil && result.ExitCode == 0
+	result, err := c.executor.Run(ctx, repoPath, "rev-list", "-n", "1", "--all")
+	if err != nil || result.ExitCode != 0 {
+		// The probe itself could not run — a canceled context, an expired
+		// timeout, an unreadable object store. That is not evidence of an empty
+		// repository, and claiming it here would convert a real failure into a
+		// silent skip. Report "has commits" so the caller's original error
+		// surfaces as the failure it is.
+		return true
+	}
+	return strings.TrimSpace(result.Stdout) != ""
 }
 
 // syncResolvedBase is the half of SyncBase that runs once a base branch is

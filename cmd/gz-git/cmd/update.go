@@ -197,20 +197,12 @@ func displayUpdateResults(result *repository.BulkUpdateResult) {
 		})
 	}
 
-	issueStatuses := issueStatusSet("error", "dirty", "conflict", "base-blocked", "base-failed", "base-synced")
-	if updateFlags.Format != "compact" {
-		issueStatuses = issueStatusSet(
-			"error", "dirty", "conflict", "base-blocked", "base-failed", "base-synced", "no-remote", "no-upstream",
-			"auth-required", "rebase-in-progress", "merge-in-progress",
-		)
-	}
-
 	RenderBulkResults(os.Stdout, BulkRenderConfig{
 		Title:          "=== Update Results ===",
 		Verb:           "Updated",
 		Format:         updateFlags.Format,
 		Verbose:        verbose,
-		IssueStatuses:  issueStatuses,
+		IssueStatuses:  updateIssueStatuses(updateFlags.Format),
 		FormatStatus:   formatUpdateStatus,
 		ChangesCount:   func(row BulkRenderRow) int { return row.CommitsBehind },
 		SuccessMessage: "✓ All repositories updated successfully",
@@ -222,6 +214,21 @@ func displayUpdateResults(result *repository.BulkUpdateResult) {
 		Summary:        result.Summary,
 		Rows:           rows,
 	})
+}
+
+// updateIssueStatuses is the set of statuses whose rows survive the renderer's
+// filter, named rather than inlined because this set is what decides whether a
+// finding is printed at all. A status wired correctly everywhere else but
+// forgotten here disappears from the output while every unit test still passes,
+// which is precisely how a base-ref finding can go unnoticed.
+func updateIssueStatuses(format string) map[string]bool {
+	if format == "compact" {
+		return issueStatusSet("error", "dirty", "conflict", "base-blocked", "base-failed", "base-synced")
+	}
+	return issueStatusSet(
+		"error", "dirty", "conflict", "base-blocked", "base-failed", "base-synced", "no-remote", "no-upstream",
+		"auth-required", "rebase-in-progress", "merge-in-progress",
+	)
 }
 
 func formatUpdateStatus(row BulkRenderRow) string {
@@ -266,6 +273,10 @@ func formatUpdateStatus(row BulkRenderRow) string {
 		// blank about why it was shown.
 		if row.Note != "" {
 			return row.Note
+		}
+		if row.Status == repository.StatusBaseFailed {
+			// "diverged" would state a comparison that never happened.
+			return "base sync failed"
 		}
 		return "base diverged"
 	case "conflict":

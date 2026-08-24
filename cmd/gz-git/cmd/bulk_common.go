@@ -241,7 +241,7 @@ func getBulkStatusIcon(status string, changesCount int) string {
 		return "✓"
 
 	// Warning states
-	case "no-remote", "no-upstream", "base-blocked":
+	case "no-remote", "no-upstream", "base-blocked", "base-failed":
 		return "⚠"
 
 	// Authentication required

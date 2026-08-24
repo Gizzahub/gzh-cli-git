@@ -64,6 +64,14 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ### Fixed
 
+- `gz-git update --sync-base` no longer reports a repository as `base-blocked` when the
+  sync simply failed. Blocked is a verdict with an instruction attached — push these
+  commits, then run again — so a clone of an empty remote, whose unborn HEAD made
+  `rev-parse` fail, landed in the one list whose value is that every row needs action.
+  A failure is now `base-failed` (shown, but not counted among the actionable), and a
+  repository with no commits is skipped. History is probed by walking refs rather than
+  resolving HEAD, so a repository sitting on an orphan branch is not mistaken for an
+  empty one and silently passed over. Exit codes are unchanged.
 - `gz-git push` surfaces git's stderr on a bulk push failure. It was swallowed, so a
   rejected push reported only a count and looked like a silent no-op.
 - `gz-git info` shows remote-only branches, prefers top-level remotes, and keeps a label

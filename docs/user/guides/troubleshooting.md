@@ -97,6 +97,29 @@ An adopt that only rewinds — the local base was strictly *ahead* of its remote
 base master rewound to origin (adopted: 2 local commit(s) already pushed elsewhere; old tip at refs/gz-git/base-backup/master)
 ```
 
+### A sync that failed is not a sync that was blocked
+
+`blocked` is a verdict reached on evidence, and it comes with an instruction:
+push those commits somewhere, then run again. When the sync could not reach a
+verdict at all — git itself failed — the row says so instead:
+
+```text
+base sync failed: failed to read current branch: exit status 128
+```
+
+The two are separate statuses (`base-failed` and `base-blocked`) on purpose.
+Nobody clears a failed row by pushing commits, and counting it among the
+blocked ones makes the blocked count overstate how much work is outstanding.
+Neither status changes the exit code: a base ref is a repair the command
+offered, and failing at it must not report the pull you asked for as failed.
+
+A repository with **no commits at all** — a fresh clone of an empty remote — is
+neither. It has no base ref to sync and cannot have one until something is
+committed, so it is skipped silently rather than listed as needing attention.
+A repository that has commits but is sitting on an orphan branch (`git checkout
+--orphan`) is not in that class: its base ref is real and possibly stale, so it
+is reported.
+
 ### The base is checked out somewhere
 
 A base a linked worktree is standing on is reported and left alone, the same as

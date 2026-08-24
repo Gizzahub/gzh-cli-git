@@ -113,6 +113,11 @@ anything has checked out — this worktree or a linked one — is always left al
 When a diverged base is moved, its previous tip is parked at
 `refs/gz-git/base-backup/<base>` first.
 
+Statuses are distinct on purpose: `base-blocked` is a verdict you clear by
+pushing the commits, `base-failed` means the sync could not run and there is
+nothing to push. A repository with no commits yet is skipped silently. Neither
+affects the exit code.
+
 `--create-missing-base` additionally creates the base branch in repositories
 that have none, and requires `--sync-base`. See
 [troubleshooting](../user/guides/troubleshooting.md#why-base-is-often-large).

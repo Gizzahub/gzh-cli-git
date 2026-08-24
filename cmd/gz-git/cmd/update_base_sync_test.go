@@ -204,3 +204,36 @@ func TestFormatUpdateStatusBaseRows(t *testing.T) {
 		t.Errorf("formatUpdateStatus(failed) = %q, want the note %q", got, failed.Note)
 	}
 }
+
+// TestUpdateIssueStatusesCarriesBaseFindings pins the filter that decides
+// whether a row is printed at all.
+//
+// Every other test in this file can pass while a base finding never reaches the
+// terminal: the status is set correctly, the note is formatted correctly, and
+// the renderer drops the row because the status is not in this set.
+func TestUpdateIssueStatusesCarriesBaseFindings(t *testing.T) {
+	for _, format := range []string{"compact", "table"} {
+		set := updateIssueStatuses(format)
+		for _, status := range []string{
+			repository.StatusBaseFailed,
+			repository.StatusBaseBlocked,
+			repository.StatusBaseSynced,
+		} {
+			if !set[status] {
+				t.Errorf("format %q filters out %q rows", format, status)
+			}
+		}
+	}
+}
+
+// TestBaseFailedIconMatchesBaseBlocked keeps the two base findings in the same
+// visual class. A status the icon switch does not know falls through to the
+// neutral bullet used for unremarkable rows, which reads as less notable than
+// "up-to-date" sitting next to it.
+func TestBaseFailedIconMatchesBaseBlocked(t *testing.T) {
+	got := getBulkStatusIcon(repository.StatusBaseFailed, 0)
+	want := getBulkStatusIcon(repository.StatusBaseBlocked, 0)
+	if got != want {
+		t.Errorf("base-failed icon = %q, want %q", got, want)
+	}
+}

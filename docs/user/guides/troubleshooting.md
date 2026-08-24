@@ -129,8 +129,16 @@ exists — typically the worktree a previous `integrate run` just reclaimed:
 ```
 
 golangci-lint caches analysis results keyed by absolute path, and the cache
-outlives the directory. The next branch's gate then reads a clean tree as a
-"baseline failure, non-worsening" warning. Clear the cache and re-run:
+outlives the directory.
+
+The gate no longer does this. `integrate check` runs the lint target with a
+private `GOLANGCI_LINT_CACHE` that it creates and removes per run, and any
+diagnostic pointing outside the repository now fails the check by name instead
+of being counted as a pre-existing baseline. If you still see it, your
+installed binary predates that fix — see the next section.
+
+Running `make lint` by hand is a different matter: it uses the shared cache,
+so a reclaimed worktree can still haunt it. Clear the cache and re-run:
 
 ```bash
 golangci-lint cache clean && GOWORK=off make lint
@@ -138,6 +146,29 @@ golangci-lint cache clean && GOWORK=off make lint
 
 `GOWORK=off` matters inside a worktree: the tracked `go.work` names sibling
 modules by relative path, and those do not resolve from a worktree checkout.
+
+## A gate fix does not take effect until `make install`
+
+`integrate check` and `integrate run` are executed by the `gz-git` on your
+PATH, not by the source tree you are standing in. A fix to the gate itself is
+therefore invisible to the gate until it is installed:
+
+```bash
+GOWORK=off make install
+```
+
+This is easy to miss precisely because the change looks landed — it is
+committed, it is on the integration branch, and its tests pass. The judgment
+still comes from the binary. When a gate behaves in a way the current source
+cannot explain, check what is actually running before investigating the code:
+
+```bash
+gz-git --version
+strings "$(command -v gz-git)" | grep -c "<a string your fix introduced>"
+```
+
+The same applies in reverse: after installing a gate change, an unexpected new
+failure may be the fix working rather than a regression.
 
 ## See also
 

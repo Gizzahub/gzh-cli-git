@@ -117,6 +117,38 @@ func ExtractLocations(output string, tracked []string) []string {
 	return uniqueSorted(out)
 }
 
+// foreignDiagnosticLocations finds diagnostic locations that start outside
+// the repository. It must run before normalizeTrackedPath, which intentionally
+// strips leading path components to match tracked files.
+func foreignDiagnosticLocations(output string) []string {
+	var out []string
+	for _, line := range strings.Split(output, "\n") {
+		match := locationLine.FindString(strings.TrimSpace(line))
+		if match == "" {
+			match = locationLine.FindString(strings.TrimPrefix(strings.TrimSpace(line), "./"))
+		}
+		if match == "" {
+			continue
+		}
+		path, _, ok := splitLoc(match)
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimPrefix(filepath.ToSlash(path), "./"), "../") {
+			out = append(out, match)
+		}
+	}
+	return uniqueSorted(out)
+}
+
+func foreignDiagnosticError(scope, output string) error {
+	foreign := foreignDiagnosticLocations(output)
+	if len(foreign) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s diagnostics reference paths outside the repository: %s", scope, strings.Join(foreign, " "))
+}
+
 func normalizeTrackedPath(path string, tracked map[string]struct{}) string {
 	path = filepath.ToSlash(path)
 	for {

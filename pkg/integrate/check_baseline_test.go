@@ -98,3 +98,13 @@ internal/script/js_engine.go:200: other`
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestEvaluateBaseline_ForeignLocationsAreRejectedBeforeNormalization(t *testing.T) {
+	output := "../deleted-worktree/internal/script/js_engine.go:193: stale\n./internal/script/js_engine.go:200: local\n"
+	if got := foreignDiagnosticLocations(output); len(got) != 1 {
+		t.Fatalf("foreign locations = %v", got)
+	}
+	if got := ExtractLocations(output, []string{"internal/script/js_engine.go"}); len(got) != 2 {
+		t.Fatalf("normalizer fixture must demonstrate why the pre-check is needed, got %v", got)
+	}
+}

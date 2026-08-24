@@ -36,9 +36,21 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 	if _, ok := allowedMakeTargets[target]; !ok {
 		return makeProbe{Target: target, Err: fmt.Errorf("undeclared make target %q", target)}
 	}
+	var lintCache string
+	if target == "lint" {
+		var err error
+		lintCache, err = os.MkdirTemp("", "gz-git-integrate-golangci-lint-")
+		if err != nil {
+			return makeProbe{Target: target, Err: fmt.Errorf("create golangci-lint cache: %w", err)}
+		}
+		defer func() { _ = os.RemoveAll(lintCache) }()
+	}
 	cmd := exec.CommandContext(ctx, "make", target) // #nosec G204 -- validated against allowedMakeTargets above
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "MAKELEVEL=0", "MAKEFLAGS=", "LC_ALL=C")
+	if lintCache != "" {
+		cmd.Env = append(cmd.Env, "GOLANGCI_LINT_CACHE="+lintCache)
+	}
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -108,6 +120,13 @@ func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe,
 	if !probe.Defined {
 		return CheckItem{Name: name, Status: checkSkip, Detail: "undefined"}
 	}
+	if err := foreignDiagnosticError("branch", probe.Output); err != nil {
+		return CheckItem{
+			Name:   name,
+			Status: checkFail,
+			Detail: err.Error(),
+		}
+	}
 	if probe.MissingCD != "" {
 		return CheckItem{
 			Name:   name,
@@ -148,6 +167,9 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	defer func() { _ = g.worktreeRemoveForce(ctx, wt) }()
 
 	baseProbe := runMakeTarget(ctx, wt, probe.Target)
+	if err := foreignDiagnosticError("baseline", baseProbe.Output); err != nil {
+		return BaselineResult{}, err
+	}
 	if baseProbe.Err == nil {
 		return BaselineResult{Status: BaselineFail, Reason: fmt.Sprintf("failed here (rc=%d) but target tip passes", probe.Code)}, nil
 	}

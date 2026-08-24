@@ -313,21 +313,33 @@ func baseSyncNote(sync *repository.BaseSyncResult) string {
 		return ""
 	}
 
+	// Keyed on DryRun rather than on Advanced == 0. Advanced is zero in two
+	// unrelated situations — a dry run, where no ref moved, and a real adopt off
+	// a base that was strictly ahead, where a ref moved backwards — and reading
+	// the second as the first prints a rewind as a passive remark.
 	switch sync.Action {
 	case repository.BaseSyncFastForward:
-		// Advanced is zero on a dry run, where the ref has not moved and Reason
-		// carries the "would advance N commits" wording instead. Printing the
-		// "+%d" form there would render "base master +0" for the very case the
-		// dry run exists to preview.
-		if sync.Advanced == 0 {
+		if sync.DryRun {
+			// Reason carries the "would advance N commits" wording. Printing the
+			// "+%d" form here would render "base master +0" for the very case
+			// the dry run exists to preview.
 			return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
 		}
 		return fmt.Sprintf("base %s +%d", sync.Base, sync.Advanced)
 	case repository.BaseSyncAdopted:
-		if sync.Advanced == 0 {
+		if sync.DryRun {
 			return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
 		}
-		return fmt.Sprintf("base %s +%d (adopted: %s)", sync.Base, sync.Advanced, sync.Reason)
+		// "rewound" and not silence: this is the one action that moves a ref off
+		// commits, and the row has to say a ref moved. The backup ref is named
+		// because a user who disagrees with the decision needs it in the same
+		// breath, not from the documentation.
+		if sync.Advanced == 0 {
+			return fmt.Sprintf("base %s rewound to %s (adopted: %s; old tip at %s)",
+				sync.Base, sync.Remote, sync.Reason, sync.Backup)
+		}
+		return fmt.Sprintf("base %s +%d (adopted: %s; old tip at %s)",
+			sync.Base, sync.Advanced, sync.Reason, sync.Backup)
 	case repository.BaseSyncCreated:
 		return fmt.Sprintf("base %s %s", sync.Base, sync.Reason)
 	case repository.BaseSyncBlocked:

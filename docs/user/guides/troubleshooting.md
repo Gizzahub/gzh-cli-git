@@ -57,9 +57,9 @@ That is not a fast-forward, so the ref cannot simply catch up — and the two
 situations it can mean are opposites:
 
 - The base is parked on the tip of a task branch that **was** pushed. Every
-  commit exists on the remote under another name, so moving the pointer loses
-  nothing. This is adopted: `base master +12 (adopted: 2 local commit(s)
-  already pushed elsewhere)`.
+  commit is reachable from some remote-tracking ref, so moving the pointer
+  loses nothing. This is adopted: `base master +12 (adopted: 2 local commit(s)
+  already pushed elsewhere; old tip at refs/gz-git/base-backup/master)`.
 - The base carries commits that exist **nowhere else** — never pushed, on no
   branch the remote has. Moving the pointer would leave them reachable only
   from the reflog. This is refused: `base master blocked: 2 commit(s) exist
@@ -69,6 +69,44 @@ The count that decides is "commits on the local base reachable from no
 remote-tracking ref", not "commits the remote base lacks". A blocked base is
 reported and left exactly as it was; resolve it by pushing the commits
 somewhere, then run again.
+
+#### The backup ref, and why adopting needs one
+
+Note the exact wording above: *reachable from a remote-tracking ref*, not *on
+the remote*. Those are not the same claim. `refs/remotes/origin/*` is a local
+cache — a tracking ref for a branch someone deleted upstream survives until the
+next `fetch --prune`, and until then it stands as evidence for a commit that is
+no longer anywhere. The decision can therefore be wrong in exactly one
+direction, and it is the expensive one.
+
+So an adopt parks the old tip before it moves the ref:
+
+```bash
+git -C <repo> for-each-ref refs/gz-git/base-backup/   # what was moved off
+git -C <repo> branch recovered refs/gz-git/base-backup/master
+```
+
+They live under `refs/gz-git/` rather than `refs/heads/`, so they never show up
+in `git branch` and can never be picked as a base on a later run. Delete one
+with `git update-ref -d refs/gz-git/base-backup/<base>` once you are satisfied.
+
+An adopt that only rewinds — the local base was strictly *ahead* of its remote
+— says so rather than reporting a distance of zero:
+
+```text
+base master rewound to origin (adopted: 2 local commit(s) already pushed elsewhere; old tip at refs/gz-git/base-backup/master)
+```
+
+### The base is checked out somewhere
+
+A base a linked worktree is standing on is reported and left alone, the same as
+one checked out here: `base master is checked out in worktree celee__mbp__feat__x`.
+
+This is not caution for its own sake. `git update-ref` is plumbing and enforces
+no checkout rule — unlike `git branch -f`, it will move a branch out from under
+a worktree, leaving that worktree's index disagreeing with its HEAD, so every
+file the moved-off commits added reads as a staged deletion and the next commit
+made there quietly reverts them. Finish or remove the worktree, then run again.
 
 ### Repositories with no local base branch at all
 
@@ -83,8 +121,21 @@ gz-git update --sync-base --create-missing-base -d 2 ~/projects
 
 This creates the branch locally at the remote's tip. It requires `--sync-base`
 and is off by default, because a repository deliberately kept without a local
-trunk is a legitimate choice and creating a branch is not a repair. A base your
-config declares and that already exists locally is never overridden.
+trunk is a legitimate choice and creating a branch is not a repair.
+
+Two things it deliberately will not do:
+
+- **Retarget a base it could repair.** The create path only runs when the
+  resolved base leaves nothing to fix — nothing resolved, or it resolved to the
+  branch you are standing on. A repository with a stale local `master` gets that
+  `master` repaired, not an unrelated `main` invented beside it. A base your
+  config declares is never overridden either way.
+- **Resurrect a branch deleted upstream.** Which branches exist is asked of the
+  remote with `ls-remote`, not read out of `refs/remotes/`, so a tracking ref
+  left behind by a deleted branch cannot become a local trunk. This is also why
+  it finds `master` in a `clone --single-branch -b develop`, which has no
+  `origin/master` ref to probe. It needs the network, so it does nothing under
+  `--skip-fetch`.
 
 ### Doing it by hand
 

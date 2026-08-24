@@ -7,6 +7,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
@@ -315,6 +316,98 @@ func TestSyncBase_AdoptsWhenNothingWouldBeStranded(t *testing.T) {
 	}
 }
 
+// TestSyncBase_AdoptSurvivesAStaleTrackingRef is the regression guard for the
+// hole in the adopt policy, and it is the reason the backup ref exists.
+//
+// Stranded is counted with `rev-list --not --remotes=origin`, which reads
+// refs/remotes/origin/*: a *local* cache. A tracking ref for a branch someone
+// deleted upstream lives on until the next prune and, until then, testifies
+// that a commit is on the remote when it is on no remote at all. The count
+// therefore reads 0 for genuinely unpushed work and the ref is adopted away.
+//
+// The fixture below is that exact state, built without ever touching the
+// remote: a commit reachable only from a tracking ref whose branch does not
+// exist on origin. What is asserted is not that the policy gets it right — it
+// cannot, from local data alone — but that getting it wrong still loses
+// nothing.
+func TestSyncBase_AdoptSurvivesAStaleTrackingRef(t *testing.T) {
+	work := syncBaseFixture(t, 2)
+	runGit(t, work, "fetch", "origin")
+
+	runGit(t, work, "checkout", "master")
+	commitFile(t, work, "never-pushed.txt")
+	orphan := gitOut(t, work, "rev-parse", "master")
+	runGit(t, work, "checkout", "develop")
+
+	// A tracking ref for a branch origin has never heard of. This is what a
+	// deleted-upstream branch looks like locally before `fetch --prune`.
+	runGit(t, work, "update-ref", "refs/remotes/origin/gone", orphan)
+
+	client := NewClient()
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
+	if err != nil {
+		t.Fatalf("SyncBase: %v", err)
+	}
+
+	// The stale ref makes this look safe, and the policy adopts. That is the
+	// bug being defended against, not a behavior worth pinning on its own.
+	if got.Action != BaseSyncAdopted {
+		t.Fatalf("Action = %q (%s), want %q", got.Action, got.Reason, BaseSyncAdopted)
+	}
+
+	if got.Backup == "" {
+		t.Fatal("an adopt that rewound the base reported no backup ref")
+	}
+
+	if at := gitOut(t, work, "rev-parse", got.Backup); at != orphan {
+		t.Errorf("%s = %s, want the old base tip %s", got.Backup, at, orphan)
+	}
+
+	// The point of the whole exercise: prune away the lie the decision rested
+	// on, and the commit is still reachable from a ref.
+	runGit(t, work, "update-ref", "-d", "refs/remotes/origin/gone")
+
+	if out := gitOut(t, work, "for-each-ref", "--contains", orphan, "--format=%(refname)"); out == "" {
+		t.Errorf("commit %s is reachable from no ref at all after adoption", orphan)
+	}
+}
+
+// TestSyncBase_SkipsBaseCheckedOutInAnotherWorktree covers the guard that
+// `git update-ref` does not supply.
+//
+// update-ref is plumbing and enforces no checkout rule: it will rewind a branch
+// a linked worktree is standing on, where `git branch -f` refuses outright. The
+// worktree is then left with an index disagreeing with HEAD, so every file the
+// moved-off commits added reads as a staged deletion and the next commit made
+// there quietly reverts them.
+func TestSyncBase_SkipsBaseCheckedOutInAnotherWorktree(t *testing.T) {
+	work := syncBaseFixture(t, 3)
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGit(t, work, "worktree", "add", linked, "master")
+
+	before := gitOut(t, work, "rev-parse", "master")
+
+	client := NewClient()
+	got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+		Remote: "origin", Candidates: []string{"master"}, Fetch: true, DryRun: false,
+	})
+	if err != nil {
+		t.Fatalf("SyncBase: %v", err)
+	}
+	if got.Action != BaseSyncSkipped {
+		t.Errorf("Action = %q (%s), want %q", got.Action, got.Reason, BaseSyncSkipped)
+	}
+	if !strings.Contains(got.Reason, "worktree") {
+		t.Errorf("Reason = %q, want it to name the worktree holding the branch", got.Reason)
+	}
+	if after := gitOut(t, work, "rev-parse", "master"); after != before {
+		t.Errorf("master moved to %s under a worktree that has it checked out", after)
+	}
+}
+
 // TestSyncBase_CreateMissingBase covers the repositories that motivated the
 // flag: cloned, switched to develop, and never once checking out master, so
 // refs/heads/master does not exist at all.
@@ -415,6 +508,75 @@ func TestSyncBase_CreateMissingBase(t *testing.T) {
 		}
 		if got.Action == BaseSyncCreated {
 			t.Error("created a branch when the configured base was already present")
+		}
+	})
+
+	t.Run("does not retarget away from a base it could repair", func(t *testing.T) {
+		// The regression the review caught. master exists locally and is stale,
+		// so there is real repair work to do; origin also has an unrelated main
+		// that is absent locally. Consulting the create path here retargets the
+		// whole sync to main, creates it, and leaves the stale master exactly as
+		// it was — so a flag whose name promises to create something absent
+		// silently stops repairing what is present.
+		//
+		// Worse, it is self-perpetuating: heuristicBaseCandidates prefers main,
+		// so every later run in that repository resolves to the branch this one
+		// invented and never looks at master again.
+		work := syncBaseFixture(t, 2)
+		runGit(t, work, "fetch", "origin")
+		runGit(t, work, "push", "origin", "refs/remotes/origin/master:refs/heads/main")
+		runGit(t, work, "fetch", "origin")
+
+		client := NewClient()
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Fetch: true, DryRun: false, CreateMissing: true,
+		})
+		if err != nil {
+			t.Fatalf("SyncBase: %v", err)
+		}
+		if got.Base != "master" {
+			t.Fatalf("Base = %q, want master — it exists locally and is behind its remote", got.Base)
+		}
+		if got.Action != BaseSyncFastForward {
+			t.Errorf("Action = %q (%s), want the stale base repaired", got.Action, got.Reason)
+		}
+		if refPresent(t, work, "refs/heads/main") {
+			t.Error("created main while master still needed repairing")
+		}
+	})
+
+	t.Run("finds a base a single-branch clone has no tracking ref for", func(t *testing.T) {
+		// The case the flag was written for, and the one a tracking-ref probe
+		// cannot see: `clone --single-branch -b develop` sets a refspec that
+		// fetches only develop, so refs/remotes/origin/master never exists even
+		// though origin has master. Asking the remote is what finds it.
+		seed := syncBaseFixture(t, 2)
+		origin := gitOut(t, seed, "config", "--get", "remote.origin.url")
+
+		work := filepath.Join(t.TempDir(), "single")
+		runGit(t, t.TempDir(), "clone", "--single-branch", "-b", "develop", origin, work)
+
+		if refPresent(t, work, "refs/remotes/origin/master") {
+			t.Fatal("fixture is not single-branch: origin/master is already cached")
+		}
+
+		client := NewClient()
+		got, err := client.SyncBase(context.Background(), work, BaseSyncOptions{
+			Remote: "origin", Fetch: true, DryRun: false, CreateMissing: true,
+		})
+		if err != nil {
+			t.Fatalf("SyncBase: %v", err)
+		}
+		if got.Action != BaseSyncCreated {
+			t.Fatalf("Action = %q (%s), want %q", got.Action, got.Reason, BaseSyncCreated)
+		}
+		if got.Base != "master" {
+			t.Errorf("Base = %q, want master", got.Base)
+		}
+
+		want := gitOut(t, work, "rev-parse", "refs/remotes/origin/master")
+		if at := gitOut(t, work, "rev-parse", "refs/heads/master"); at != want {
+			t.Errorf("master = %s, want origin/master %s", at, want)
 		}
 	})
 }

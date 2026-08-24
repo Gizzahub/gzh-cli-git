@@ -107,10 +107,14 @@ gz-git update --sync-base --create-missing-base -d 2 ~/projects
 
 `--sync-base` also fast-forwards each repository's local base ref (the one
 `info` reports `BASE` against) without checking it out. A base that diverged
-from its remote is moved only when every commit it would move off already
-exists on the remote under some other branch; otherwise it is reported and left
-alone. `--create-missing-base` additionally creates the base branch in
-repositories that have none, and requires `--sync-base`. See
+from its remote is moved only when every commit it would move off is reachable
+from some remote-tracking ref; otherwise it is reported and left alone. A base
+anything has checked out — this worktree or a linked one — is always left alone.
+When a diverged base is moved, its previous tip is parked at
+`refs/gz-git/base-backup/<base>` first.
+
+`--create-missing-base` additionally creates the base branch in repositories
+that have none, and requires `--sync-base`. See
 [troubleshooting](../user/guides/troubleshooting.md#why-base-is-often-large).
 
 ### diff

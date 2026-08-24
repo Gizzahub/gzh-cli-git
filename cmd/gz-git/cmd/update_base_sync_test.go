@@ -37,8 +37,24 @@ func TestBaseSyncNote(t *testing.T) {
 			sync: &repository.BaseSyncResult{
 				Base: "master", Action: repository.BaseSyncAdopted, Advanced: 3,
 				Reason: "2 local commit(s) already pushed elsewhere",
+				Backup: "refs/gz-git/base-backup/master",
 			},
-			want: "base master +3 (adopted: 2 local commit(s) already pushed elsewhere)",
+			want: "base master +3 (adopted: 2 local commit(s) already pushed elsewhere; " +
+				"old tip at refs/gz-git/base-backup/master)",
+		},
+		{
+			// The case the review caught: a real adopt off a base that was
+			// strictly ahead leaves Advanced at zero because RemoteOnly is zero.
+			// Keying the "nothing moved" wording on Advanced rendered the one
+			// action that rewinds a ref as a passive remark with no verb.
+			name: "a real adopt that only rewinds still says a ref moved",
+			sync: &repository.BaseSyncResult{
+				Base: "master", Remote: "origin", Action: repository.BaseSyncAdopted,
+				Reason: "2 local commit(s) already pushed elsewhere",
+				Backup: "refs/gz-git/base-backup/master",
+			},
+			want: "base master rewound to origin (adopted: 2 local commit(s) already pushed elsewhere; " +
+				"old tip at refs/gz-git/base-backup/master)",
 		},
 		{
 			// Advanced is zero on a dry run because nothing moved. Falling
@@ -46,7 +62,7 @@ func TestBaseSyncNote(t *testing.T) {
 			// case the dry run exists to preview.
 			name: "dry-run fast-forward reports what would happen, not +0",
 			sync: &repository.BaseSyncResult{
-				Base: "master", Action: repository.BaseSyncFastForward,
+				Base: "master", Action: repository.BaseSyncFastForward, DryRun: true,
 				Reason: "would advance 1275 commits",
 			},
 			want: "base master would advance 1275 commits",
@@ -54,8 +70,9 @@ func TestBaseSyncNote(t *testing.T) {
 		{
 			name: "dry-run adoption likewise",
 			sync: &repository.BaseSyncResult{
-				Base: "master", Action: repository.BaseSyncAdopted,
+				Base: "master", Action: repository.BaseSyncAdopted, DryRun: true,
 				Reason: "would adopt remote tip (3 local commit(s) already pushed elsewhere)",
+				Backup: "refs/gz-git/base-backup/master",
 			},
 			want: "base master would adopt remote tip (3 local commit(s) already pushed elsewhere)",
 		},

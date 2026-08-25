@@ -122,7 +122,7 @@ release:
     **Homebrew (macOS/Linux)**:
     ```bash
     brew tap gizzahub/tap
-    brew install gz-git
+    brew install --cask gz-git
     ```
 
     **Go install**:
@@ -133,10 +133,12 @@ release:
     **Binary download**: See assets below.
 
 # Homebrew Tap configuration
-brews:
+homebrew_casks:
   - name: gz-git
     ids:
       - default
+    binary: gz-git
+    directory: Casks
     repository:
       owner: gizzahub
       name: homebrew-tap
@@ -144,24 +146,23 @@ brews:
       # Set as HOMEBREW_TAP_TOKEN in GitHub Secrets
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 
-    # Git author for formula updates
+    # Git author for cask updates
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
 
-    # Formula metadata
+    # Cask metadata
     homepage: "https://github.com/gizzahub/gzh-cli-gitforge"
     description: "Git repository management CLI tool with multi-forge support"
     license: "MIT"
 
-    # Installation directory
-    install: |
-      bin.install "gz-git"
-
-    # Post-install test
-    test: |
-      system "#{bin}/gz-git", "--version"
+    # Release binaries are not notarized, so remove macOS quarantine metadata.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/gz-git"]
 
     # Optional: dependencies
     # dependencies:

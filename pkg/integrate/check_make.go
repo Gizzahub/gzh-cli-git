@@ -113,18 +113,56 @@ func hasSkippedCheck(out string) bool {
 
 func missingCD(out string) string {
 	for _, line := range strings.Split(out, "\n") {
-		const mid = ": No such file or directory"
-		if !strings.Contains(line, "cd: ") || !strings.Contains(line, mid) {
+		const prefix = "cd: "
+		i := strings.Index(line, prefix)
+		if i < 0 {
 			continue
 		}
-		i := strings.Index(line, "cd: ")
-		rest := line[i+4:]
-		j := strings.Index(rest, mid)
-		if j > 0 {
-			return rest[:j]
+		rest := line[i+len(prefix):]
+
+		// dash (the /bin/sh used by Ubuntu) reports a failed directory
+		// change as, for example, "/bin/sh: 1: cd: can't cd to api".
+		// The path is the entire non-empty tail: unlike the BSD/GNU form
+		// below, dash supplies no suffix delimiter.
+		const dashPrefix = "can't cd to "
+		if strings.HasPrefix(rest, dashPrefix) {
+			if !shellCDPrefix(line[:i]) {
+				continue
+			}
+			if path := strings.TrimSpace(strings.TrimPrefix(rest, dashPrefix)); path != "" {
+				return path
+			}
+			continue
+		}
+
+		// Preserve the BSD/GNU shell form, including a shell-specific prefix
+		// before "cd:". A non-empty path is required so arbitrary output
+		// containing the suffix cannot be mistaken for a missing component.
+		const posixSuffix = ": No such file or directory"
+		if path, found := strings.CutSuffix(rest, posixSuffix); found {
+			if path = strings.TrimSpace(path); path != "" {
+				return path
+			}
 		}
 	}
 	return ""
+}
+
+// shellCDPrefix accepts a bare shell diagnostic or the conventional
+// "<shell>: [line:]" prefix. Requiring a shell name for dash's un-delimited
+// form avoids treating arbitrary tool output containing "can't cd to" as a
+// missing Make component.
+func shellCDPrefix(prefix string) bool {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return true
+	}
+	parts := strings.Split(prefix, ":")
+	if len(parts) < 2 {
+		return false
+	}
+	shell := strings.TrimSpace(parts[0])
+	return strings.HasSuffix(shell, "sh")
 }
 
 func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe, allowSkipped bool) CheckItem {

@@ -124,6 +124,59 @@ func TestJudgeMake_MissingCDFailsEvenWhenSkippedChecksAreAllowed(t *testing.T) {
 	}
 }
 
+func TestMissingCD(t *testing.T) {
+	tests := []struct {
+		name string
+		out  string
+		want string
+	}{
+		{
+			name: "bsd GNU form with shell prefix",
+			out:  "/bin/sh: cd: missing-component: No such file or directory\n",
+			want: "missing-component",
+		},
+		{
+			name: "dash form with numbered shell prefix",
+			out:  "/bin/sh: 1: cd: can't cd to missing-component\n",
+			want: "missing-component",
+		},
+		{
+			name: "dash form keeps spaces in the component path",
+			out:  "dash: 1: cd: can't cd to missing component/path\n",
+			want: "missing component/path",
+		},
+		{
+			name: "dash form trims presentation spacing around path",
+			out:  "/bin/sh: 1: cd: can't cd to   missing-component   \n",
+			want: "missing-component",
+		},
+		{
+			name: "similar wording is not a shell cd error",
+			out:  "tool: cd: cannot cd to missing-component\n",
+		},
+		{
+			name: "non shell prefix is not a dash cd error",
+			out:  "tool: 1: cd: can't cd to missing-component\n",
+		},
+		{
+			name: "empty dash path is rejected",
+			out:  "/bin/sh: 1: cd: can't cd to \n",
+		},
+		{
+			name: "empty POSIX path is rejected",
+			out:  "cd: : No such file or directory\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := missingCD(tt.out); got != tt.want {
+				t.Fatalf("missingCD(%q) = %q, want %q", tt.out, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestForeignDiagnosticError_InvalidatesBranchAndBaseline(t *testing.T) {
 	output := "../deleted-worktree/pkg/check.go:12: stale\n"
 	for _, scope := range []string{"branch", "baseline"} {

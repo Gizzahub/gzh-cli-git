@@ -1,8 +1,29 @@
 # 28. `.goreleaser.yaml`의 `brews`가 폐기 예정인데 CI는 `version: latest`를 쓴다
 
-> 상태: 열림 — 메인테이너 판단 필요 (외부 저장소 `gizzahub/homebrew-tap` 변경 포함)
+> 상태: 완료 (2026-08-25) — 저장소 소유 코드·CI 범위 해결
 > 발견: 2026-08-25, 릴리스 드라이런 중
 > 관련: 이 저장소에는 아직 git 태그가 없어 실제 릴리스는 한 번도 돈 적이 없다
+
+## 해결
+
+권장했던 버전 고정과 Cask 이전을 함께 완료했다.
+
+- `24944dc`: snapshot/release 워크플로의 GoReleaser를 로컬 도구와 같은
+  `v2.10.2`로 고정했다.
+- `5be5005`: `brews`를 `homebrew_casks`로 이전하고 설치 문서와 릴리스 안내를
+  Cask 기준으로 맞췄다.
+- `5cbd428`: 저장소의 이동 `snapshot` 태그를 버전 탐색에서 제외하고, 생성된
+  `dist/homebrew/Casks/gz-git.rb`를 `ruby -c`로 검사한 뒤에만 artifact를 게시하도록
+  게이트를 보강했다.
+
+검증은 `goreleaser check`, 실제 `goreleaser release --snapshot --clean`, 생성된 Cask의
+Ruby 구문 검사, `GOWORK=off make quality-check`, 통합 시 `make check`·`make lint`로
+완료했다. 새 clone과 깨끗한 모듈 캐시에서도 snapshot 5개 artifact 생성을 확인했다.
+
+외부 `gizzahub/homebrew-tap`의 기존 Formula 사용자가 Cask로 자연스럽게 업그레이드되는지는
+이 저장소의 코드 결함과 분리한 **릴리스 운영 선행조건**이다. 실제 tap fixture에서 전환을
+검증한 뒤 기존 Formula를 폐기하거나 제거해야 하며, 같은 이름을 자기 자신으로 매핑하는
+`tap_migrations.json`이 필요하다고 가정하지 않는다.
 
 ## 증상
 
@@ -59,13 +80,14 @@ homebrew_casks:
 
 하지만 설정 파일만 바꿔서 끝나지 않는다. 대가가 셋이다.
 
-### 1. 외부 저장소 `gizzahub/homebrew-tap`에 `tap_migrations.json`이 필요하다
+### 1. 외부 저장소 `gizzahub/homebrew-tap`의 업그레이드 경로 검증이 필요하다
 
 이미 `brew install gizzahub/tap/gz-git`으로 설치한 사용자는 Formula를 들고 있다.
-tap에 `tap_migrations.json`을 두어야 `brew upgrade` 때 Cask로 자동 이전된다.
-없으면 기존 사용자는 조용히 옛 Formula에 고정된 채 남는다.
-**이 파일은 이 저장소가 아니라 tap 저장소에 들어간다.** 에이전트가 대신 결정하고
-밀 수 있는 범위가 아니다.
+기존 Formula와 새 Cask가 같은 token(`gz-git`)을 쓰는 전환은 실제 tap fixture에서
+`brew upgrade` 동작을 확인해야 한다. 조사 당시 `tap_migrations.json`이 반드시 필요하다고
+판단했지만, 같은 이름을 자기 자신으로 매핑하는 migration은 근거가 없어 채택하지 않았다.
+검증이 끝날 때까지 기존 Formula 폐기·제거는 보류한다. 외부 tap 변경은 이 저장소의
+코드 수정과 별도 운영 작업이다.
 
 ### 2. Linux 설치 경로가 사라질 수 있다
 
@@ -87,18 +109,15 @@ Cask는 Homebrew에서 macOS 전용으로 취급된다. 이전하면 광고한 L
 
 두 갈래를 분리해서 처리한다. 두 번째가 첫 번째보다 급하다.
 
-**(a) `brews` → `homebrew_casks` 이전** — 메인테이너 결정 사항.
-tap 저장소 변경과 Linux 지원 축소를 수반하므로 이 이슈만으로 진행하지 않는다.
-결정에 필요한 선행 확인: Linuxbrew에서 Cask가 실제로 안 되는지, 현재 tap에
-Formula를 설치한 사용자가 몇이나 되는지.
+**(a) `brews` → `homebrew_casks` 이전** — 완료.
+저장소 설정과 문서는 Cask 기준으로 바꿨다. 외부 tap의 기존 Formula 전환 검증은
+릴리스 운영 선행조건으로 분리했다.
 
-**(b) CI의 GoReleaser 버전 고정** — 이건 지금 해도 안전하고, (a)를 미루는
-비용을 없앤다. `.github/workflows/release.yml`의 `version: latest`를 `.make/tools.mk`가
-설치하는 버전과 같은 명시적 버전으로 바꾼다. 그러면 릴리스가 깨지는 시점이
+**(b) CI의 GoReleaser 버전 고정** — 완료.
+`.github/workflows/release.yml`의 `version: latest`를 `.make/tools.mk`가 설치하는 버전과
+같은 명시적 버전으로 바꿨다. 그러면 릴리스가 깨지는 시점이
 "어느 날 갑자기"에서 "우리가 버전을 올릴 때"로 옮겨오고, 로컬 드라이런 결과가
 CI 결과를 실제로 예측하게 된다.
-
-(b)를 먼저 하면 (a)는 급한 일이 아니라 계획된 일이 된다.
 
 ## 채택하지 않은 대안
 

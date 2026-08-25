@@ -25,7 +25,7 @@ $ goreleaser check
 
 1. `.goreleaser.yaml:131` `brews:` — GoReleaser가 Homebrew Formula 대신 Cask로
    이전하면서 폐기 예고한 키다. 폐기 예고는 언젠가 제거로 끝난다.
-2. `.github/workflows/release.yml` — `goreleaser-action@v7`을 `version: latest`로
+1. `.github/workflows/release.yml` — `goreleaser-action@v7`을 `version: latest`로
    고정 없이 쓴다.
 
 `latest`는 릴리스 태그를 미는 그 시점에 최신인 GoReleaser를 가져온다는 뜻이다.

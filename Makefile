@@ -18,10 +18,21 @@ VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --abbrev=0 2>/
 #   $(MODULE).Version/...   -> the `gz-git version` subcommand, via VersionString()
 # Injecting only main.version made `gz-git version` report its hardcoded default
 # regardless of the tag the binary was actually built from.
+#
+# All three are simply-expanded (`:=`) on purpose. A recursive `=` re-runs the
+# `$(shell ...)` at every use, so a single `make run` invoked `git`/`date` once
+# per branch of its shell `if` and the values could differ between branches that
+# describe the same build. `:=` also stops a stray `COMMIT` in the environment
+# from silently relabelling the binary, which `?=` would have allowed.
+#
+# BUILD_DATE is the commit time, not the wall clock, so that repeating a build of
+# the same commit produces the same ldflags and hits the build cache instead of
+# relinking every time. `mod_timestamp` in .goreleaser.yaml already dates
+# artifacts by commit for the same reason.
 MODULE := github.com/gizzahub/gzh-cli-gitforge
-COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-VERSION_LDFLAGS = -X main.version=$(VERSION) \
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE := $(shell TZ=UTC git log -1 --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd 2>/dev/null || echo "unknown")
+VERSION_LDFLAGS := -X main.version=$(VERSION) \
 	-X $(MODULE).Version=$(VERSION) \
 	-X $(MODULE).GitCommit=$(COMMIT) \
 	-X $(MODULE).BuildDate=$(BUILD_DATE)

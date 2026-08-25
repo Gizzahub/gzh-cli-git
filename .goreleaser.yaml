@@ -41,9 +41,14 @@ builds:
       # The previous `-X main.commit` and `-X main.date` were dead: package main
       # declares only `version`, and the linker silently ignores -X for a symbol
       # that does not exist.
+      #
+      # ShortCommit and CommitDate, not Commit and Date: VersionString() renders
+      # all three on one line and documents the short form, and dating the build
+      # by commit keeps a rebuild of the same tag reporting the same thing --
+      # which is what mod_timestamp below already assumes.
       - -X github.com/gizzahub/gzh-cli-gitforge.Version={{.Version}}
-      - -X github.com/gizzahub/gzh-cli-gitforge.GitCommit={{.Commit}}
-      - -X github.com/gizzahub/gzh-cli-gitforge.BuildDate={{.Date}}
+      - -X github.com/gizzahub/gzh-cli-gitforge.GitCommit={{.ShortCommit}}
+      - -X github.com/gizzahub/gzh-cli-gitforge.BuildDate={{.CommitDate}}
     mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:

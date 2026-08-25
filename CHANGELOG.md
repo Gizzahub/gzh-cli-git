@@ -79,6 +79,12 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ### Fixed
 
+- Task branches that track the integration branch are no longer diagnosed as
+  merely unpushed. `integrate check` now fails with an explicit upstream
+  diagnosis and a same-named task destination, while `info --audit` emits
+  `UPSTREAM_TARGETS_INTEGRATION_BRANCH` using each repository's own
+  `integrationBranch` declaration. Neither path suggests a bare `git push`,
+  which could update the integration branch under `push.default=upstream`.
 - `gz-git update --sync-base` no longer reports a repository as `base-blocked` when the
   sync simply failed. Blocked is a verdict with an instruction attached — push these
   commits, then run again — so a clone of an empty remote, whose unborn HEAD made

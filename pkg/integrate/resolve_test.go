@@ -127,6 +127,34 @@ func TestResolveIntegrationBranch_EmptyOriginHeadIsNone(t *testing.T) {
 	}
 }
 
+func TestUpstreamTargetsIntegration(t *testing.T) {
+	resolution := Resolution{Participates: true, Name: "release/2.0", Source: "config[0]"}
+	tests := []struct {
+		name     string
+		branch   string
+		upstream string
+		remotes  []string
+		want     bool
+	}{
+		{name: "non-origin remote", branch: "dev/a/b/c", upstream: "upstream/release/2.0", remotes: []string{"upstream"}, want: true},
+		{name: "same sha is irrelevant to name classification", branch: "dev/a/b/c", upstream: "origin/release/2.0", remotes: []string{"origin"}, want: true},
+		{name: "normal task upstream", branch: "dev/a/b/c", upstream: "origin/dev/a/b/c", remotes: []string{"origin"}},
+		{name: "integration branch itself", branch: "release/2.0", upstream: "origin/release/2.0", remotes: []string{"origin"}},
+		{name: "unresolved integration", branch: "dev/a/b/c", upstream: "origin/release/2.0", remotes: []string{"origin"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotResolution := resolution
+			if tt.name == "unresolved integration" {
+				gotResolution = Resolution{Source: SourceNone}
+			}
+			if got := UpstreamTargetsIntegration(tt.branch, tt.upstream, gotResolution, tt.remotes); got != tt.want {
+				t.Fatalf("UpstreamTargetsIntegration() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveIntegrationBranch_MissingIsReportable(t *testing.T) {
 	dir := testutil.TempGitRepoWithCommit(t)
 	got, err := ResolveIntegrationBranch(context.Background(), gitcmd.NewExecutor(), dir, nil)

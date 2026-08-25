@@ -210,6 +210,37 @@ func checkWorkingTree(ctx context.Context, g gitRepo, plan TargetPlan) CheckItem
 }
 
 func checkPushed(ctx context.Context, g gitRepo, plan TargetPlan) CheckItem {
+	upstream, hasUpstream, err := g.upstreamName(ctx, plan.Branch)
+	if err != nil {
+		return CheckItem{Name: "upstream", Status: checkFail, Detail: err.Error()}
+	}
+	if hasUpstream {
+		remotes, remotesErr := g.remotes(ctx)
+		if remotesErr != nil {
+			return CheckItem{Name: "upstream", Status: checkFail, Detail: remotesErr.Error()}
+		}
+		if UpstreamTargetsIntegration(plan.Branch, upstream, plan.Integration, remotes) {
+			remote := plan.Remote
+			if remote == "" {
+				remote = "origin"
+			}
+			taskRef := remote + "/" + plan.Branch
+			_, taskRefExists, taskRefErr := g.revParse(ctx, taskRef)
+			if taskRefErr != nil {
+				return CheckItem{Name: "upstream", Status: checkFail, Detail: taskRefErr.Error()}
+			}
+			remediation := fmt.Sprintf("git push --set-upstream %s HEAD:refs/heads/%s", remote, plan.Branch)
+			if taskRefExists {
+				remediation = fmt.Sprintf("git branch --set-upstream-to=%s %s", taskRef, plan.Branch)
+			}
+			return CheckItem{
+				Name:   "upstream",
+				Status: checkFail,
+				Detail: fmt.Sprintf("%s targets integration branch %s — %s", upstream, plan.Integration.Name, remediation),
+			}
+		}
+	}
+
 	up, ok, err := g.upstreamSHA(ctx, plan.Branch)
 	if err != nil {
 		return CheckItem{Name: "push", Status: checkFail, Detail: err.Error()}

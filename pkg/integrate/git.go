@@ -184,6 +184,18 @@ func (g gitRepo) upstreamSHA(ctx context.Context, branch string) (sha string, ok
 	return g.revParse(ctx, branch+"@{upstream}")
 }
 
+func (g gitRepo) upstreamName(ctx context.Context, branch string) (name string, ok bool, err error) {
+	res, err := g.run(ctx, "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
+	if err != nil {
+		return "", false, err
+	}
+	if res.ExitCode != 0 {
+		return "", false, nil
+	}
+	name = strings.TrimSpace(res.Stdout)
+	return name, name != "", nil
+}
+
 func (g gitRepo) branchRemote(ctx context.Context, branch string) (string, error) {
 	res, err := g.run(ctx, "config", "--get", "branch."+branch+".remote")
 	if err != nil {

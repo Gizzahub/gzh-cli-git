@@ -45,6 +45,104 @@ func TestCheck_ReadyWhenFreshCleanPushed(t *testing.T) {
 	}
 }
 
+func TestCheck_IntegrationUpstreamHasSafeRemediation(t *testing.T) {
+	fx := readyTaskFixture(t)
+	branch := "dev/actor/feat/task"
+	runGit(t, fx.Worktree, "branch", "--set-upstream-to", fx.Remote+"/develop", branch)
+
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   branch,
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	for _, item := range report.Items {
+		if item.Name != "upstream" {
+			continue
+		}
+		if item.Status != checkFail || !strings.Contains(item.Detail, "targets integration branch develop") {
+			t.Fatalf("upstream item = %+v", item)
+		}
+		if strings.Contains(item.Detail, "— git push\n") || strings.HasSuffix(item.Detail, "— git push") {
+			t.Fatalf("unsafe bare push remediation: %q", item.Detail)
+		}
+		if !strings.Contains(item.Detail, "git branch --set-upstream-to="+fx.Remote+"/"+branch) {
+			t.Fatalf("missing local tracking repair for existing task ref: %q", item.Detail)
+		}
+		return
+	}
+	t.Fatalf("missing upstream failure:\n%s", FormatCheck(report))
+}
+
+func TestCheck_IntegrationUpstreamUsesExplicitRefspecWhenTaskRefMissing(t *testing.T) {
+	for _, mode := range []string{"upstream", "tracking"} {
+		t.Run(mode, func(t *testing.T) {
+			fx := readyTaskFixture(t)
+			branch := "dev/actor/feat/task"
+			runGit(t, fx.Worktree, "push", fx.Remote, "--delete", branch)
+			runGit(t, fx.Worktree, "branch", "--set-upstream-to", fx.Remote+"/develop", branch)
+			runGit(t, fx.Worktree, "config", "push.default", mode)
+			integrationBefore := gitOutput(t, fx.Worktree, "rev-parse", fx.Remote+"/develop")
+
+			report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+				RepoPath: fx.Worktree,
+				Branch:   branch,
+			})
+			if err != nil {
+				t.Fatalf("Check: %v", err)
+			}
+			found := false
+			for _, item := range report.Items {
+				if item.Name != "upstream" {
+					continue
+				}
+				found = true
+				if !strings.Contains(item.Detail, "git push --set-upstream "+fx.Remote+" HEAD:refs/heads/"+branch) {
+					t.Fatalf("missing explicit task refspec: %q", item.Detail)
+				}
+			}
+			if !found {
+				t.Fatalf("missing upstream failure:\n%s", FormatCheck(report))
+			}
+
+			// Execute the prescribed argv under the dangerous push.default values:
+			// only the same-named task ref may move.
+			runGit(t, fx.Worktree, "push", "--set-upstream", fx.Remote, "HEAD:refs/heads/"+branch)
+			runGit(t, fx.Worktree, "fetch", fx.Remote)
+			if got := gitOutput(t, fx.Worktree, "rev-parse", fx.Remote+"/develop"); got != integrationBefore {
+				t.Fatalf("integration ref moved: got %s, want %s", got, integrationBefore)
+			}
+			if got, want := gitOutput(t, fx.Worktree, "rev-parse", fx.Remote+"/"+branch), gitOutput(t, fx.Worktree, "rev-parse", "HEAD"); got != want {
+				t.Fatalf("task ref = %s, want HEAD %s", got, want)
+			}
+		})
+	}
+}
+
+func TestCheck_IntegrationUpstreamDetectedWhenSHAsMatch(t *testing.T) {
+	fx := readyTaskFixture(t)
+	branch := "dev/actor/feat/task"
+	// Advance the fixture's integration ref to the task tip so a SHA-first
+	// implementation would incorrectly call this pushed.
+	runGit(t, fx.Worktree, "push", fx.Remote, "HEAD:develop")
+	runGit(t, fx.Worktree, "branch", "--set-upstream-to", fx.Remote+"/develop", branch)
+
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   branch,
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	for _, item := range report.Items {
+		if item.Name == "upstream" && item.Status == checkFail {
+			return
+		}
+	}
+	t.Fatalf("same-SHA integration upstream was not detected:\n%s", FormatCheck(report))
+}
+
 func TestCheck_NoGateFails(t *testing.T) {
 	fx := readyTaskFixtureNoGate(t)
 	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{

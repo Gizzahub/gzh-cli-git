@@ -25,18 +25,19 @@ const (
 	CodeScanError        = "SCAN_ERROR"
 
 	// Branch position.
-	CodeDetachedHead         = "DETACHED_HEAD"
-	CodeNoUpstream           = "NO_UPSTREAM"
-	CodeUpstreamDiverged     = "UPSTREAM_DIVERGED"
-	CodeUnpushedCommits      = "UNPUSHED_COMMITS"
-	CodeUpstreamBehind       = "UPSTREAM_BEHIND"
-	CodeBranchBehindBase     = "BRANCH_BEHIND_BASE"
-	CodeBaseUnresolved       = "BASE_UNRESOLVED"
-	CodeWorkOnBaseBranch     = "WORK_ON_BASE_BRANCH"
-	CodeMergedNotReclaimed   = "MERGED_BRANCH_NOT_RECLAIMED"
-	CodeRemoteBotReclaimable = "REMOTE_BOT_BRANCH_RECLAIMABLE"
-	CodeRemoteBotSuperseded  = "REMOTE_BOT_BRANCH_SUPERSEDED"
-	CodeRemoteBotPending     = "REMOTE_BOT_BRANCH_PENDING"
+	CodeDetachedHead               = "DETACHED_HEAD"
+	CodeNoUpstream                 = "NO_UPSTREAM"
+	CodeUpstreamTargetsIntegration = "UPSTREAM_TARGETS_INTEGRATION_BRANCH"
+	CodeUpstreamDiverged           = "UPSTREAM_DIVERGED"
+	CodeUnpushedCommits            = "UNPUSHED_COMMITS"
+	CodeUpstreamBehind             = "UPSTREAM_BEHIND"
+	CodeBranchBehindBase           = "BRANCH_BEHIND_BASE"
+	CodeBaseUnresolved             = "BASE_UNRESOLVED"
+	CodeWorkOnBaseBranch           = "WORK_ON_BASE_BRANCH"
+	CodeMergedNotReclaimed         = "MERGED_BRANCH_NOT_RECLAIMED"
+	CodeRemoteBotReclaimable       = "REMOTE_BOT_BRANCH_RECLAIMABLE"
+	CodeRemoteBotSuperseded        = "REMOTE_BOT_BRANCH_SUPERSEDED"
+	CodeRemoteBotPending           = "REMOTE_BOT_BRANCH_PENDING"
 
 	// Local state.
 	CodeDirtyWorktree       = "DIRTY_WORKTREE"
@@ -173,6 +174,15 @@ type AuditInput struct {
 	Path   string
 	Status *RepositoryStatusResult
 	Base   BaseBranchInfo
+
+	// Integration* is the repo-root integrationBranch answer used only for the
+	// upstream safety finding. It is deliberately separate from Base, whose
+	// public meaning remains defaultBranch-relative divergence.
+	IntegrationName            string
+	IntegrationSource          string
+	UpstreamTargetsIntegration bool
+	UpstreamRemote             string
+	TaskRemoteExists           bool
 
 	// Worktrees are the checkouts other than the main one, with the branch each
 	// holds. Branches checked out here are excluded from plain branch deletion:

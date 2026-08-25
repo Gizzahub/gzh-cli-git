@@ -159,6 +159,65 @@ func TestEvaluateUpstream_StatesAreMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestEvaluateUpstream_IntegrationTargetSuppressesPushDiagnosis(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		taskRemoteExists bool
+		wantCommand      []string
+		wantReversible   bool
+	}{
+		{
+			name:           "task ref has not been published",
+			wantCommand:    []string{"git", "push", "--set-upstream", "upstream", "HEAD:refs/heads/dev/a/b/c"},
+			wantReversible: false,
+		},
+		{
+			name:             "task ref already exists",
+			taskRemoteExists: true,
+			wantCommand:      []string{"git", "branch", "--set-upstream-to=upstream/dev/a/b/c", "dev/a/b/c"},
+			wantReversible:   true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EvaluateRepo(AuditInput{
+				Name: "r",
+				Status: &RepositoryStatusResult{
+					Branch: "dev/a/b/c", Upstream: "upstream/develop", CommitsAhead: 3,
+				},
+				Base:                       BaseBranchInfo{Name: "main", Source: "config.defaultBranch[0]"},
+				IntegrationName:            "develop",
+				IntegrationSource:          "config[0]",
+				UpstreamTargetsIntegration: true,
+				UpstreamRemote:             "upstream",
+				TaskRemoteExists:           tt.taskRemoteExists,
+				AutofixPolicy:              AutofixPolicyFrom(nil),
+			})
+
+			finding := findingByCode(got, CodeUpstreamTargetsIntegration)
+			if finding == nil {
+				t.Fatalf("no %s finding; got %v", CodeUpstreamTargetsIntegration, codes(got))
+			}
+			for _, code := range []string{CodeUpstreamDiverged, CodeUnpushedCommits, CodeUpstreamBehind} {
+				if findingByCode(got, code) != nil {
+					t.Errorf("integration upstream also classified as %s", code)
+				}
+			}
+			if finding.Fix.Autofix {
+				t.Error("upstream intent change must never be automatic")
+			}
+			if finding.Fix.Reversible != tt.wantReversible {
+				t.Errorf("reversible = %v, want %v", finding.Fix.Reversible, tt.wantReversible)
+			}
+			if strings.Join(finding.Fix.Command, "\x00") != strings.Join(tt.wantCommand, "\x00") {
+				t.Errorf("command = %v, want %v", finding.Fix.Command, tt.wantCommand)
+			}
+			if got := finding.Evidence["integration"]; got != "develop" {
+				t.Errorf("integration evidence = %v", got)
+			}
+		})
+	}
+}
+
 func TestEvaluateBase_BehindOnlyReportedOffBase(t *testing.T) {
 	// Being "behind master" while standing on master is definitionally zero;
 	// reporting it would tell an agent to rebase a branch onto itself.

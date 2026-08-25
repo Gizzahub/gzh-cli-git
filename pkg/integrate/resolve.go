@@ -117,6 +117,21 @@ func NormalizeName(raw string, remotes []string) string {
 	return name
 }
 
+// UpstreamTargetsIntegration reports the unsafe tracking relationship where
+// work on a non-integration branch tracks the integration branch itself. The
+// comparison is name-based rather than SHA-based so a freshly created branch
+// is caught even while both refs still point at the same commit.
+func UpstreamTargetsIntegration(branch, upstream string, resolution Resolution, remotes []string) bool {
+	if !resolution.Participates || strings.TrimSpace(branch) == "" || strings.TrimSpace(upstream) == "" {
+		return false
+	}
+	branchName := NormalizeName(branch, remotes)
+	if branchName == resolution.Name {
+		return false
+	}
+	return NormalizeName(upstream, remotes) == resolution.Name
+}
+
 func nameExists(name string, remotes []string, refs map[string]struct{}) bool {
 	if _, ok := refs["refs/heads/"+name]; ok {
 		return true

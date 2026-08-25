@@ -6,10 +6,14 @@ package cmd
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/integrate"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -26,6 +30,18 @@ type infoEnrichment struct {
 	// Base is the resolved integration branch and HEAD's divergence from it.
 	// Base.Source is "none" when the repository has no recognizable base.
 	Base repository.BaseBranchInfo
+
+	// Integration is resolved independently from Base using the repo-root
+	// integrationBranch declaration. Base retains the existing defaultBranch
+	// divergence contract; this answer is only for integration safety checks.
+	Integration integrate.Resolution
+
+	// UpstreamTargetsIntegration is true for a matching declared task branch,
+	// or any non-integration branch when the repository declares no task
+	// namespace, whose tracking ref names the canonical integration branch.
+	UpstreamTargetsIntegration bool
+	UpstreamRemote             string
+	TaskRemoteExists           bool
 
 	// LinkedWorktrees counts worktrees other than the main checkout. The main
 	// worktree is excluded because every repository has one; only the extra
@@ -158,6 +174,34 @@ func enrichOne(
 		}
 	}
 
+	if deep {
+		decl, declErr := config.LoadRepoRootTaskPattern(status.Path)
+		if declErr != nil {
+			if out.Err == nil {
+				out.Err = declErr
+			}
+		} else {
+			resolution, resolutionErr := integrate.ResolveIntegrationBranch(
+				ctx, gitcmd.NewExecutor(), status.Path, decl.IntegrationBranch,
+			)
+			if resolutionErr != nil {
+				if out.Err == nil {
+					out.Err = resolutionErr
+				}
+			} else {
+				out.Integration = resolution
+				remotes := remoteNames(status.Remotes)
+				isTaskBranch := len(decl.Patterns) == 0 || config.MatchesAnyTaskPattern(status.Branch, decl.Patterns)
+				out.UpstreamTargetsIntegration = isTaskBranch &&
+					integrate.UpstreamTargetsIntegration(status.Branch, status.Upstream, resolution, remotes)
+				if out.UpstreamTargetsIntegration {
+					out.UpstreamRemote = trackingRemote(status.Upstream, status.Remotes)
+					out.TaskRemoteExists = containsExactString(status.RemoteBranches, out.UpstreamRemote+"/"+status.Branch)
+				}
+			}
+		}
+	}
+
 	worktrees, err := wtMgr.List(ctx, repo)
 	if err != nil {
 		// Keep whatever base resolution produced; record the first failure only
@@ -193,6 +237,38 @@ func enrichOne(
 	}
 
 	return out
+}
+
+func remoteNames(remotes map[string]string) []string {
+	names := make([]string, 0, len(remotes))
+	for name := range remotes {
+		names = append(names, name)
+	}
+	return names
+}
+
+func trackingRemote(upstream string, remotes map[string]string) string {
+	if head, _, ok := strings.Cut(upstream, "/"); ok {
+		if _, exists := remotes[head]; exists {
+			return head
+		}
+	}
+	if _, exists := remotes["origin"]; exists {
+		return "origin"
+	}
+	for name := range remotes {
+		return name
+	}
+	return "origin"
+}
+
+func containsExactString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 // resolvePath canonicalizes a path for identity comparison. Symlinks are

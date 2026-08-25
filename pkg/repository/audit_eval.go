@@ -3,7 +3,10 @@
 
 package repository
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // EvaluateRepo runs the finding catalog against one repository.
 //
@@ -147,7 +150,7 @@ func evaluateBranchPosition(in AuditInput, st *RepositoryStatusResult) []Finding
 		})
 	}
 
-	findings = append(findings, evaluateUpstream(st)...)
+	findings = append(findings, evaluateUpstream(in, st)...)
 	findings = append(findings, evaluateBase(in, st)...)
 
 	// Branches fully contained in the base are finished work still occupying a
@@ -251,7 +254,7 @@ func evaluateRemoteBots(in AuditInput) []Finding {
 // evaluateUpstream classifies the relationship to the tracking branch. The
 // states are mutually exclusive and each has a different repair, which is why
 // they are separate codes rather than one "out of sync" finding with counts.
-func evaluateUpstream(st *RepositoryStatusResult) []Finding {
+func evaluateUpstream(in AuditInput, st *RepositoryStatusResult) []Finding {
 	if st.Branch == "" {
 		return nil // detached HEAD is already reported; upstream is not meaningful
 	}
@@ -267,6 +270,38 @@ func evaluateUpstream(st *RepositoryStatusResult) []Finding {
 				Command:    []string{"git", "push", "-u", "origin", st.Branch},
 				Reversible: false,
 				Note:       "publishes the branch; others may fetch it once it exists",
+			},
+		}}
+	}
+
+	if in.UpstreamTargetsIntegration {
+		remote := strings.TrimSpace(in.UpstreamRemote)
+		if remote == "" {
+			remote = "origin"
+		}
+		command := []string{"git", "push", "--set-upstream", remote, "HEAD:refs/heads/" + st.Branch}
+		reversible := false
+		note := "publishes only the same-named task ref; the explicit destination cannot update the integration branch"
+		if in.TaskRemoteExists {
+			command = []string{"git", "branch", "--set-upstream-to=" + remote + "/" + st.Branch, st.Branch}
+			reversible = true
+			note = "changes only local tracking configuration; review push and pull intent before applying"
+		}
+		return []Finding{{
+			Code:     CodeUpstreamTargetsIntegration,
+			Severity: SeverityWarn,
+			Message:  fmt.Sprintf("task branch tracks integration branch %s", st.Upstream),
+			Evidence: map[string]any{
+				"branch":             st.Branch,
+				"upstream":           st.Upstream,
+				"integration":        in.IntegrationName,
+				"integration_source": in.IntegrationSource,
+			},
+			Fix: &Remediation{
+				Action:     ActionSetUpstream,
+				Command:    command,
+				Reversible: reversible,
+				Note:       note,
 			},
 		}}
 	}

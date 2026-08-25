@@ -1,11 +1,33 @@
 # ISSUE: task 브랜치의 upstream이 통합 브랜치를 가리켜도 그렇게 보고되지 않는다
 
-- status: open
+- status: closed (2026-08-25)
 - priority: P2
 - category: safety / diagnostics
 - created_at: 2026-08-25T10:40:00+09:00
 - affects: `git worktree add -b <task> <path> origin/<integration>` 및 `git checkout -b <task> origin/<integration>` 로 만든 **모든** task 브랜치
 - spawned_from: 2026-08-25 세션에서 서로 다른 두 저장소에서 독립적으로 관측
+
+## 해결
+
+`b8ad882`·`9a42ae4`·`f1c9881`에서 다음을 구현했다.
+
+- `integrate check`는 upstream 이름을 SHA보다 먼저 검사해 task branch가 integration
+  branch를 추적하면 별도 `upstream` 실패로 분류한다. 이미 같은 이름의 원격 task ref가
+  있으면 로컬 tracking만 교정하고, 없으면 `HEAD:refs/heads/<task>` 명시 refspec만
+  제안한다. bare `git push`는 제안하지 않는다.
+- `info --audit`는 각 저장소 root의 `integrationBranch`를 공용 resolver로 독립 해석하고
+  `taskPattern`에 맞는 branch에 `UPSTREAM_TARGETS_INTEGRATION_BRANCH`를 출력한다.
+  기존 `BASE`/`defaultBranch` 계약은 바꾸지 않았고 task pattern 미선언 시에는 추측하지
+  않는다.
+- remote 이름과 branch 이름 양쪽에 `/`가 있어도 가장 긴 **등록 remote 이름**을 먼저
+  제거한다. `team/upstream`, `refs/remotes/team/upstream`,
+  `refs/heads/team/upstream`을 실제 Git fixture로 검증했다.
+
+`push.default=upstream`과 `tracking` 각각에서 제안한 명시 refspec을 실제 실행해 integration
+ref는 불변이고 같은 이름의 task ref만 게시됨을 확인했다. 새 audit code의 JSON,
+`findings_by_code`, exit 1, `audit_complete`, 기존 upstream code와의 상호배타성도 계약
+테스트로 고정했다. 관련 package 테스트와 canonical `make quality-check`가 통과했고
+독립 리뷰 결과 P0/P1/P2 finding이 없었다.
 
 ## 요약
 

@@ -23,11 +23,10 @@ ______________________________________________________________________
 
 ## Open Issues (후속)
 
-| #   | 이슈                                              | 요약                                                                                                                                                                                                                        |
-| --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 26  | defaults-scan-depth-is-a-dead-config-key          | `defaults.scan.depth`를 읽는 명령이 하나도 없어 기본 스캔 깊이를 설정으로 바꿀 수 없다                                                                                                                                      |
-| 27  | task-branch-upstream-points-at-integration-branch | 통합 브랜치에서 만든 task 브랜치의 upstream이 통합 브랜치로 잡히는데 `integrate check`가 이를 push 실패로 오분류하고 `git push`를 처방한다 — `push.default`가 `upstream`/`tracking`이면 `git push`가 통합 브랜치로 들어간다 |
-| 28  | goreleaser-brews-deprecated-and-ci-pins-latest    | 저장소 코드·CI 수정은 완료. 빈 `gizzahub/homebrew-tap` bootstrap, 최초 Cask 게시·macOS 설치, stable release workflow의 실제 검증이 남았다                                                                                   |
+| #   | 이슈                                           | 요약                                                                                                                                      |
+| --- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 26  | defaults-scan-depth-is-a-dead-config-key       | `defaults.scan.depth`를 읽는 명령이 하나도 없어 기본 스캔 깊이를 설정으로 바꿀 수 없다                                                    |
+| 28  | goreleaser-brews-deprecated-and-ci-pins-latest | 저장소 코드·CI 수정은 완료. 빈 `gizzahub/homebrew-tap` bootstrap, 최초 Cask 게시·macOS 설치, stable release workflow의 실제 검증이 남았다 |
 
 메인테이너 판단 대기 항목이 하나 있다: 이동 `snapshot` 태그 외 stable `v*` 태그가 없고
 `VERSION`은 0.7.0에 멈춰 있어 `[Unreleased]`에 릴리스되지 않은 작업 배치가 누적된다. 이슈 22의 분할로
@@ -36,9 +35,10 @@ ______________________________________________________________________
 
 ### Recently closed (2026-08-25)
 
-| #   | 태스크                                           | 결과                                                                                                             |
-| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| 25  | no-declarative-exclusion-for-bulk-write-commands | `defaults.scan.exclude` 추가(`2dcaf8e`)와 빈 항목 제거(`33cc679`)로 해결. 저장소 단위 `readOnly`는 채택하지 않음 |
+| #   | 태스크                                            | 결과                                                                                                                               |
+| --- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 27  | task-branch-upstream-points-at-integration-branch | integration upstream 별도 진단, 안전한 task ref 처방, audit code 추가와 slash remote 정규화로 해결 (`b8ad882`·`9a42ae4`·`f1c9881`) |
+| 25  | no-declarative-exclusion-for-bulk-write-commands  | `defaults.scan.exclude` 추가(`2dcaf8e`)와 빈 항목 제거(`33cc679`)로 해결. 저장소 단위 `readOnly`는 채택하지 않음                   |
 
 ### Recently closed (2026-08-24)
 

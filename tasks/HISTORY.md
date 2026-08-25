@@ -4,6 +4,20 @@
 
 ______________________________________________________________________
 
+## 완료 (2026-08-25)
+
+| #   | 태스크                                                                                                             | 우선순위 | 요지                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 27  | [task-branch-upstream-points-at-integration-branch](issue/27-task-branch-upstream-points-at-integration-branch.md) | P2       | integration upstream을 push 지연과 분리하고 동일 이름 task ref만 지시. audit code와 longest registered remote 정규화까지 구현 (`b8ad882`·`9a42ae4`·`f1c9881`) ✅ |
+
+검증: `push.default=upstream`·`tracking`에서 제안 refspec을 실행해 integration ref 불변과
+task ref 게시를 확인했다. 일반 slash remote와 `refs/remotes/`·`refs/heads/`로 시작하는
+remote, slash integration branch, same-SHA upstream, task ref 존재·부재, per-repo 설정,
+audit JSON 계약을 회귀 테스트로 고정했다. canonical `make quality-check`와 독립 리뷰가
+통과했다.
+
+______________________________________________________________________
+
 ## 완료 (2026-08-24)
 
 | #   | 태스크                                                                                                     | 우선순위 | 요지                                                                                                                                        |

@@ -129,3 +129,31 @@ func TestExtractLocations_LabelPrefixedLine(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractLocations_RuffFullOutput(t *testing.T) {
+	out := "F401 [*] `pathlib` imported but unused\n" +
+		" --> scripts/source_to_instruction.py:2:8\n" +
+		"  |\n" +
+		"2 | import pathlib\n"
+	got := ExtractLocations(out, []string{"scripts/source_to_instruction.py"})
+	want := []string{"scripts/source_to_instruction.py:2"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestForeignDiagnosticLocations_RuffFullOutput(t *testing.T) {
+	output := " --> ../other-worktree/check.py:3:7\n" +
+		" --> /absolute/check.py:4:2\n" +
+		" --> ./local/check.py:5:1\n"
+	got := foreignDiagnosticLocations(output)
+	want := []string{"../other-worktree/check.py:3", "/absolute/check.py:4"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}

@@ -104,6 +104,9 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
   what git actually accepts for refs and URLs.
 - The `integrate` lint gate runs with a per-run `GOLANGCI_LINT_CACHE`, so a cached
   diagnostic from a deleted worktree is no longer reported against the current tree.
+- The `integrate` lint baseline recognizes Ruff's full `--> path:line:column`
+  locations, and a missing `cd` target now fails explicitly instead of allowing a
+  gate that never ran to count as a warning.
 - Fail-closed corrections: protected branches are screened inside `Execute` (not only at
   the call site), and a failed stash-status git command is an error rather than "clean".
 

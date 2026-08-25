@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
@@ -89,6 +90,44 @@ func TestCheck_NoGateAllowedWhenSkippedFlag(t *testing.T) {
 	if !found {
 		t.Fatalf("expected make check/lint WARN:\n%s", FormatCheck(report))
 	}
+}
+
+func TestCheck_BaselineMissingCDFailsWithPreciseReason(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "checkout", "-B", "develop")
+	writeRepoFile(t, fx.Clone, "foo.py", "import pathlib\n")
+	writeRepoFile(t, fx.Clone, "Makefile", "check:\n\t@true\nlint:\n\t@cd missing-component && true\n")
+	writeRepoFile(t, fx.Clone, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n")
+	runGit(t, fx.Clone, "add", ".")
+	runGit(t, fx.Clone, "commit", "-m", "add target gate")
+	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+
+	runGit(t, fx.Worktree, "checkout", "-B", "dev/actor/feat/task", "develop")
+	writeRepoFile(t, fx.Worktree, "Makefile", "check:\n\t@true\nlint:\n\t@printf 'F401 unused import\\n --> foo.py:1:1\\n'\n\t@false\n")
+	runGit(t, fx.Worktree, "add", "Makefile")
+	runGit(t, fx.Worktree, "commit", "-m", "change lint runner")
+	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")
+
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath:           fx.Worktree,
+		Branch:             "dev/actor/feat/task",
+		AllowSkippedChecks: true,
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if report.Ready {
+		t.Fatalf("missing baseline component must not be READY:\n%s", FormatCheck(report))
+	}
+	for _, item := range report.Items {
+		if item.Name == "make lint" {
+			if item.Status != checkFail || !strings.Contains(item.Detail, "baseline make lint did not run") || !strings.Contains(item.Detail, "missing-component") {
+				t.Fatalf("make lint = %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatalf("make lint result missing:\n%s", FormatCheck(report))
 }
 
 func TestCheck_StaleTargetFailsFreshness(t *testing.T) {

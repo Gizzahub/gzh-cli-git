@@ -144,7 +144,7 @@ func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe,
 	if probe.MissingCD != "" {
 		return CheckItem{
 			Name:   name,
-			Status: checkWarn,
+			Status: checkFail,
 			Detail: fmt.Sprintf("not run — %q missing in this tree", probe.MissingCD),
 		}
 	}
@@ -181,6 +181,13 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	defer func() { _ = g.worktreeRemoveForce(ctx, wt) }()
 
 	baseProbe := runMakeTarget(ctx, wt, probe.Target)
+	if baseProbe.MissingCD != "" {
+		return BaselineResult{}, fmt.Errorf(
+			"baseline make %s did not run — %q missing in target tree",
+			probe.Target,
+			baseProbe.MissingCD,
+		)
+	}
 	if probe.Target == "lint" {
 		if err := foreignDiagnosticError("baseline", baseProbe.Output); err != nil {
 			return BaselineResult{}, err

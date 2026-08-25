@@ -44,18 +44,27 @@ var locationLine = regexp.MustCompile(`^[^ \t:]+\.[A-Za-z0-9_]+:\d+`)
 // scripts/{link,task-index}-check.sh: "BROKEN  tasks/batch.md:9: ...".
 var labelPrefix = regexp.MustCompile(`^[A-Z][A-Z0-9_]*[ \t]+`)
 
+// ruffArrowPrefix matches Ruff's full output location marker. Ruff prints the
+// diagnostic code on one line and the location on the next as
+// "--> path.py:line:column" instead of starting that line with the path.
+var ruffArrowPrefix = regexp.MustCompile(`^-->[ \t]+`)
+
 // diagnosticCandidates returns the strings to try locationLine against for
-// one output line: as-is, with a leading label tag stripped, and each of
-// those with a leading "./" stripped. Order matters only for foreign-path
-// detection, which needs the untouched (label-stripped) string first.
+// one output line: as-is, with a leading label tag stripped, with Ruff's
+// location arrow stripped, and each recognized form with a leading "./"
+// stripped. Order matters only for foreign-path detection, which needs the
+// untouched path form before normalization.
 func diagnosticCandidates(line string) []string {
 	trimmed := strings.TrimSpace(line)
 	noLabel := labelPrefix.ReplaceAllString(trimmed, "")
+	noRuffArrow := ruffArrowPrefix.ReplaceAllString(trimmed, "")
 	return []string{
 		trimmed,
 		noLabel,
+		noRuffArrow,
 		strings.TrimPrefix(trimmed, "./"),
 		strings.TrimPrefix(noLabel, "./"),
+		strings.TrimPrefix(noRuffArrow, "./"),
 	}
 }
 

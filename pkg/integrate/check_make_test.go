@@ -111,6 +111,19 @@ func TestJudgeMake_CheckAllowsForeignDiagnosticOutput(t *testing.T) {
 	}
 }
 
+func TestJudgeMake_MissingCDFailsEvenWhenSkippedChecksAreAllowed(t *testing.T) {
+	for _, allowSkipped := range []bool{false, true} {
+		item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+			Target:    "lint",
+			Defined:   true,
+			MissingCD: "missing-component",
+		}, allowSkipped)
+		if item.Status != checkFail || !strings.Contains(item.Detail, "not run") {
+			t.Fatalf("allowSkipped=%v missing cd = %+v", allowSkipped, item)
+		}
+	}
+}
+
 func TestForeignDiagnosticError_InvalidatesBranchAndBaseline(t *testing.T) {
 	output := "../deleted-worktree/pkg/check.go:12: stale\n"
 	for _, scope := range []string{"branch", "baseline"} {

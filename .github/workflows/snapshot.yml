@@ -37,6 +37,9 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Validate generated Homebrew cask
+      run: ruby -c dist/homebrew/Casks/gz-git.rb
+
     - name: Upload snapshot artifacts
       uses: actions/upload-artifact@v7
       with:

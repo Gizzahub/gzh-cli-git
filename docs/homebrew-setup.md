@@ -39,7 +39,7 @@ homebrew-tap/
 ```bash
 brew tap gizzahub/tap
 brew install --cask gz-git
-````
+```
 
 ## Available Casks
 
@@ -59,19 +59,19 @@ brew upgrade gz-git
 ## Step 2: Create Personal Access Token (PAT)
 
 1. Go to GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
-2. Click "Generate new token (classic)"
-3. Configure:
+1. Click "Generate new token (classic)"
+1. Configure:
    - **Note**: `homebrew-tap-token`
    - **Expiration**: Set appropriate expiration
    - **Scopes**: Select `repo` (full control of private repositories)
-4. Copy the generated token
+1. Copy the generated token
 
 ## Step 3: Add Repository Secret
 
 1. Go to `gzh-cli-gitforge` repository settings
-2. Navigate to Secrets and variables > Actions
-3. Click "New repository secret"
-4. Configure:
+1. Navigate to Secrets and variables > Actions
+1. Click "New repository secret"
+1. Configure:
    - **Name**: `HOMEBREW_TAP_TOKEN`
    - **Value**: Paste the PAT from Step 2
 
@@ -80,14 +80,14 @@ brew upgrade gz-git
 When you push a new tag, GoReleaser will:
 
 1. Build binaries for all platforms
-2. Create GitHub release with assets
-3. Auto-update the Homebrew cask in `homebrew-tap`
+1. Create GitHub release with assets
+1. Auto-update the Homebrew cask in `homebrew-tap`
 
 ```bash
 # Create and push a new tag
 git tag v1.0.0
 git push origin v1.0.0
-````
+```
 
 ## User Installation
 
@@ -107,17 +107,16 @@ gz-git --version
 
 ## Migrating the Existing Formula
 
-After the first cask release, add `tap_migrations.json` to the root of
-`gizzahub/homebrew-tap` and remove the old `Formula/gz-git.rb`:
+Do not remove the existing `Formula/gz-git.rb` as part of this repository's
+release. A same-name Formula-to-Cask migration has not been verified for the
+external `gizzahub/homebrew-tap` repository, and an untested removal can strand
+existing installations.
 
-```json
-{
-  "gz-git": "gz-git"
-}
-```
-
-This lets existing formula installations move to the cask on upgrade. The tap
-repository change is separate from this repository's GoReleaser configuration.
+Before the first stable cask release, validate the transition in a tap fixture,
+including install and upgrade from the existing Formula. Only then should the
+tap repository deprecate or remove the Formula using the verified Homebrew
+migration mechanism. That external tap change is intentionally separate from
+this GoReleaser configuration.
 
 ## Updating a Cask Manually (Optional)
 

@@ -5,6 +5,12 @@ version: 2
 
 project_name: gz-git
 
+git:
+  # The snapshot workflow maintains this moving, non-semver release tag.
+  # It must not participate in current/previous stable tag discovery.
+  ignore_tags:
+    - snapshot
+
 before:
   hooks:
     - go mod tidy
@@ -163,6 +169,7 @@ homebrew_casks:
         install: |
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/gz-git"]
+          end
 
     # Optional: dependencies
     # dependencies:

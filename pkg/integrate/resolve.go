@@ -97,16 +97,15 @@ func ResolveFromFacts(f Facts) Resolution {
 // registered remote.
 func NormalizeName(raw string, remotes []string) string {
 	name := strings.TrimSpace(raw)
+	if _, branch, ok := SplitRemoteBranch(name, remotes); ok {
+		return branch
+	}
 	remoteRef := strings.HasPrefix(name, "refs/remotes/")
 	switch {
 	case strings.HasPrefix(name, "refs/heads/"):
 		return strings.TrimPrefix(name, "refs/heads/")
 	case strings.HasPrefix(name, "refs/remotes/"):
 		name = strings.TrimPrefix(name, "refs/remotes/")
-	}
-
-	if _, branch, ok := SplitRemoteBranch(name, remotes); ok {
-		return branch
 	}
 	if remoteRef {
 		// Compatibility fallback for callers that have a full remote ref but no
@@ -126,7 +125,16 @@ func NormalizeName(raw string, remotes []string) string {
 // upstream/main.
 func SplitRemoteBranch(raw string, remotes []string) (remote, branch string, ok bool) {
 	name := strings.TrimSpace(raw)
-	name = strings.TrimPrefix(name, "refs/remotes/")
+	if remote, branch, ok := splitRegisteredRemote(name, remotes); ok {
+		return remote, branch, true
+	}
+	if stripped, found := strings.CutPrefix(name, "refs/remotes/"); found {
+		return splitRegisteredRemote(stripped, remotes)
+	}
+	return "", "", false
+}
+
+func splitRegisteredRemote(name string, remotes []string) (remote, branch string, ok bool) {
 	best := ""
 	for _, candidate := range remotes {
 		candidate = strings.TrimSpace(candidate)

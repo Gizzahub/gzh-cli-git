@@ -144,34 +144,47 @@ func TestCheck_IntegrationUpstreamDetectedWhenSHAsMatch(t *testing.T) {
 }
 
 func TestCheck_IntegrationUpstreamWithSlashRemoteAndBranch(t *testing.T) {
-	fx := testutil.TempWorktreeWithBareOriginRemote(t, "team/upstream")
-	remote := fx.Remote
-	integration := "release/2.0"
-	branch := "dev/actor/feat/task"
-	runGit(t, fx.Clone, "branch", integration)
-	runGit(t, fx.Clone, "push", remote, integration)
-	runGit(t, fx.Worktree, "checkout", "-B", branch, remote+"/"+integration)
-	writeRepoFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: "+integration+"\n")
-	writeGateMakefile(t, fx.Worktree)
-	runGit(t, fx.Worktree, "add", ".gz-git.yaml", "Makefile")
-	runGit(t, fx.Worktree, "commit", "-m", "declare policy")
-	runGit(t, fx.Worktree, "push", "-u", remote, "HEAD:refs/heads/"+branch)
-	runGit(t, fx.Worktree, "branch", "--set-upstream-to", remote+"/"+integration, branch)
+	for _, tt := range []struct {
+		name        string
+		remote      string
+		integration string
+	}{
+		{name: "slash remote and branch", remote: "team/upstream", integration: "release/2.0"},
+		{name: "remote begins refs remotes", remote: "refs/remotes/team/upstream", integration: "main"},
+		{name: "remote begins refs heads", remote: "refs/heads/team/upstream", integration: "main"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fx := testutil.TempWorktreeWithBareOriginRemote(t, tt.remote)
+			remote := fx.Remote
+			branch := "dev/actor/feat/task"
+			if tt.integration != "main" {
+				runGit(t, fx.Clone, "branch", tt.integration)
+			}
+			runGit(t, fx.Clone, "push", remote, tt.integration)
+			runGit(t, fx.Worktree, "checkout", "-B", branch, remote+"/"+tt.integration)
+			writeRepoFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: "+tt.integration+"\n")
+			writeGateMakefile(t, fx.Worktree)
+			runGit(t, fx.Worktree, "add", ".gz-git.yaml", "Makefile")
+			runGit(t, fx.Worktree, "commit", "-m", "declare policy")
+			runGit(t, fx.Worktree, "push", "-u", remote, "HEAD:refs/heads/"+branch)
+			runGit(t, fx.Worktree, "branch", "--set-upstream-to", remote+"/"+tt.integration, branch)
 
-	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
-		RepoPath: fx.Worktree,
-		Branch:   branch,
-	})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
+			report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+				RepoPath: fx.Worktree,
+				Branch:   branch,
+			})
+			if err != nil {
+				t.Fatalf("Check: %v", err)
+			}
+			for _, item := range report.Items {
+				if item.Name == "upstream" && item.Status == checkFail &&
+					strings.Contains(item.Detail, "targets integration branch "+tt.integration) {
+					return
+				}
+			}
+			t.Fatalf("remote %q integration upstream was not detected:\n%s", remote, FormatCheck(report))
+		})
 	}
-	for _, item := range report.Items {
-		if item.Name == "upstream" && item.Status == checkFail &&
-			strings.Contains(item.Detail, remote+"/"+integration+" targets integration branch "+integration) {
-			return
-		}
-	}
-	t.Fatalf("slash remote integration upstream was not detected:\n%s", FormatCheck(report))
 }
 
 func TestCheck_NoGateFails(t *testing.T) {

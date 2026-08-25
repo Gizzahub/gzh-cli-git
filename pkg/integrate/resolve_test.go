@@ -105,6 +105,16 @@ func TestNormalizeName_KeepsReleaseSlash(t *testing.T) {
 	if !ok || remote != "team/upstream" || branch != "release/2.0" {
 		t.Fatalf("SplitRemoteBranch() = %q, %q, %v", remote, branch, ok)
 	}
+	for _, remoteName := range []string{"refs/remotes/team/upstream", "refs/heads/team/upstream"} {
+		raw := remoteName + "/main"
+		if got := NormalizeName(raw, []string{remoteName}); got != "main" {
+			t.Errorf("NormalizeName(%q) = %q, want main", raw, got)
+		}
+		remote, branch, ok := SplitRemoteBranch(raw, []string{remoteName})
+		if !ok || remote != remoteName || branch != "main" {
+			t.Errorf("SplitRemoteBranch(%q) = %q, %q, %v", raw, remote, branch, ok)
+		}
+	}
 }
 
 func TestResolveIntegrationBranch_UsesOriginHeadNotDevelop(t *testing.T) {

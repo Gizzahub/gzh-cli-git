@@ -135,13 +135,13 @@ func init() {
 	// Auto flags
 	tagAutoCmd.Flags().StringVar(&tagBump, "bump", "patch", "version bump type: major, minor, patch")
 	tagAutoCmd.Flags().StringVarP(&tagMessage, "message", "m", "", "tag message")
+	tagAutoCmd.Flags().BoolVarP(&tagAutoBulkFlags.DryRun, "dry-run", "n", false, "show what would be done without doing it")
 
 	// Push flags
 	tagPushCmd.Flags().BoolVar(&tagPushAll, "all", false, "push all tags (required for bulk/directory mode)")
 
 	// Bulk flags for subcommands (using shared addBulkFlags)
 	addBulkFlags(tagCreateCmd, &tagCreateBulkFlags)
-	addBulkFlags(tagAutoCmd, &tagAutoBulkFlags)
 	addBulkFlags(tagListCmd, &tagListBulkFlags)
 	addBulkFlags(tagPushCmd, &tagPushBulkFlags)
 	addBulkFlags(tagStatusCmd, &tagStatusBulkFlags)

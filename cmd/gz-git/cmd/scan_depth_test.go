@@ -6,6 +6,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -33,6 +34,51 @@ func TestResolveBulkDepthUsesConfiguredDepth(t *testing.T) {
 	}
 }
 
+func TestResolveBulkDepthSupportsEveryProjectConfigExtension(t *testing.T) {
+	for _, ext := range []string{".yaml", ".yml", ".json"} {
+		t.Run(ext, func(t *testing.T) {
+			dir := t.TempDir()
+			body := "defaults:\n  scan:\n    depth: 3\n"
+			if ext == ".json" {
+				body = `{"defaults":{"scan":{"depth":3}}}`
+			}
+			if err := os.WriteFile(filepath.Join(dir, ".gz-git"+ext), []byte(body), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+			if err := resolveBulkDepth(cmd, dir, depth); err != nil {
+				t.Fatalf("resolveBulkDepth: %v", err)
+			}
+			if *depth != 3 {
+				t.Fatalf("depth = %d, want configured depth 3", *depth)
+			}
+		})
+	}
+}
+
+func TestResolveBulkDepthUsesConfigExtensionPriority(t *testing.T) {
+	dir := t.TempDir()
+	for name, depth := range map[string]int{
+		".gz-git.yaml": 2,
+		".gz-git.yml":  3,
+		".gz-git.json": 4,
+	} {
+		body := []byte("defaults:\n  scan:\n    depth: " + strconv.Itoa(depth) + "\n")
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
+		t.Fatalf("resolveBulkDepth: %v", err)
+	}
+	if *depth != 2 {
+		t.Fatalf("depth = %d, want .yaml priority depth 2", *depth)
+	}
+}
+
 func TestResolveBulkDepthExplicitFlagWins(t *testing.T) {
 	dir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 5\n")
 	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
@@ -45,6 +91,27 @@ func TestResolveBulkDepthExplicitFlagWins(t *testing.T) {
 	}
 	if *depth != 2 {
 		t.Fatalf("depth = %d, want explicit flag depth 2", *depth)
+	}
+}
+
+func TestResolveBulkDepthDoesNotLeakExplicitFlagAcrossRuns(t *testing.T) {
+	dir := t.TempDir()
+	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	if err := cmd.Flags().Set("scan-depth", "2"); err != nil {
+		t.Fatalf("set scan-depth: %v", err)
+	}
+	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
+		t.Fatalf("resolve explicit depth: %v", err)
+	}
+	if *depth != 2 {
+		t.Fatalf("explicit depth = %d, want 2", *depth)
+	}
+
+	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
+		t.Fatalf("resolve next default depth: %v", err)
+	}
+	if *depth != repository.DefaultLocalScanDepth {
+		t.Fatalf("explicit depth leaked into next run: got %d, want %d", *depth, repository.DefaultLocalScanDepth)
 	}
 }
 
@@ -104,5 +171,46 @@ func TestResolveBulkDepthRejectsInvalidConfiguredDepth(t *testing.T) {
 
 	if err := resolveBulkDepth(cmd, dir, depth); err == nil {
 		t.Fatal("resolveBulkDepth accepted a negative configured depth")
+	}
+}
+
+func TestResolveBulkDepthResetsToFlagDefaultWithoutConfig(t *testing.T) {
+	configuredDir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 5\n")
+	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	if err := resolveBulkDepth(cmd, configuredDir, depth); err != nil {
+		t.Fatalf("resolve configured depth: %v", err)
+	}
+	if *depth != 5 {
+		t.Fatalf("configured depth = %d, want 5", *depth)
+	}
+
+	if err := resolveBulkDepth(cmd, t.TempDir(), depth); err != nil {
+		t.Fatalf("resolve default depth: %v", err)
+	}
+	if *depth != repository.DefaultLocalScanDepth {
+		t.Fatalf("depth leaked from prior run: got %d, want %d", *depth, repository.DefaultLocalScanDepth)
+	}
+}
+
+func TestResolveBulkDepthTreatsZeroAsOmitted(t *testing.T) {
+	dir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 0\n")
+	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+
+	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
+		t.Fatalf("resolveBulkDepth: %v", err)
+	}
+	if *depth != repository.DefaultLocalScanDepth {
+		t.Fatalf("depth = %d, want CLI default %d", *depth, repository.DefaultLocalScanDepth)
+	}
+}
+
+func TestTagAutoDoesNotAdvertiseBulkScanFlags(t *testing.T) {
+	for _, name := range []string{"scan-depth", "parallel", "recursive", "include", "exclude"} {
+		if flag := tagAutoCmd.Flags().Lookup(name); flag != nil {
+			t.Errorf("tag auto unexpectedly exposes unused --%s", name)
+		}
+	}
+	if flag := tagAutoCmd.Flags().Lookup("dry-run"); flag == nil {
+		t.Error("tag auto lost its used --dry-run flag")
 	}
 }

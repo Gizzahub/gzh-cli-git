@@ -183,7 +183,10 @@ type SyncDefaults struct {
 
 // ScanDefaults holds scan-related default settings.
 type ScanDefaults struct {
-	Depth int `yaml:"depth,omitempty"` // Default scan depth for bulk operations
+	// Depth is the default scan depth for bulk operations. Zero means omitted,
+	// so a child value of zero inherits its parent and a top-level zero keeps the
+	// CLI default. Positive values opt into a different depth.
+	Depth int `yaml:"depth,omitempty"`
 
 	// Exclude holds regex patterns removed from the *local directory scan*
 	// that every bulk command runs. It exists because the only way to keep a

@@ -41,7 +41,8 @@ func gitCommit(t *testing.T, dir string, args ...string) {
 
 	cmd := exec.Command("git", args...) //nolint:noctx // test helper
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GIT_AUTHOR_NAME=Test",
 		"GIT_AUTHOR_EMAIL=test@test.com",
 		"GIT_COMMITTER_NAME=Test",

@@ -58,11 +58,13 @@ jobs:
         files: ${{ runner.temp }}/coverage-unit.out
         flags: unittests
         name: codecov-umbrella
-        # v4 ended tokenless uploads for most repositories, and this repository
-        # has no secrets configured at all, so the upload cannot currently
-        # authenticate. The token is wired to a secret that may not exist yet —
-        # an empty value behaves exactly as no token does — so this line costs
-        # nothing now and is the whole fix once the secret is created.
+        # This upload is currently unauthenticated: no CODECOV_TOKEN secret is
+        # referenced anywhere else in the tree, and whether Codecov still
+        # accepts a tokenless upload here depends on its own rules for this
+        # repository, which are not observable from the checkout. Wiring the
+        # token is free either way — an undefined secret evaluates to an empty
+        # string, which behaves exactly as no token does — and is the whole fix
+        # once the secret is created.
         token: ${{ secrets.CODECOV_TOKEN }}
         # Was true, which made an unauthenticated upload fail the whole Quality
         # gate job. That never showed up because format-check died first and

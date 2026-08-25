@@ -246,8 +246,8 @@ func remoteNames(remotes map[string]string) []string {
 	return names
 }
 
-func isDeclaredTaskBranch(branch string, patterns []string) bool {
-	return len(patterns) > 0 && config.MatchesAnyTaskPattern(branch, patterns)
+func isDeclaredTaskBranch(branchName string, patterns []string) bool {
+	return len(patterns) > 0 && config.MatchesAnyTaskPattern(branchName, patterns)
 }
 
 func trackingRemote(upstream string, remotes map[string]string) string {

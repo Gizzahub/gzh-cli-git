@@ -9,9 +9,9 @@ Symptom-first guide for `gz-git`. For what a command does, see the
 Both are right — they measure different things. `info` prints divergence in two
 columns and both use the same `↑N ↓N` glyphs:
 
-| Column   | Compares HEAD against                       | Moved by         |
-| -------- | ------------------------------------------- | ---------------- |
-| `BRANCH` | its upstream (`@{upstream}`)                | `push` / `pull`  |
+| Column   | Compares HEAD against                        | Moved by           |
+| -------- | -------------------------------------------- | ------------------ |
+| `BRANCH` | its upstream (`@{upstream}`)                 | `push` / `pull`    |
 | `BASE`   | the **local** base branch (`master`, `main`) | `merge` / `rebase` |
 
 `push` only ever acts on the `BRANCH` axis. A repository that is fully pushed —
@@ -58,12 +58,10 @@ situations it can mean are opposites:
 
 - The base is parked on the tip of a task branch that **was** pushed. Every
   commit is reachable from some remote-tracking ref, so moving the pointer
-  loses nothing. This is adopted: `base master +12 (adopted: 2 local commit(s)
-  already pushed elsewhere; old tip at refs/gz-git/base-backup/master)`.
+  loses nothing. This is adopted: `base master +12 (adopted: 2 local commit(s) already pushed elsewhere; old tip at refs/gz-git/base-backup/master)`.
 - The base carries commits that exist **nowhere else** — never pushed, on no
   branch the remote has. Moving the pointer would leave them reachable only
-  from the reflog. This is refused: `base master blocked: 2 commit(s) exist
-  only here`.
+  from the reflog. This is refused: `base master blocked: 2 commit(s) exist only here`.
 
 The count that decides is "commits on the local base reachable from no
 remote-tracking ref", not "commits the remote base lacks". A blocked base is
@@ -116,8 +114,7 @@ offered, and failing at it must not report the pull you asked for as failed.
 A repository with **no commits at all** — a fresh clone of an empty remote — is
 neither. It has no base ref to sync and cannot have one until something is
 committed, so it is skipped silently rather than listed as needing attention.
-A repository that has commits but is sitting on an orphan branch (`git checkout
---orphan`) is not in that class: its base ref is real and possibly stale, so it
+A repository that has commits but is sitting on an orphan branch (`git checkout --orphan`) is not in that class: its base ref is real and possibly stale, so it
 is reported.
 
 ### The base is checked out somewhere
@@ -133,8 +130,7 @@ made there quietly reverts them. Finish or remove the worktree, then run again.
 
 ### Repositories with no local base branch at all
 
-A clone that was switched to `develop` on day one may have no `refs/heads/
-master`. The base then resolves to `develop` — the branch you are standing on —
+A clone that was switched to `develop` on day one may have no `refs/heads/ master`. The base then resolves to `develop` — the branch you are standing on —
 and the sync hands off to the normal pull path, so nothing is ever repaired and
 `info`'s `BASE` column stays meaningless. Opt in to fixing it:
 
@@ -217,11 +213,11 @@ was skipped:
 gz-git pull -d3; echo "EXIT=$?"
 ```
 
-| Exit | Meaning                                  |
-| ---- | ---------------------------------------- |
-| 0    | all repositories processed successfully  |
-| 1    | tool or configuration error (nothing ran)|
-| 2    | one or more repositories failed          |
+| Exit | Meaning                                   |
+| ---- | ----------------------------------------- |
+| 0    | all repositories processed successfully   |
+| 1    | tool or configuration error (nothing ran) |
+| 2    | one or more repositories failed           |
 
 `--dry-run` reports the same scan without touching anything, which is the
 cheapest way to confirm the command is finding your repositories at all.
@@ -252,8 +248,10 @@ so a reclaimed worktree can still haunt it. Clear the cache and re-run:
 golangci-lint cache clean && GOWORK=off make lint
 ```
 
-`GOWORK=off` matters inside a worktree: the tracked `go.work` names sibling
-modules by relative path, and those do not resolve from a worktree checkout.
+The tracked `go.work` deliberately contains only `use .`, so a worktree or a
+standalone clone does not depend on sibling modules existing at relative paths.
+`GOWORK=off` is still useful here because it keeps this manual lint run aligned
+with the canonical quality gate and isolates it from any parent workspace.
 
 ## A gate fix does not take effect until `make install`
 

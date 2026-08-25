@@ -91,7 +91,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := validateBulkDepth(cmd, updateFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &updateFlags.Depth); err != nil {
 		return err
 	}
 

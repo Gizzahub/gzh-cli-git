@@ -123,6 +123,9 @@ func runCleanupBranch(cmd *cobra.Command, args []string) error {
 
 	// If directory argument provided, run in bulk mode
 	if len(args) > 0 {
+		if err := resolveBulkDepth(cmd, args[0], &cleanupBranchBulkFlags.Depth); err != nil {
+			return err
+		}
 		return runBulkCleanupBranch(ctx, args[0], excludePatterns)
 	}
 

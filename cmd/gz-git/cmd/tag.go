@@ -153,6 +153,9 @@ func runTagCreate(cmd *cobra.Command, args []string) error {
 
 	// Bulk mode
 	if len(args) > 1 {
+		if err := resolveBulkDepth(cmd, args[1], &tagCreateBulkFlags.Depth); err != nil {
+			return err
+		}
 		return runBulkTagCreate(ctx, args[1], tagName)
 	}
 
@@ -260,7 +263,7 @@ func runTagList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, tagListBulkFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &tagListBulkFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(tagListBulkFlags.Format); err != nil {
@@ -301,6 +304,9 @@ func runTagPush(cmd *cobra.Command, args []string) error {
 	if tagPushAll {
 		// All-tags mode. An optional directory arg selects bulk mode.
 		if len(args) > 0 {
+			if err := resolveBulkDepth(cmd, args[0], &tagPushBulkFlags.Depth); err != nil {
+				return err
+			}
 			return runBulkTagPush(ctx, args[0])
 		}
 		return runSingleTagPush(ctx, "")
@@ -373,7 +379,7 @@ func runTagStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, tagStatusBulkFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &tagStatusBulkFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(tagStatusBulkFlags.Format); err != nil {

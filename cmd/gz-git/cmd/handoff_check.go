@@ -59,7 +59,7 @@ func runHandoffCheck(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, handoffCheckFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &handoffCheckFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(handoffCheckFlags.Format); err != nil {

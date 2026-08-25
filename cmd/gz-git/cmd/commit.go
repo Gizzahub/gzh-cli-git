@@ -153,7 +153,7 @@ func prepareCommitRun(cmd *cobra.Command, args []string) (commitRunConfig, error
 	if err != nil {
 		return commitRunConfig{}, err
 	}
-	if err := validateBulkDepth(cmd, commitFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &commitFlags.Depth); err != nil {
 		return commitRunConfig{}, err
 	}
 	if err := validateBulkFormat(commitFlags.Format); err != nil {

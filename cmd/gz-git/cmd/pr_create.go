@@ -75,7 +75,7 @@ func runPRCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return cliutil.NewExitError(cliutil.ExitToolError, err)
 	}
-	if err := validateBulkDepth(cmd, prCreateFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &prCreateFlags.Depth); err != nil {
 		return cliutil.NewExitError(cliutil.ExitToolError, err)
 	}
 

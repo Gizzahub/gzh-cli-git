@@ -118,7 +118,7 @@ func runHandoffEnd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, handoffEndFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &handoffEndFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(handoffEndFlags.Format); err != nil {

@@ -55,6 +55,9 @@ func runBranchList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := resolveBulkDepth(cmd, directory, &branchListFlags.Depth); err != nil {
+		return err
+	}
 
 	return runBulkBranchList(ctx, directory)
 }

@@ -70,7 +70,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate depth
-	if err := validateBulkDepth(cmd, statusFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &statusFlags.Depth); err != nil {
 		return err
 	}
 

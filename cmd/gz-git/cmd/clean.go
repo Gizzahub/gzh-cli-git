@@ -94,7 +94,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate depth
-	if err := validateBulkDepth(cmd, cleanFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &cleanFlags.Depth); err != nil {
 		return err
 	}
 

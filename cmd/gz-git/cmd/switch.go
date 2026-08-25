@@ -70,7 +70,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate depth
-	if err := validateBulkDepth(cmd, switchFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &switchFlags.Depth); err != nil {
 		return err
 	}
 

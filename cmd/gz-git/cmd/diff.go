@@ -86,7 +86,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate depth
-	if err := validateBulkDepth(cmd, diffFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &diffFlags.Depth); err != nil {
 		return err
 	}
 

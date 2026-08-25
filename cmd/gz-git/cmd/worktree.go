@@ -128,7 +128,7 @@ func runWorktreeList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, worktreeListFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &worktreeListFlags.Depth); err != nil {
 		return err
 	}
 	return runBulkWorktreeList(cmdContext(cmd), directory)

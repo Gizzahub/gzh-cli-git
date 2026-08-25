@@ -83,7 +83,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate depth
-	if err := validateBulkDepth(cmd, fetchFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &fetchFlags.Depth); err != nil {
 		return err
 	}
 

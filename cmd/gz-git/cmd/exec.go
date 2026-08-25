@@ -75,7 +75,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, execFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &execFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(execFlags.Format); err != nil {

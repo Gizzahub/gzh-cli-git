@@ -123,10 +123,10 @@ func validateBulkDirectory(args []string) (string, error) {
 	return directory, nil
 }
 
-// validateBulkDepth validates the scan-depth flag
-// Returns an error if depth is explicitly set to 0.
+// validateBulkDepth validates the scan-depth flag.
+// Returns an error if depth is explicitly set below 1.
 func validateBulkDepth(cmd *cobra.Command, depth int) error {
-	if cmd.Flags().Changed("scan-depth") && depth == 0 {
+	if cmd.Flags().Changed("scan-depth") && depth < 1 {
 		return fmt.Errorf("scan-depth must be at least 1 (use --scan-depth 1 to scan current directory and immediate subdirectories)")
 	}
 	return nil

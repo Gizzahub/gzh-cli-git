@@ -120,7 +120,7 @@ func runStashSave(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, stashSaveBulkFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &stashSaveBulkFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(stashSaveBulkFlags.Format); err != nil {
@@ -163,7 +163,7 @@ func runStashList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, stashListBulkFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &stashListBulkFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(stashListBulkFlags.Format); err != nil {
@@ -203,7 +203,7 @@ func runStashPop(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, stashPopBulkFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &stashPopBulkFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(stashPopBulkFlags.Format); err != nil {
@@ -244,7 +244,7 @@ func runStashApply(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, stashApplyBulkFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &stashApplyBulkFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(stashApplyBulkFlags.Format); err != nil {

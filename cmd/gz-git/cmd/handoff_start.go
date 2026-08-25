@@ -91,7 +91,7 @@ func runHandoffStart(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateBulkDepth(cmd, handoffStartFlags.Depth); err != nil {
+	if err := resolveBulkDepth(cmd, directory, &handoffStartFlags.Depth); err != nil {
 		return err
 	}
 	if err := validateBulkFormat(handoffStartFlags.Format); err != nil {

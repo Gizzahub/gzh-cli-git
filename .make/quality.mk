@@ -338,7 +338,7 @@ pre-commit-update: ## update pre-commit hooks to latest versions
 # Quality Assurance Workflows
 # ==============================================================================
 
-.PHONY: quality quality-strict quality-fix quality-build quality-check-validate lint-all
+.PHONY: quality quality-strict quality-fix quality-build quality-workspace-check quality-check-validate lint-all
 
 # quality-check is the one canonical source-non-mutating gate. Keep build/tests
 # here instead of in each workflow wrapper so security and test work is never
@@ -353,8 +353,28 @@ quality-build: ## build the application in a private temporary directory
 	go build -ldflags "$(VERSION_LDFLAGS)" -o "$$quality_tmp/$(BINARY)" ./cmd/gz-git; \
 	test -x "$$quality_tmp/$(BINARY)"
 
+quality-workspace-check: ## verify workspace metadata in an isolated temporary copy
+	@set -eu; \
+		echo -e "$(CYAN)Checking tracked Go workspace metadata...$(RESET)"; \
+		source_before=$$(git hash-object go.work go.work.sum); \
+		workspace_tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/gzh-cli-quality-workspace.XXXXXX"); \
+		trap 'rm -rf "$$workspace_tmp"' EXIT HUP INT TERM; \
+		cp go.mod go.sum go.work go.work.sum "$$workspace_tmp/"; \
+		(cd "$$workspace_tmp" && GOWORK=auto go list -mod=readonly -m all >/dev/null); \
+		temporary_after=$$(git hash-object "$$workspace_tmp/go.work" "$$workspace_tmp/go.work.sum"); \
+		source_after=$$(git hash-object go.work go.work.sum); \
+		if [ "$$source_before" != "$$source_after" ]; then \
+			echo "workspace validation unexpectedly modified source go.work metadata" >&2; \
+			exit 1; \
+		fi; \
+		if [ "$$source_before" != "$$temporary_after" ]; then \
+			echo "workspace metadata would drift under GOWORK=auto; run 'go work sync' and commit the result" >&2; \
+			exit 1; \
+		fi; \
+		echo -e "$(GREEN)✅ Tracked Go workspace metadata is clean!$(RESET)"
+
 quality-check: export GOWORK := off
-quality-check: format-check lint-check security-code security-deps quality-build test-install-audit test-unit-quality test-integration-quality test-e2e-only ## run the canonical source-non-mutating quality gate
+quality-check: quality-workspace-check format-check lint-check security-code security-deps quality-build test-install-audit test-unit-quality test-integration-quality test-e2e-only ## run the canonical source-non-mutating quality gate
 	@echo -e "$(GREEN)✅ Canonical quality gate passed!$(RESET)"
 
 quality: quality-check ## compatibility alias for the canonical quality gate
@@ -368,6 +388,7 @@ quality-check-validate: ## validate quality workflow delegation and fail-closed 
 		printf '%s\n' "$$graph" | grep -Fq 'Canonical quality gate passed!'; \
 		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'GOWORK=off gosec ./...' || true)" -eq 1 ]; \
 		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'GOWORK=off govulncheck ./...' || true)" -eq 1 ]; \
+		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'GOWORK=auto go list -mod=readonly -m all >/dev/null' || true)" -eq 1 ]; \
 		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'go test -short --cover' || true)" -eq 1 ]; \
 		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'go test -short -count=1 -v ./tests/integration/...' || true)" -eq 1 ]; \
 		[ "$$(printf '%s\n' "$$graph" | grep -Fc 'go test -tags=e2e' || true)" -eq 1 ]; \

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/integrate"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -84,6 +85,45 @@ func TestRunInfoAudit_FindingsExitOne(t *testing.T) {
 	}
 	if got.Summary.FindingsByCode[repository.CodeBranchBehindBase] != 1 {
 		t.Errorf("missing %s: %v", repository.CodeBranchBehindBase, got.Summary.FindingsByCode)
+	}
+}
+
+func TestRunInfoAudit_IntegrationUpstreamJSONContract(t *testing.T) {
+	var out bytes.Buffer
+	scan := auditScan(repository.RepositoryStatusResult{
+		Path: "/ws/a", RelativePath: "a", Branch: "dev/a/b/c",
+		Upstream: "origin/develop", CommitsAhead: 4,
+	})
+	enr := map[string]infoEnrichment{
+		"/ws/a": {
+			Base:                       repository.BaseBranchInfo{Name: "main", Source: "config.defaultBranch[0]"},
+			Integration:                integrate.Resolution{Participates: true, Name: "develop", Source: "config[0]"},
+			UpstreamTargetsIntegration: true,
+			UpstreamRemote:             "origin",
+			TaskRemoteExists:           true,
+		},
+	}
+
+	err := runInfoAudit(&out, scan, enr, "/ws", nil, auditNow)
+	if code := cliutil.ExitCodeForError(err); code != cliutil.ExitToolError {
+		t.Fatalf("exit code = %d, want findings exit %d", code, cliutil.ExitToolError)
+	}
+	got := decodeAudit(t, &out)
+	if !got.Repositories[0].Complete {
+		t.Error("audit_complete = false for a non-blocking upstream finding")
+	}
+	if got.Summary.FindingsByCode[repository.CodeUpstreamTargetsIntegration] != 1 {
+		t.Fatalf("summary = %+v", got.Summary.FindingsByCode)
+	}
+	for _, finding := range got.Repositories[0].Findings {
+		switch finding.Code {
+		case repository.CodeUpstreamTargetsIntegration:
+			if finding.Evidence["integration"] != "develop" || finding.Fix == nil || finding.Fix.Autofix {
+				t.Fatalf("integration finding contract = %+v", finding)
+			}
+		case repository.CodeUnpushedCommits, repository.CodeUpstreamDiverged, repository.CodeUpstreamBehind:
+			t.Fatalf("integration upstream also emitted %s", finding.Code)
+		}
 	}
 }
 

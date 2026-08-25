@@ -6,7 +6,6 @@ package cmd
 import (
 	"context"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/sync/errgroup"
 
@@ -36,9 +35,9 @@ type infoEnrichment struct {
 	// divergence contract; this answer is only for integration safety checks.
 	Integration integrate.Resolution
 
-	// UpstreamTargetsIntegration is true for a matching declared task branch,
-	// or any non-integration branch when the repository declares no task
-	// namespace, whose tracking ref names the canonical integration branch.
+	// UpstreamTargetsIntegration is true only for a branch matching the
+	// repo-root taskPattern whose tracking ref names the canonical integration
+	// branch. An undeclared task namespace is unknown, not permission to guess.
 	UpstreamTargetsIntegration bool
 	UpstreamRemote             string
 	TaskRemoteExists           bool
@@ -191,7 +190,7 @@ func enrichOne(
 			} else {
 				out.Integration = resolution
 				remotes := remoteNames(status.Remotes)
-				isTaskBranch := len(decl.Patterns) == 0 || config.MatchesAnyTaskPattern(status.Branch, decl.Patterns)
+				isTaskBranch := isDeclaredTaskBranch(status.Branch, decl.Patterns)
 				out.UpstreamTargetsIntegration = isTaskBranch &&
 					integrate.UpstreamTargetsIntegration(status.Branch, status.Upstream, resolution, remotes)
 				if out.UpstreamTargetsIntegration {
@@ -247,11 +246,13 @@ func remoteNames(remotes map[string]string) []string {
 	return names
 }
 
+func isDeclaredTaskBranch(branch string, patterns []string) bool {
+	return len(patterns) > 0 && config.MatchesAnyTaskPattern(branch, patterns)
+}
+
 func trackingRemote(upstream string, remotes map[string]string) string {
-	if head, _, ok := strings.Cut(upstream, "/"); ok {
-		if _, exists := remotes[head]; exists {
-			return head
-		}
+	if remote, _, ok := integrate.SplitRemoteBranch(upstream, remoteNames(remotes)); ok {
+		return remote
 	}
 	if _, exists := remotes["origin"]; exists {
 		return "origin"

@@ -143,6 +143,37 @@ func TestCheck_IntegrationUpstreamDetectedWhenSHAsMatch(t *testing.T) {
 	t.Fatalf("same-SHA integration upstream was not detected:\n%s", FormatCheck(report))
 }
 
+func TestCheck_IntegrationUpstreamWithSlashRemoteAndBranch(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOriginRemote(t, "team/upstream")
+	remote := fx.Remote
+	integration := "release/2.0"
+	branch := "dev/actor/feat/task"
+	runGit(t, fx.Clone, "branch", integration)
+	runGit(t, fx.Clone, "push", remote, integration)
+	runGit(t, fx.Worktree, "checkout", "-B", branch, remote+"/"+integration)
+	writeRepoFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: "+integration+"\n")
+	writeGateMakefile(t, fx.Worktree)
+	runGit(t, fx.Worktree, "add", ".gz-git.yaml", "Makefile")
+	runGit(t, fx.Worktree, "commit", "-m", "declare policy")
+	runGit(t, fx.Worktree, "push", "-u", remote, "HEAD:refs/heads/"+branch)
+	runGit(t, fx.Worktree, "branch", "--set-upstream-to", remote+"/"+integration, branch)
+
+	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
+		RepoPath: fx.Worktree,
+		Branch:   branch,
+	})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	for _, item := range report.Items {
+		if item.Name == "upstream" && item.Status == checkFail &&
+			strings.Contains(item.Detail, remote+"/"+integration+" targets integration branch "+integration) {
+			return
+		}
+	}
+	t.Fatalf("slash remote integration upstream was not detected:\n%s", FormatCheck(report))
+}
+
 func TestCheck_NoGateFails(t *testing.T) {
 	fx := readyTaskFixtureNoGate(t)
 	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{

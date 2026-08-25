@@ -97,24 +97,48 @@ func ResolveFromFacts(f Facts) Resolution {
 // registered remote.
 func NormalizeName(raw string, remotes []string) string {
 	name := strings.TrimSpace(raw)
+	remoteRef := strings.HasPrefix(name, "refs/remotes/")
 	switch {
 	case strings.HasPrefix(name, "refs/heads/"):
 		return strings.TrimPrefix(name, "refs/heads/")
 	case strings.HasPrefix(name, "refs/remotes/"):
-		rest := strings.TrimPrefix(name, "refs/remotes/")
-		if i := strings.IndexByte(rest, '/'); i >= 0 {
-			return rest[i+1:]
-		}
-		return rest
+		name = strings.TrimPrefix(name, "refs/remotes/")
 	}
 
-	if i := strings.IndexByte(name, '/'); i > 0 {
-		head, tail := name[:i], name[i+1:]
-		if isRemoteName(head, remotes) {
-			return tail
+	if _, branch, ok := SplitRemoteBranch(name, remotes); ok {
+		return branch
+	}
+	if remoteRef {
+		// Compatibility fallback for callers that have a full remote ref but no
+		// remote inventory. With an inventory, SplitRemoteBranch above handles
+		// slash-containing remote names without guessing at the first segment.
+		if i := strings.IndexByte(name, '/'); i >= 0 {
+			return name[i+1:]
 		}
+		return name
 	}
 	return name
+}
+
+// SplitRemoteBranch separates a tracking ref using the longest registered
+// remote prefix. Git permits slash-containing remote names, so splitting on
+// the first slash would mistake team/upstream/main for remote team and branch
+// upstream/main.
+func SplitRemoteBranch(raw string, remotes []string) (remote, branch string, ok bool) {
+	name := strings.TrimSpace(raw)
+	name = strings.TrimPrefix(name, "refs/remotes/")
+	best := ""
+	for _, candidate := range remotes {
+		candidate = strings.TrimSpace(candidate)
+		if len(candidate) <= len(best) || !strings.HasPrefix(name, candidate+"/") {
+			continue
+		}
+		best = candidate
+	}
+	if best == "" {
+		return "", "", false
+	}
+	return best, strings.TrimPrefix(name, best+"/"), true
 }
 
 // UpstreamTargetsIntegration reports the unsafe tracking relationship where

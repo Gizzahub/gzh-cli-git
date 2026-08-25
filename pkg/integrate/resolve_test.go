@@ -97,6 +97,14 @@ func TestNormalizeName_KeepsReleaseSlash(t *testing.T) {
 	if got != "develop" {
 		t.Fatalf("NormalizeName(refs/remotes/upstream/develop) = %q, want develop", got)
 	}
+	got = NormalizeName("refs/remotes/team/upstream/release/2.0", []string{"team", "team/upstream"})
+	if got != "release/2.0" {
+		t.Fatalf("NormalizeName(slash remote) = %q, want release/2.0", got)
+	}
+	remote, branch, ok := SplitRemoteBranch("team/upstream/release/2.0", []string{"team", "team/upstream"})
+	if !ok || remote != "team/upstream" || branch != "release/2.0" {
+		t.Fatalf("SplitRemoteBranch() = %q, %q, %v", remote, branch, ok)
+	}
 }
 
 func TestResolveIntegrationBranch_UsesOriginHeadNotDevelop(t *testing.T) {
@@ -137,6 +145,7 @@ func TestUpstreamTargetsIntegration(t *testing.T) {
 		want     bool
 	}{
 		{name: "non-origin remote", branch: "dev/a/b/c", upstream: "upstream/release/2.0", remotes: []string{"upstream"}, want: true},
+		{name: "slash remote and slash branch", branch: "dev/a/b/c", upstream: "team/upstream/release/2.0", remotes: []string{"team/upstream"}, want: true},
 		{name: "same sha is irrelevant to name classification", branch: "dev/a/b/c", upstream: "origin/release/2.0", remotes: []string{"origin"}, want: true},
 		{name: "normal task upstream", branch: "dev/a/b/c", upstream: "origin/dev/a/b/c", remotes: []string{"origin"}},
 		{name: "integration branch itself", branch: "release/2.0", upstream: "origin/release/2.0", remotes: []string{"origin"}},

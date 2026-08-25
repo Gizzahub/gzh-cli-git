@@ -58,7 +58,18 @@ jobs:
         files: ${{ runner.temp }}/coverage-unit.out
         flags: unittests
         name: codecov-umbrella
-        fail_ci_if_error: true
+        # v4 ended tokenless uploads for most repositories, and this repository
+        # has no secrets configured at all, so the upload cannot currently
+        # authenticate. The token is wired to a secret that may not exist yet —
+        # an empty value behaves exactly as no token does — so this line costs
+        # nothing now and is the whole fix once the secret is created.
+        token: ${{ secrets.CODECOV_TOKEN }}
+        # Was true, which made an unauthenticated upload fail the whole Quality
+        # gate job. That never showed up because format-check died first and
+        # this step was skipped; fixing format-check would have made it the new
+        # failure. Coverage reporting is not the merge gate here — `make
+        # quality-check`, which runs immediately above, is.
+        fail_ci_if_error: false
 
   build:
     name: Build (${{ matrix.os }})

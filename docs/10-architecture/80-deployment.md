@@ -68,7 +68,8 @@ brew install --cask gizzahub/tap/gz-git
 
 **Direct Download:**
 
-```bash
-curl -sL https://github.com/gizzahub/gzh-cli-gitforge/releases/latest/download/gz-git-linux-amd64 -o gz-git
-chmod +x gz-git
-```
+Download the archive for your platform from the
+[latest GitHub release](https://github.com/gizzahub/gzh-cli-gitforge/releases/latest).
+Linux amd64 archives follow the GoReleaser name
+`gz-git_<version>_linux_x86_64.tar.gz`; extract the archive before running
+`gz-git`.

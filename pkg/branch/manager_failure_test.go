@@ -26,11 +26,27 @@ import (
 // into a repository with no branches.
 
 // gitCommit runs git in dir and fails the test if git does.
+//
+// The identity is supplied through the environment rather than repo config
+// because tests in this package build repositories by hand — `git clone` into
+// a fresh directory produces a repository that never passed through
+// testutil's configureTempGit, so its local config carries no user. That
+// commits at all on a developer machine only because a global identity is
+// there to fall back on; on a runner there is none, and the commit fails with
+// "empty ident name". Setting it here covers every git this package runs,
+// including the ones inside hand-rolled clones, without reintroducing the
+// dependency on whatever the developer has configured globally.
 func gitCommit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
 	cmd := exec.Command("git", args...) //nolint:noctx // test helper
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
 
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)

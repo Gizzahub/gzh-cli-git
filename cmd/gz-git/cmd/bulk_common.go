@@ -75,6 +75,7 @@ type BulkFlagOptions struct {
 func addBulkFlagsWithOpts(cmd *cobra.Command, flags *BulkCommandFlags, opts BulkFlagOptions) {
 	if !opts.SkipScanDepth {
 		cmd.Flags().IntVarP(&flags.Depth, "scan-depth", "d", repository.DefaultLocalScanDepth, "directory depth to scan for repositories")
+		wrapScanDepthFlagLifecycle(cmd)
 	}
 	cmd.Flags().IntVarP(&flags.Parallel, "parallel", "j", repository.DefaultLocalParallel, "number of parallel operations")
 	if !opts.SkipRecursive {
@@ -99,6 +100,28 @@ func addBulkFlagsWithOpts(cmd *cobra.Command, flags *BulkCommandFlags, opts Bulk
 	}
 	if !opts.SkipFetch {
 		cmd.Flags().BoolVar(&flags.SkipFetch, "skip-fetch", false, "skip fetching from remote (use local state only)")
+	}
+}
+
+// wrapScanDepthFlagLifecycle makes reusable Cobra commands behave like fresh
+// CLI processes. Cobra retains both a flag's value and Changed bit after
+// Execute returns; without an execution-boundary reset, an early error before
+// config resolution can leak an explicit depth into the next Execute.
+func wrapScanDepthFlagLifecycle(cmd *cobra.Command) {
+	run := cmd.RunE
+	if run == nil {
+		return
+	}
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			flag := cmd.Flags().Lookup("scan-depth")
+			if flag == nil {
+				return
+			}
+			_ = flag.Value.Set(flag.DefValue)
+			flag.Changed = false
+		}()
+		return run(cmd, args)
 	}
 }
 

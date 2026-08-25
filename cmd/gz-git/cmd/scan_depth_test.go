@@ -94,27 +94,6 @@ func TestResolveBulkDepthExplicitFlagWins(t *testing.T) {
 	}
 }
 
-func TestResolveBulkDepthDoesNotLeakExplicitFlagAcrossRuns(t *testing.T) {
-	dir := t.TempDir()
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
-	if err := cmd.Flags().Set("scan-depth", "2"); err != nil {
-		t.Fatalf("set scan-depth: %v", err)
-	}
-	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
-		t.Fatalf("resolve explicit depth: %v", err)
-	}
-	if *depth != 2 {
-		t.Fatalf("explicit depth = %d, want 2", *depth)
-	}
-
-	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
-		t.Fatalf("resolve next default depth: %v", err)
-	}
-	if *depth != repository.DefaultLocalScanDepth {
-		t.Fatalf("explicit depth leaked into next run: got %d, want %d", *depth, repository.DefaultLocalScanDepth)
-	}
-}
-
 func TestResolveBulkDepthInheritsParentConfig(t *testing.T) {
 	root := t.TempDir()
 	parentDir := filepath.Join(root, "parent")
@@ -139,6 +118,41 @@ func TestResolveBulkDepthInheritsParentConfig(t *testing.T) {
 	}
 	if *depth != 4 {
 		t.Fatalf("depth = %d, want inherited depth 4", *depth)
+	}
+}
+
+func TestScanDepthFlagLifecycleResetsAfterEarlyError(t *testing.T) {
+	validDir := t.TempDir()
+	missingDir := filepath.Join(t.TempDir(), "missing")
+	flags := BulkCommandFlags{}
+	observed := 0
+	cmd := &cobra.Command{
+		Use:          "scan [directory]",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			directory, err := validateBulkDirectory(args)
+			if err != nil {
+				return err
+			}
+			if err := resolveBulkDepth(cmd, directory, &flags.Depth); err != nil {
+				return err
+			}
+			observed = flags.Depth
+			return nil
+		},
+	}
+	addBulkFlags(cmd, &flags)
+
+	cmd.SetArgs([]string{"--scan-depth", "7", missingDir})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("first Execute unexpectedly accepted a missing directory")
+	}
+	cmd.SetArgs([]string{validDir})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("second Execute: %v", err)
+	}
+	if observed != repository.DefaultLocalScanDepth {
+		t.Fatalf("explicit depth leaked across Execute calls: got %d, want %d", observed, repository.DefaultLocalScanDepth)
 	}
 }
 

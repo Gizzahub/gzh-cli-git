@@ -18,14 +18,8 @@ import (
 // invalid: an explicit zero or negative value must be reported rather than
 // silently replaced by configuration.
 func resolveBulkDepth(cmd *cobra.Command, directory string, depth *int) error {
-	flag := cmd.Flags().Lookup("scan-depth")
-	if flag != nil && flag.Changed {
-		err := validateBulkDepth(cmd, *depth)
-		// Commands are reusable in tests and by embedders. Consume Changed here
-		// so a later Execute without the flag can return to config/default
-		// resolution instead of inheriting this invocation's explicit value.
-		flag.Changed = false
-		return err
+	if cmd.Flags().Changed("scan-depth") {
+		return validateBulkDepth(cmd, *depth)
 	}
 
 	configured, err := loadScanDepth(directory)

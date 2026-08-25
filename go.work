@@ -1,6 +1,6 @@
 go 1.26
 
-toolchain go1.26.6
+toolchain go1.26.7
 
 // Deliberately a single-module workspace, mirroring gzh-cli-quality (605ea39).
 // It is tracked to stop `go` from walking up into a parent workspace and to keep

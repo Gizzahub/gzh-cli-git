@@ -77,6 +77,7 @@ archives:
       - README.md
       - LICENSE*
       - CHANGELOG*
+      - docs/changelog/0.8.md
 
 checksum:
   name_template: 'checksums.txt'
@@ -148,8 +149,8 @@ homebrew_casks:
     repository:
       owner: gizzahub
       name: homebrew-tap
-      # Personal Access Token with repo scope
-      # Set as HOMEBREW_TAP_TOKEN in GitHub Secrets
+      # Active fine-grained PAT limited to homebrew-tap with Contents: Read and write.
+      # Set as HOMEBREW_TAP_TOKEN in GitHub Secrets only after any org approval.
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 
     # Git author for cask updates

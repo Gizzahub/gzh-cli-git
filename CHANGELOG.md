@@ -34,13 +34,14 @@ No changes yet.
 
 ______________________________________________________________________
 
-## Past releases
+## Source-version milestones
 
-Prepared and released versions are archived one file per release line. A row marked
-`publication pending` is release preparation, not evidence that a tag or artifact exists.
-This file carries only unreleased changes.
+Earlier 0.x files record source-version milestones; the current remote has no matching
+stable tags or GitHub Releases. v0.8.0 is intended to be the first stable published tag.
+A row marked `publication pending` is release preparation, not evidence that a tag or
+artifact exists. This file carries only unreleased changes.
 
-| Line                           | Releases                                         |
+| Line                           | Milestones                                       |
 | ------------------------------ | ------------------------------------------------ |
 | [0.8.x](docs/changelog/0.8.md) | 0.8.0 (prepared 2026-08-25; publication pending) |
 | [0.7.x](docs/changelog/0.7.md) | 0.7.0 (2026-07-02)                               |
@@ -69,5 +70,3 @@ ______________________________________________________________________
 - Inspired by [gzh-cli](https://github.com/gizzahub/gzh-cli)
 
 ______________________________________________________________________
-
-[unreleased]: https://github.com/gizzahub/gzh-cli-gitforge/compare/v0.8.0...HEAD

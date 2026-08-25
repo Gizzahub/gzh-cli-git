@@ -37,7 +37,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # Required for Homebrew tap updates
-        # Create a PAT with 'repo' scope and add as repository secret
+        # Use an active fine-grained PAT limited to homebrew-tap with Contents: Read and write
         HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
     - name: Upload artifacts

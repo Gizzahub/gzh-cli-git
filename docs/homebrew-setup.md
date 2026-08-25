@@ -71,6 +71,8 @@ brew upgrade gz-git
    - **Repository permission**: `Contents: Read and write`; leave every unrelated
      permission at `No access`.
 1. Copy the generated token. Do not reuse a broad classic `repo` token.
+1. If organization policy requires approval, wait until the token is approved and active.
+   A pending token cannot publish the Cask and must not be used to start a release.
 
 ## Step 3: Add Repository Secret
 
@@ -90,7 +92,7 @@ When you push a new tag, GoReleaser will:
 1. Auto-update the Homebrew cask in `homebrew-tap`
 
 ```bash
-# Only after the tap branch and HOMEBREW_TAP_TOKEN are verified:
+# Only after the tap branch and an approved, active HOMEBREW_TAP_TOKEN are verified:
 git tag -a v0.8.0 -m "Release v0.8.0"
 git push origin v0.8.0
 ```
@@ -150,7 +152,9 @@ git push
 
 If GoReleaser fails to push to homebrew-tap:
 
-- Verify PAT has `repo` scope
+- Verify the fine-grained PAT targets only `homebrew-tap` and grants
+  `Contents: Read and write`
+- Verify any required organization approval is complete and the token is active
 - Ensure PAT is not expired
 - Check `HOMEBREW_TAP_TOKEN` secret is correctly set
 

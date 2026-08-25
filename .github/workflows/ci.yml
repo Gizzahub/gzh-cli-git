@@ -37,6 +37,13 @@ jobs:
       with:
         version: '0.9.17'
 
+    - name: Validate standalone workspace
+      env:
+        GOWORK: auto
+      run: |
+        go list -m all >/dev/null
+        git diff --exit-code -- go.work go.work.sum
+
     - name: Download dependencies
       run: go mod download
 

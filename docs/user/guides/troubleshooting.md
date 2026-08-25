@@ -130,7 +130,9 @@ made there quietly reverts them. Finish or remove the worktree, then run again.
 
 ### Repositories with no local base branch at all
 
-A clone that was switched to `develop` on day one may have no `refs/heads/ master`. The base then resolves to `develop` — the branch you are standing on —
+A clone that was switched to `develop` on day one may have no
+`refs/heads/master`. The base then resolves to `develop` — the branch you are
+standing on —
 and the sync hands off to the normal pull path, so nothing is ever repaired and
 `info`'s `BASE` column stays meaningless. Opt in to fixing it:
 

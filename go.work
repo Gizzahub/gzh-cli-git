@@ -3,10 +3,7 @@ go 1.26
 toolchain go1.26.6
 
 // Deliberately a single-module workspace, mirroring gzh-cli-quality (605ea39).
-// It is tracked to stop `go` from walking up into the devbox checkout's own
-// go.work, which lists all eleven sibling modules — not to wire ../gzh-cli-core
-// in here. Naming a sibling is what broke this: outside a devbox layout it does
-// not exist, so every `go` invocation that does not set GOWORK=off failed
-// before it started. Cross-repo local development goes through `make local-dev`
-// in the devbox, which is the documented mechanism.
+// It is tracked to stop `go` from walking up into a parent workspace and to keep
+// this repository buildable outside the devbox layout. Cross-repository devbox
+// tests explicitly select the generated root workspace through GOWORK instead.
 use .

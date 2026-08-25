@@ -125,7 +125,7 @@ release:
 
     ### Installation
 
-    **Homebrew (macOS/Linux)**:
+    **Homebrew Cask (macOS)**:
     ```bash
     brew tap gizzahub/tap
     brew install --cask gz-git

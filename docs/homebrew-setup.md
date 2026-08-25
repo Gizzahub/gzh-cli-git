@@ -105,18 +105,19 @@ brew install --cask gizzahub/tap/gz-git
 gz-git --version
 ```
 
-## Migrating the Existing Formula
+## Bootstrap the Empty Tap
 
-Do not remove the existing `Formula/gz-git.rb` as part of this repository's
-release. A same-name Formula-to-Cask migration has not been verified for the
-external `gizzahub/homebrew-tap` repository, and an untested removal can strand
-existing installations.
+As of 2026-08-25, `gizzahub/homebrew-tap` has no refs or published Formula, so
+there is no existing Formula-to-Cask migration to perform. Before the first
+stable release, verify the external publishing path end to end:
 
-Before the first stable cask release, validate the transition in a tap fixture,
-including install and upgrade from the existing Formula. Only then should the
-tap repository deprecate or remove the Formula using the verified Homebrew
-migration mechanism. That external tap change is intentionally separate from
-this GoReleaser configuration.
+1. Initialize the tap with a default branch and README.
+1. Confirm `HOMEBREW_TAP_TOKEN` can publish `Casks/gz-git.rb`.
+1. Audit the generated Cask and install it on macOS from the tap.
+1. Confirm `gz-git --version` reports the stable tag.
+
+This bootstrap is a release operation in the external tap, not a migration
+performed by this repository.
 
 ## Updating a Cask Manually (Optional)
 

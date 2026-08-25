@@ -60,10 +60,10 @@
 go get github.com/gizzahub/gzh-cli-gitforge@latest
 ```
 
-**Homebrew (macOS/Linux):**
+**Homebrew Cask (macOS):**
 
 ```bash
-brew install gz-git
+brew install --cask gizzahub/tap/gz-git
 ```
 
 **Direct Download:**

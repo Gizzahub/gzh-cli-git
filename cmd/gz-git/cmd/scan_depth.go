@@ -48,7 +48,10 @@ func resolveBulkDepth(cmd *cobra.Command, directory string, depth *int) error {
 func loadScanDepth(directory string) (int, error) {
 	configPath, err := config.DetectConfigFile(directory)
 	if err != nil {
-		return 0, nil
+		// Bulk scans do not require a project config. DetectConfigFile uses an
+		// error to report the ordinary "not found" case, which means keep the
+		// registered CLI default here.
+		return 0, nil //nolint:nilerr // an absent optional config is not a command failure
 	}
 
 	cfg, err := config.LoadConfigRecursive(filepath.Dir(configPath), filepath.Base(configPath))

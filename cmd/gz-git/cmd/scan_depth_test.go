@@ -15,17 +15,17 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
-func scanDepthCommand(t *testing.T, value int) (*cobra.Command, *int) {
+func scanDepthCommand(t *testing.T) (command *cobra.Command, depth *int) {
 	t.Helper()
-	cmd := &cobra.Command{Use: "scan"}
-	depth := value
-	cmd.Flags().IntVarP(&depth, "scan-depth", "d", value, "scan depth")
-	return cmd, &depth
+	value := repository.DefaultLocalScanDepth
+	command = &cobra.Command{Use: "scan"}
+	command.Flags().IntVarP(&value, "scan-depth", "d", value, "scan depth")
+	return command, &value
 }
 
 func TestResolveBulkDepthUsesConfiguredDepth(t *testing.T) {
 	dir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 3\n")
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 
 	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
 		t.Fatalf("resolveBulkDepth: %v", err)
@@ -47,7 +47,7 @@ func TestResolveBulkDepthSupportsEveryProjectConfigExtension(t *testing.T) {
 				t.Fatalf("write config: %v", err)
 			}
 
-			cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+			cmd, depth := scanDepthCommand(t)
 			if err := resolveBulkDepth(cmd, dir, depth); err != nil {
 				t.Fatalf("resolveBulkDepth: %v", err)
 			}
@@ -71,7 +71,7 @@ func TestResolveBulkDepthUsesConfigExtensionPriority(t *testing.T) {
 		}
 	}
 
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
 		t.Fatalf("resolveBulkDepth: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestResolveBulkDepthUsesConfigExtensionPriority(t *testing.T) {
 
 func TestResolveBulkDepthExplicitFlagWins(t *testing.T) {
 	dir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 5\n")
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 	if err := cmd.Flags().Set("scan-depth", "2"); err != nil {
 		t.Fatalf("set scan-depth: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestResolveBulkDepthInheritsParentConfig(t *testing.T) {
 		t.Fatalf("write child config: %v", err)
 	}
 
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 	if err := resolveBulkDepth(cmd, childDir, depth); err != nil {
 		t.Fatalf("resolveBulkDepth: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestResolveBulkDepthChangesActualScanReach(t *testing.T) {
 		t.Fatalf("create nested repository: %v", err)
 	}
 
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 	if err := resolveBulkDepth(cmd, root, depth); err != nil {
 		t.Fatalf("resolveBulkDepth: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestResolveBulkDepthChangesActualScanReach(t *testing.T) {
 
 func TestResolveBulkDepthRejectsInvalidConfiguredDepth(t *testing.T) {
 	dir := writeScanConfig(t, "defaults:\n  scan:\n    depth: -1\n")
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 
 	if err := resolveBulkDepth(cmd, dir, depth); err == nil {
 		t.Fatal("resolveBulkDepth accepted a negative configured depth")
@@ -196,7 +196,7 @@ func TestResolveBulkDepthRejectsInvalidConfiguredDepth(t *testing.T) {
 
 func TestResolveBulkDepthResetsToFlagDefaultWithoutConfig(t *testing.T) {
 	configuredDir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 5\n")
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 	if err := resolveBulkDepth(cmd, configuredDir, depth); err != nil {
 		t.Fatalf("resolve configured depth: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestResolveBulkDepthResetsToFlagDefaultWithoutConfig(t *testing.T) {
 
 func TestResolveBulkDepthTreatsZeroAsOmitted(t *testing.T) {
 	dir := writeScanConfig(t, "defaults:\n  scan:\n    depth: 0\n")
-	cmd, depth := scanDepthCommand(t, repository.DefaultLocalScanDepth)
+	cmd, depth := scanDepthCommand(t)
 
 	if err := resolveBulkDepth(cmd, dir, depth); err != nil {
 		t.Fatalf("resolveBulkDepth: %v", err)

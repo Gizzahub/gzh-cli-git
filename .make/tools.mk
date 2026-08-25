@@ -29,11 +29,40 @@ install-quality-tools: install-format-tools install-golangci-lint install-securi
 install-tools: install-quality-tools install-analysis-tools install-goreleaser ## install all development tools
 	@echo -e "$(GREEN)✅ All development tools installed!$(RESET)"
 
+# A bare `which <tool>` cannot enforce the pins above. A developer machine almost
+# always has these binaries already, so the guard short-circuits and the pinned
+# version is never installed locally; only CI, which starts empty, ever runs the
+# version this file names. That gap is not theoretical — it let a file pass
+# `make format-check` locally under gofumpt v0.7.0 and fail the identical check
+# in CI under the pinned v0.10.0, which is the worse failure because the gate
+# reported success to the person able to fix it.
+#
+# `go version -m` reads the module version recorded inside the binary, so it
+# identifies any go-installed tool regardless of what its own --version prints.
+# When a tool resolves to something GOPATH/bin cannot replace (mise, Homebrew),
+# reinstalling silently changes nothing, so the version is re-checked afterwards
+# and the mismatch is reported with the offending path rather than ignored.
+define ensure-go-tool
+	@installed=$$(command -v $(1) 2>/dev/null); \
+	current=$$([ -n "$$installed" ] && go version -m "$$installed" 2>/dev/null | awk '$$1=="mod"{print $$3; exit}'); \
+	if [ "$$current" != "$(3)" ]; then \
+		echo "Installing $(1) $(3) (found: $${current:-none})..."; \
+		go install $(2)@$(3) || exit 1; \
+		installed=$$(command -v $(1) 2>/dev/null); \
+		current=$$([ -n "$$installed" ] && go version -m "$$installed" 2>/dev/null | awk '$$1=="mod"{print $$3; exit}'); \
+		if [ "$$current" != "$(3)" ]; then \
+			echo "$(1) resolves to $${current:-unknown} at $$installed, not the pinned $(3)." >&2; \
+			echo "Another installation is shadowing GOPATH/bin; remove it or fix PATH." >&2; \
+			exit 1; \
+		fi; \
+	fi
+endef
+
 install-format-tools: ## install advanced formatting tools
 	@echo -e "$(CYAN)Installing formatting tools...$(RESET)"
-	@which gofumpt > /dev/null || (echo "Installing gofumpt $(GOFUMPT_VERSION)..." && go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION))
-	@which goimports > /dev/null || (echo "Installing goimports $(GOIMPORTS_VERSION)..." && go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION))
-	@which gci > /dev/null || (echo "Installing gci $(GCI_VERSION)..." && go install github.com/daixiang0/gci@$(GCI_VERSION))
+	$(call ensure-go-tool,gofumpt,mvdan.cc/gofumpt,$(GOFUMPT_VERSION))
+	$(call ensure-go-tool,goimports,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
+	$(call ensure-go-tool,gci,github.com/daixiang0/gci,$(GCI_VERSION))
 	@command -v uv >/dev/null 2>&1 || { echo "uv is required to install mdformat" >&2; exit 1; }
 	@command -v mdformat >/dev/null 2>&1 || (echo "Installing mdformat $(MDFORMAT_VERSION)..." && uv tool install --with mdformat-gfm==$(MDFORMAT_GFM_VERSION) --with mdformat-tables==$(MDFORMAT_TABLES_VERSION) mdformat==$(MDFORMAT_VERSION))
 	@echo -e "$(GREEN)✅ All formatting tools installed!$(RESET)"

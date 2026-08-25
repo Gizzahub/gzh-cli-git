@@ -8,7 +8,13 @@ ______________________________________________________________________
 
 | #   | 태스크                                                                                                             | 우선순위 | 요지                                                                                                                                                             |
 | --- | ------------------------------------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 26  | [defaults-scan-depth-is-a-dead-config-key](issue/26-defaults-scan-depth-is-a-dead-config-key.md)                   | P3       | 계층형 `defaults.scan.depth`를 모든 bulk scan에 적용하고 명시 플래그 우선·설정 확장자·반복 실행 상태 복원을 고정 (`7fa61c5`·`341ce6d`) ✅                        |
 | 27  | [task-branch-upstream-points-at-integration-branch](issue/27-task-branch-upstream-points-at-integration-branch.md) | P2       | integration upstream을 push 지연과 분리하고 동일 이름 task ref만 지시. audit code와 longest registered remote 정규화까지 구현 (`b8ad882`·`9a42ae4`·`f1c9881`) ✅ |
+
+이슈 26 검증은 `.gz-git.yaml`·`.yml`·`.json` 탐색 우선순위, 부모 설정 상속,
+`--scan-depth` 우선, `depth: 0`의 미설정/상속 의미, 실제 중첩 저장소 탐색을 포함한다.
+Cobra 명령을 반복 실행할 때 Args/help/flag parse 오류 뒤에도 scan-depth 상태가 남지 않으며,
+스캔하지 않는 `tag auto`에서는 오해를 부르는 bulk 플래그를 제거했다.
 
 검증: `push.default=upstream`·`tracking`에서 제안 refspec을 실행해 integration ref 불변과
 task ref 게시를 확인했다. 일반 slash remote와 `refs/remotes/`·`refs/heads/`로 시작하는

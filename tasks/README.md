@@ -25,7 +25,6 @@ ______________________________________________________________________
 
 | #   | 이슈                                           | 요약                                                                                                                                      |
 | --- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 26  | defaults-scan-depth-is-a-dead-config-key       | `defaults.scan.depth`를 읽는 명령이 하나도 없어 기본 스캔 깊이를 설정으로 바꿀 수 없다                                                    |
 | 28  | goreleaser-brews-deprecated-and-ci-pins-latest | 저장소 코드·CI 수정은 완료. 빈 `gizzahub/homebrew-tap` bootstrap, 최초 Cask 게시·macOS 설치, stable release workflow의 실제 검증이 남았다 |
 
 메인테이너 판단 대기 항목이 하나 있다: 이동 `snapshot` 태그 외 stable `v*` 태그가 없고
@@ -37,6 +36,7 @@ ______________________________________________________________________
 
 | #   | 태스크                                            | 결과                                                                                                                               |
 | --- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 26  | defaults-scan-depth-is-a-dead-config-key          | 모든 bulk scan에 계층형 기본 깊이를 적용하고 명시 플래그 우선·설정 확장자·반복 실행 계약을 테스트로 고정 (`7fa61c5`·`341ce6d`)     |
 | 27  | task-branch-upstream-points-at-integration-branch | integration upstream 별도 진단, 안전한 task ref 처방, audit code 추가와 slash remote 정규화로 해결 (`b8ad882`·`9a42ae4`·`f1c9881`) |
 | 25  | no-declarative-exclusion-for-bulk-write-commands  | `defaults.scan.exclude` 추가(`2dcaf8e`)와 빈 항목 제거(`33cc679`)로 해결. 저장소 단위 `readOnly`는 채택하지 않음                   |
 

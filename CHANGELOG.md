@@ -79,6 +79,10 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ### Fixed
 
+- `defaults.scan.depth` now supplies the default for every bulk directory scan while
+  an explicit `--scan-depth` still wins. The effective value follows parent config
+  inheritance and the documented `.gz-git.yaml` / `.yml` / `.json` discovery order;
+  repeated command executions also reset scan-depth state after every exit path.
 - Task branches that track the integration branch are no longer diagnosed as
   merely unpushed. `integrate check` now fails with an explicit upstream
   diagnosis and a same-named task destination, while `info --audit` emits

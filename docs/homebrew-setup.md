@@ -61,15 +61,16 @@ brew upgrade gz-git
 
 ````
 
-## Step 2: Create Personal Access Token (PAT)
+## Step 2: Create a Fine-Grained Personal Access Token
 
-1. Go to GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
-1. Click "Generate new token (classic)"
+1. Go to GitHub Settings > Developer settings > Personal access tokens > Fine-grained tokens.
+1. Select `Gizzahub` as the resource owner and only `homebrew-tap` as the repository.
 1. Configure:
    - **Note**: `homebrew-tap-token`
-   - **Expiration**: Set appropriate expiration
-   - **Scopes**: Select `repo` (full control of private repositories)
-1. Copy the generated token
+   - **Expiration**: Use the shortest practical rotation period.
+   - **Repository permission**: `Contents: Read and write`; leave every unrelated
+     permission at `No access`.
+1. Copy the generated token. Do not reuse a broad classic `repo` token.
 
 ## Step 3: Add Repository Secret
 
@@ -89,9 +90,9 @@ When you push a new tag, GoReleaser will:
 1. Auto-update the Homebrew cask in `homebrew-tap`
 
 ```bash
-# Create and push a new tag
-git tag v1.0.0
-git push origin v1.0.0
+# Only after the tap branch and HOMEBREW_TAP_TOKEN are verified:
+git tag -a v0.8.0 -m "Release v0.8.0"
+git push origin v0.8.0
 ```
 
 ## User Installation

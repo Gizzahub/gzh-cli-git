@@ -34,7 +34,7 @@ var (
 // Defaults the linker overwrites. They are named so the build-info fallback can
 // tell "nobody set this" apart from "the build deliberately said this".
 const (
-	defaultVersion = "0.7.0"
+	defaultVersion = "0.8.0"
 	defaultUnknown = "unknown"
 )
 
@@ -115,7 +115,7 @@ func shortRevision(revision string) string {
 //   - version: The library version (e.g., "0.1.0-alpha")
 //   - gitCommit: The git commit SHA (e.g., "a1b2c3d")
 //   - buildDate: The build date (e.g., "2025-11-30")
-//   - goVersion: The Go version used for building (e.g., "go1.24.0")
+//   - goVersion: The Go version used for building (e.g., "go1.26.7")
 //
 // Example:
 //

@@ -30,9 +30,20 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
+      # main.version backs cobra's `gz-git --version`.
       - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+      # The `gz-git version` subcommand does NOT read main.version — it calls
+      # gzhcligitforge.VersionString(), which reads these three package-level
+      # variables in the module root. Leaving them uninjected made every release
+      # binary report the hardcoded default (v0.7.0, commit unknown, built
+      # unknown) no matter which tag it was built from.
+      #
+      # The previous `-X main.commit` and `-X main.date` were dead: package main
+      # declares only `version`, and the linker silently ignores -X for a symbol
+      # that does not exist.
+      - -X github.com/gizzahub/gzh-cli-gitforge.Version={{.Version}}
+      - -X github.com/gizzahub/gzh-cli-gitforge.GitCommit={{.Commit}}
+      - -X github.com/gizzahub/gzh-cli-gitforge.BuildDate={{.Date}}
     mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:

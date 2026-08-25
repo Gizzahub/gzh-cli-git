@@ -12,6 +12,20 @@ executablename := gz-git
 # Version from VERSION file (preferred) or git tag (fallback)
 VERSION ?= $(shell cat VERSION 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")
 
+# Version injection (shared by every build/run recipe; keep in sync with .goreleaser.yaml).
+# Two independent surfaces report a version and they read different variables:
+#   main.version            -> cobra's `gz-git --version`
+#   $(MODULE).Version/...   -> the `gz-git version` subcommand, via VersionString()
+# Injecting only main.version made `gz-git version` report its hardcoded default
+# regardless of the tag the binary was actually built from.
+MODULE := github.com/gizzahub/gzh-cli-gitforge
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION_LDFLAGS = -X main.version=$(VERSION) \
+	-X $(MODULE).Version=$(VERSION) \
+	-X $(MODULE).GitCommit=$(COMMIT) \
+	-X $(MODULE).BuildDate=$(BUILD_DATE)
+
 # Go configuration
 export GOPROXY=https://proxy.golang.org,direct
 export GOSUMDB=sum.golang.org

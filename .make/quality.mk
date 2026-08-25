@@ -350,7 +350,7 @@ quality-build: ## build the application in a private temporary directory
 	quality_tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/gzh-cli-quality-build.XXXXXX"); \
 	trap 'rm -rf "$$quality_tmp"' EXIT HUP INT TERM; \
 	echo -e "$(CYAN)Building $(BINARY) in a temporary directory...$(RESET)"; \
-	go build -ldflags "-X main.version=$(VERSION)" -o "$$quality_tmp/$(BINARY)" ./cmd/gz-git; \
+	go build -ldflags "$(VERSION_LDFLAGS)" -o "$$quality_tmp/$(BINARY)" ./cmd/gz-git; \
 	test -x "$$quality_tmp/$(BINARY)"
 
 quality-check: export GOWORK := off

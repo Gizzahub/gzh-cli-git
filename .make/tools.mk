@@ -65,7 +65,7 @@ install-golangci-lint: ## install golangci-lint v2 (skip when PATH already has v
 
 install-goreleaser: ## install goreleaser
 	@echo -e "$(CYAN)Installing goreleaser...$(RESET)"
-	@go install github.com/goreleaser/goreleaser@v2.10.2
+	@go install github.com/goreleaser/goreleaser/v2@v2.10.2
 	@echo -e "$(GREEN)✅ goreleaser installed$(RESET)"
 
 # ==============================================================================

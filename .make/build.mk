@@ -46,7 +46,7 @@ endif
 
 build: ## build golang binary
 	@printf "$(CYAN)Building %s...$(RESET)\n" "$(BINARY)"
-	@go build -ldflags "-X main.version=$(VERSION)" -o "$(BINARY)" ./cmd/gz-git
+	@go build -ldflags "$(VERSION_LDFLAGS)" -o "$(BINARY)" ./cmd/gz-git
 	@printf "$(GREEN)Built %s successfully$(RESET)\n" "$(BINARY)"
 
 
@@ -135,12 +135,12 @@ run: ## run the application (usage: make run [args...] or ARGS="args" make run)
 	@if [ "$(words $(MAKECMDGOALS))" -gt 1 ]; then \
 		ARGS="$(filter-out run,$(MAKECMDGOALS))"; \
 		echo -e "$(YELLOW)Arguments: $$ARGS$(RESET)"; \
-		go run -ldflags "-X main.version=$(VERSION)" ./cmd/gz-git $$ARGS; \
+		go run -ldflags "$(VERSION_LDFLAGS)" ./cmd/gz-git $$ARGS; \
 	elif [ -n "$(ARGS)" ]; then \
 		echo -e "$(YELLOW)Arguments: $(ARGS)$(RESET)"; \
-		go run -ldflags "-X main.version=$(VERSION)" ./cmd/gz-git $(ARGS); \
+		go run -ldflags "$(VERSION_LDFLAGS)" ./cmd/gz-git $(ARGS); \
 	else \
-		go run -ldflags "-X main.version=$(VERSION)" ./cmd/gz-git; \
+		go run -ldflags "$(VERSION_LDFLAGS)" ./cmd/gz-git; \
 	fi
 
 # Prevent make from interpreting arguments as targets

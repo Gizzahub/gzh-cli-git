@@ -108,3 +108,24 @@ func TestEvaluateBaseline_ForeignLocationsAreRejectedBeforeNormalization(t *test
 		t.Fatalf("normalizer fixture must demonstrate why the pre-check is needed, got %v", got)
 	}
 }
+
+func TestExtractLocations_LabelPrefixedLine(t *testing.T) {
+	// infra-ops's scripts/link-check.sh and scripts/task-index-check.sh emit
+	// "TAG<spaces>path:line: message" instead of a bare "path:line" prefix.
+	// Without label stripping this line never matches locationLine, so
+	// EvaluateBaseline sees zero locations for both base and branch and
+	// fails every run with "no file:line diagnostics" regardless of content.
+	out := "BROKEN  tasks/batch.md:9: todo/560-stale.md\n" +
+		"DANGLING_ROW    tasks/batch.md:9: todo/560-stale.md\n" +
+		"internal/script/js_engine.go:200: unrelated tool output\n"
+	got := ExtractLocations(out, []string{"tasks/batch.md", "internal/script/js_engine.go"})
+	want := []string{"internal/script/js_engine.go:200", "tasks/batch.md:9"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}

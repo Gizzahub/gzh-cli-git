@@ -38,6 +38,36 @@ type BaselineResult struct {
 // tsc, eslint, ruff, and pytest all emit at the start of a diagnostic line.
 var locationLine = regexp.MustCompile(`^[^ \t:]+\.[A-Za-z0-9_]+:\d+`)
 
+// labelPrefix matches an uppercase diagnostic tag ("BROKEN", "DANGLING_ROW")
+// that some project check scripts emit before the file:line token, instead
+// of starting the line with the path itself. Observed in infra-ops's
+// scripts/{link,task-index}-check.sh: "BROKEN  tasks/batch.md:9: ...".
+var labelPrefix = regexp.MustCompile(`^[A-Z][A-Z0-9_]*[ \t]+`)
+
+// diagnosticCandidates returns the strings to try locationLine against for
+// one output line: as-is, with a leading label tag stripped, and each of
+// those with a leading "./" stripped. Order matters only for foreign-path
+// detection, which needs the untouched (label-stripped) string first.
+func diagnosticCandidates(line string) []string {
+	trimmed := strings.TrimSpace(line)
+	noLabel := labelPrefix.ReplaceAllString(trimmed, "")
+	return []string{
+		trimmed,
+		noLabel,
+		strings.TrimPrefix(trimmed, "./"),
+		strings.TrimPrefix(noLabel, "./"),
+	}
+}
+
+func findLocationMatch(line string) string {
+	for _, candidate := range diagnosticCandidates(line) {
+		if match := locationLine.FindString(candidate); match != "" {
+			return match
+		}
+	}
+	return ""
+}
+
 // EvaluateBaseline is the non-worsening gate.
 //
 // It does not compare diagnostic location sets. The measured lint run
@@ -99,11 +129,7 @@ func ExtractLocations(output string, tracked []string) []string {
 	}
 	var out []string
 	for _, line := range strings.Split(output, "\n") {
-		match := locationLine.FindString(strings.TrimSpace(line))
-		if match == "" {
-			// also accept a file:line after a leading "./"
-			match = locationLine.FindString(strings.TrimPrefix(strings.TrimSpace(line), "./"))
-		}
+		match := findLocationMatch(line)
 		if match == "" {
 			continue
 		}
@@ -123,10 +149,7 @@ func ExtractLocations(output string, tracked []string) []string {
 func foreignDiagnosticLocations(output string) []string {
 	var out []string
 	for _, line := range strings.Split(output, "\n") {
-		match := locationLine.FindString(strings.TrimSpace(line))
-		if match == "" {
-			match = locationLine.FindString(strings.TrimPrefix(strings.TrimSpace(line), "./"))
-		}
+		match := findLocationMatch(line)
 		if match == "" {
 			continue
 		}

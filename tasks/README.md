@@ -27,6 +27,7 @@ ______________________________________________________________________
 | --- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | 26  | defaults-scan-depth-is-a-dead-config-key            | `defaults.scan.depth`를 읽는 명령이 하나도 없어 기본 스캔 깊이를 설정으로 바꿀 수 없다                          |
 | 27  | task-branch-upstream-points-at-integration-branch   | 통합 브랜치에서 만든 task 브랜치의 upstream이 통합 브랜치로 잡히는데 아무도 보고하지 않는다 — `push.default`가 `upstream`/`tracking`이면 `git push`가 통합 브랜치로 들어간다 |
+| 28  | goreleaser-brews-deprecated-and-ci-pins-latest      | `.goreleaser.yaml`의 `brews`는 폐기 예고 상태인데 릴리스 CI는 `version: latest`라, 저장소를 안 건드려도 어느 날 태그 푸시에서 릴리스가 깨진다 |
 
 메인테이너 판단 대기 항목이 하나 있다: 이 저장소에는 git 태그가 하나도 없고 `VERSION`은
 0.7.0에 멈춰 있어 `[Unreleased]`에 릴리스되지 않은 작업 배치가 누적된다. 이슈 22의 분할로

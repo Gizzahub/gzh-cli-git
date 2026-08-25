@@ -496,7 +496,8 @@ func mergeParentDefaults(child, parent *Config) {
 		// a parent excludes a vendored mirror precisely so no descendant can
 		// write to it by forgetting to repeat the rule.
 		child.Defaults.Scan.Exclude = mergeExcludePatterns(
-			parent.Defaults.Scan.Exclude, child.Defaults.Scan.Exclude)
+			parent.Defaults.Scan.Exclude, child.Defaults.Scan.Exclude,
+		)
 	}
 
 	// Merge Output defaults

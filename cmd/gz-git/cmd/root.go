@@ -154,9 +154,30 @@ func Execute(version string) {
 	setCommandGroups(rootCmd)
 	applyUsageTemplateRecursive(rootCmd, buildUsageTemplate())
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := executeCommand(rootCmd); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(cliutil.ExitCodeForError(err))
+	}
+}
+
+// executeCommand gives reusable Cobra trees the same fresh-flag behavior as a
+// new CLI process. Cobra retains parsed values and Changed bits after every
+// exit path, including parse, help, and Args errors, so cleanup belongs around
+// Execute rather than inside an individual RunE.
+func executeCommand(command *cobra.Command) error {
+	defer resetCommandFlags(command)
+	return command.Execute()
+}
+
+func resetCommandFlags(command *cobra.Command) {
+	reset := func(flag *pflag.Flag) {
+		_ = flag.Value.Set(flag.DefValue)
+		flag.Changed = false
+	}
+	command.LocalNonPersistentFlags().VisitAll(reset)
+	command.PersistentFlags().VisitAll(reset)
+	for _, child := range command.Commands() {
+		resetCommandFlags(child)
 	}
 }
 

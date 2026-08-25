@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -121,38 +122,43 @@ func TestResolveBulkDepthInheritsParentConfig(t *testing.T) {
 	}
 }
 
-func TestScanDepthFlagLifecycleResetsAfterEarlyError(t *testing.T) {
-	validDir := t.TempDir()
-	missingDir := filepath.Join(t.TempDir(), "missing")
-	flags := BulkCommandFlags{}
-	observed := 0
-	cmd := &cobra.Command{
-		Use:          "scan [directory]",
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			directory, err := validateBulkDirectory(args)
-			if err != nil {
-				return err
+func TestExecuteCommandResetsFlagsAfterEveryExitPath(t *testing.T) {
+	for _, firstArgs := range [][]string{
+		{"--scan-depth", "7", "one", "two"},
+		{"--scan-depth", "7", "--help"},
+		{"--scan-depth", "7", "--unknown"},
+	} {
+		t.Run(strings.Join(firstArgs, "_"), func(t *testing.T) {
+			flags := BulkCommandFlags{}
+			observed := 0
+			cmd := &cobra.Command{
+				Use:          "scan [directory]",
+				Args:         cobra.MaximumNArgs(1),
+				SilenceUsage: true,
+				RunE: func(cmd *cobra.Command, args []string) error {
+					directory, err := validateBulkDirectory(args)
+					if err != nil {
+						return err
+					}
+					if err := resolveBulkDepth(cmd, directory, &flags.Depth); err != nil {
+						return err
+					}
+					observed = flags.Depth
+					return nil
+				},
 			}
-			if err := resolveBulkDepth(cmd, directory, &flags.Depth); err != nil {
-				return err
-			}
-			observed = flags.Depth
-			return nil
-		},
-	}
-	addBulkFlags(cmd, &flags)
+			addBulkFlags(cmd, &flags)
 
-	cmd.SetArgs([]string{"--scan-depth", "7", missingDir})
-	if err := cmd.Execute(); err == nil {
-		t.Fatal("first Execute unexpectedly accepted a missing directory")
-	}
-	cmd.SetArgs([]string{validDir})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("second Execute: %v", err)
-	}
-	if observed != repository.DefaultLocalScanDepth {
-		t.Fatalf("explicit depth leaked across Execute calls: got %d, want %d", observed, repository.DefaultLocalScanDepth)
+			cmd.SetArgs(firstArgs)
+			_ = executeCommand(cmd)
+			cmd.SetArgs([]string{t.TempDir()})
+			if err := executeCommand(cmd); err != nil {
+				t.Fatalf("second Execute: %v", err)
+			}
+			if observed != repository.DefaultLocalScanDepth {
+				t.Fatalf("explicit depth leaked across Execute calls: got %d, want %d", observed, repository.DefaultLocalScanDepth)
+			}
+		})
 	}
 }
 

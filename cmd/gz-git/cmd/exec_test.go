@@ -52,7 +52,7 @@ func TestRunExec_DryRunAndSuccess(t *testing.T) {
 
 	rootCmd.SetArgs([]string{"exec", "-d", "1", "-n", parent, "--", "true"})
 	out := captureStdout(t, func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := executeCommand(rootCmd); err != nil {
 			t.Fatalf("exec dry-run: %v", err)
 		}
 	})
@@ -65,7 +65,7 @@ func TestRunExec_DryRunAndSuccess(t *testing.T) {
 	execFlags.DryRun = false
 	rootCmd.SetArgs([]string{"exec", "-d", "1", "--format", "json", parent, "--", "true"})
 	out = captureStdout(t, func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := executeCommand(rootCmd); err != nil {
 			t.Fatalf("exec true: %v", err)
 		}
 	})
@@ -76,7 +76,7 @@ func TestRunExec_DryRunAndSuccess(t *testing.T) {
 	_ = execCmd.Flags().Set("dry-run", "false")
 	execFlags.DryRun = false
 	rootCmd.SetArgs([]string{"exec", "-d", "1", parent, "--", "false"})
-	if err := rootCmd.Execute(); err == nil {
+	if err := executeCommand(rootCmd); err == nil {
 		t.Fatal("expected failure for false")
 	}
 }
@@ -84,7 +84,7 @@ func TestRunExec_DryRunAndSuccess(t *testing.T) {
 func TestRunExec_MissingCommandAfterDash(t *testing.T) {
 	setCommandGroups(rootCmd)
 	rootCmd.SetArgs([]string{"exec", "--"})
-	err := rootCmd.Execute()
+	err := executeCommand(rootCmd)
 	if err == nil {
 		t.Fatal("expected error for empty command")
 	}

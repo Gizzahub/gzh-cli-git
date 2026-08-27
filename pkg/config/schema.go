@@ -220,6 +220,15 @@ workspaces:
       upstream: https://github.com/original/project.git
       backup: git@gitlab.com:myuser/project.git
 
+  # 4. Third-party repository: keep current, but never publish from this machine
+  upstream-reference:
+    path: upstream-reference
+    type: git
+    url: https://github.com/other-owner/project.git
+    access: read-only  # Forces pull sync; bulk push and handoff skip this repo
+    sync:
+      strategy: pull
+
 # -----------------------------------------------------------------------------
 # Metadata (Optional)
 # -----------------------------------------------------------------------------

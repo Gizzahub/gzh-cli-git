@@ -693,6 +693,11 @@ type Workspace struct {
 	// Profile overrides the parent profile for this workspace
 	Profile string `yaml:"profile,omitempty"`
 
+	// Access controls whether this machine may publish changes to the
+	// workspace. Read-only workspaces are still cloned and pulled, but bulk
+	// push and handoff never write to their remotes.
+	Access WorkspaceAccess `yaml:"access,omitempty"`
+
 	// === Git Repository Settings (for type=git) ===
 
 	// URL is the git clone URL (required for type=git sync)
@@ -742,6 +747,27 @@ type Workspace struct {
 	// ChildConfigMode controls how child config files are generated during sync.
 	// Values: "repositories" (default), "workspaces", "none"
 	ChildConfigMode ChildConfigMode `yaml:"childConfigMode,omitempty"`
+}
+
+// WorkspaceAccess describes the remote-write contract for a workspace.
+type WorkspaceAccess string
+
+const (
+	// WorkspaceAccessReadWrite is the default: normal pull and push behavior.
+	WorkspaceAccessReadWrite WorkspaceAccess = "read-write"
+	// WorkspaceAccessReadOnly keeps the checkout current while forbidding push.
+	WorkspaceAccessReadOnly WorkspaceAccess = "read-only"
+)
+
+// IsValid reports whether the configured access mode is supported. Empty is
+// the backward-compatible read-write default.
+func (a WorkspaceAccess) IsValid() bool {
+	return a == "" || a == WorkspaceAccessReadWrite || a == WorkspaceAccessReadOnly
+}
+
+// IsReadOnly reports whether remote writes must be suppressed.
+func (a WorkspaceAccess) IsReadOnly() bool {
+	return a == WorkspaceAccessReadOnly
 }
 
 // WorkspaceType represents the type of workspace.

@@ -369,6 +369,11 @@ Config File Structure (Reference):
 					return fmt.Errorf("workspace sync failed: %w", orchErr)
 				}
 			}
+			if !dryRun {
+				if err := recordReadOnlyWorkspaceAccess(ctx, execResult, configDir); err != nil {
+					return err
+				}
+			}
 
 			// Display machine output if requested
 			switch format {
@@ -447,6 +452,25 @@ Config File Structure (Reference):
 	cmd.Flags().BoolVar(&pushAfterSync, "push", false, "Push after successful sync (only repos with local commits ahead)")
 
 	return cmd
+}
+
+func recordReadOnlyWorkspaceAccess(ctx context.Context, result reposync.ExecutionResult, configDir string) error {
+	for _, actionResult := range result.Succeeded {
+		path := actionResult.Action.Repo.TargetPath
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(configDir, path)
+		}
+		var err error
+		if actionResult.Action.ReadOnly {
+			err = config.RecordWorkspaceReadOnly(ctx, path)
+		} else {
+			err = config.ClearWorkspaceAccessMarker(ctx, path)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // createActionsFromFlatConfig converts flat config PlanRequest to Actions.
@@ -638,18 +662,10 @@ func planForgeWorkspaces(ctx context.Context, cfg *config.Config, out io.Writer,
 		planner := reposync.NewForgePlanner(prov, plannerConfig)
 		planReq := reposync.PlanRequest{
 			Options: reposync.PlanOptions{
-				DefaultStrategy: strategyOverride,
+				DefaultStrategy: workspaceSyncStrategy(ws, strategyOverride),
 			},
 		}
 
-		if planReq.Options.DefaultStrategy == "" {
-			if ws.Sync != nil && ws.Sync.Strategy != "" {
-				s, err := reposync.ParseStrategy(ws.Sync.Strategy)
-				if err == nil {
-					planReq.Options.DefaultStrategy = s
-				}
-			}
-		}
 		if planReq.Options.DefaultStrategy == "" {
 			planReq.Options.DefaultStrategy = reposync.StrategyReset
 		}
@@ -663,6 +679,9 @@ func planForgeWorkspaces(ctx context.Context, cfg *config.Config, out io.Writer,
 		plan, err := planner.Plan(ctx, planReq)
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan workspace '%s': %w", name, err)
+		}
+		if ws.Access.IsReadOnly() {
+			markActionsReadOnly(plan.Actions)
 		}
 
 		fmt.Fprintf(out, "  → Found %d repositories\n", len(plan.Actions))
@@ -792,15 +811,7 @@ func planGitWorkspaces(ctx context.Context, cfg *config.Config, configDir string
 		}
 
 		// Determine strategy
-		strategy := strategyOverride
-		if strategy == "" {
-			if ws.Sync != nil && ws.Sync.Strategy != "" {
-				s, err := reposync.ParseStrategy(ws.Sync.Strategy)
-				if err == nil {
-					strategy = s
-				}
-			}
-		}
+		strategy := workspaceSyncStrategy(ws, strategyOverride)
 		if strategy == "" {
 			strategy = reposync.StrategyReset
 		}
@@ -824,6 +835,7 @@ func planGitWorkspaces(ctx context.Context, cfg *config.Config, configDir string
 			},
 			Type:      reposync.ActionUpdate,
 			Strategy:  strategy,
+			ReadOnly:  ws.Access.IsReadOnly(),
 			Reason:    "git workspace",
 			PlannedBy: "config",
 			Workspace: name,
@@ -846,6 +858,22 @@ func planGitWorkspaces(ctx context.Context, cfg *config.Config, configDir string
 	}
 
 	return allActions, nil
+}
+
+func workspaceSyncStrategy(ws *config.Workspace, override reposync.Strategy) reposync.Strategy {
+	if ws.Access.IsReadOnly() {
+		return reposync.StrategyPull
+	}
+	if override != "" {
+		return override
+	}
+	if ws.Sync != nil && ws.Sync.Strategy != "" {
+		strategy, err := reposync.ParseStrategy(ws.Sync.Strategy)
+		if err == nil {
+			return strategy
+		}
+	}
+	return ""
 }
 
 // planConfigWorkspaces loads child configs from type=config workspaces with sync.recursive=true
@@ -902,8 +930,14 @@ func planConfigWorkspaces(ctx context.Context, cfg *config.Config, configDir str
 					cfgData.Plan.Options.DefaultStrategy = s
 				}
 			}
+			if ws.Access.IsReadOnly() {
+				cfgData.Plan.Options.DefaultStrategy = reposync.StrategyPull
+			}
 
 			childActions := createActionsFromFlatConfig(cfgData.Plan, wsPath)
+			if ws.Access.IsReadOnly() {
+				markActionsReadOnly(childActions)
+			}
 			for i := range childActions {
 				childActions[i].Workspace = name
 			}
@@ -924,11 +958,17 @@ func planConfigWorkspaces(ctx context.Context, cfg *config.Config, configDir str
 				if fErr != nil {
 					return nil, fmt.Errorf("failed to plan forge workspaces in '%s': %w", name, fErr)
 				}
+				if ws.Access.IsReadOnly() {
+					markActionsReadOnly(forgeActions)
+				}
 				allActions = append(allActions, forgeActions...)
 
 				gitActions, gErr := planGitWorkspaces(ctx, childRecursiveCfg, wsPath, out, strategyOverrideStr)
 				if gErr != nil {
 					return nil, fmt.Errorf("failed to plan git workspaces in '%s': %w", name, gErr)
+				}
+				if ws.Access.IsReadOnly() {
+					markActionsReadOnly(gitActions)
 				}
 				allActions = append(allActions, gitActions...)
 			}
@@ -936,6 +976,13 @@ func planConfigWorkspaces(ctx context.Context, cfg *config.Config, configDir str
 	}
 
 	return allActions, nil
+}
+
+func markActionsReadOnly(actions []reposync.Action) {
+	for i := range actions {
+		actions[i].ReadOnly = true
+		actions[i].Strategy = reposync.StrategyPull
+	}
 }
 
 // writeChildForgeConfig writes a child config file with the list of repositories.
@@ -2304,17 +2351,22 @@ type pushResult struct {
 	Error   error
 }
 
+type pushTarget struct {
+	Path     string
+	ReadOnly bool
+}
+
 // collectPushTargets returns target paths from successfully synced repos.
-func collectPushTargets(result reposync.ExecutionResult) []string {
-	targets := make([]string, 0, len(result.Succeeded))
+func collectPushTargets(result reposync.ExecutionResult) []pushTarget {
+	targets := make([]pushTarget, 0, len(result.Succeeded))
 	for _, r := range result.Succeeded {
-		targets = append(targets, r.Action.Repo.TargetPath)
+		targets = append(targets, pushTarget{Path: r.Action.Repo.TargetPath, ReadOnly: r.Action.ReadOnly})
 	}
 	return targets
 }
 
 // executePushForSyncedRepos pushes repos that have local commits ahead of remote.
-func executePushForSyncedRepos(ctx context.Context, targets []string, parallel int) []pushResult {
+func executePushForSyncedRepos(ctx context.Context, targets []pushTarget, parallel int) []pushResult {
 	if parallel <= 0 {
 		parallel = repository.DefaultForgeParallel
 	}
@@ -2326,12 +2378,12 @@ func executePushForSyncedRepos(ctx context.Context, targets []string, parallel i
 
 	for i, target := range targets {
 		wg.Add(1)
-		go func(idx int, repoPath string) {
+		go func(idx int, repo pushTarget) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			results[idx] = pushOneRepo(ctx, repoPath)
+			results[idx] = pushOneRepo(ctx, repo)
 		}(i, target)
 	}
 
@@ -2339,7 +2391,18 @@ func executePushForSyncedRepos(ctx context.Context, targets []string, parallel i
 	return results
 }
 
-func pushOneRepo(ctx context.Context, repoPath string) pushResult {
+func pushOneRepo(ctx context.Context, target pushTarget) pushResult {
+	repoPath := target.Path
+	if target.ReadOnly {
+		return pushResult{Path: repoPath, Message: "read-only workspace; push skipped"}
+	}
+	access, source, err := config.WorkspacePushAccessContext(ctx, repoPath)
+	if err != nil {
+		return pushResult{Path: repoPath, Error: fmt.Errorf("resolve workspace access: %w", err)}
+	}
+	if access.IsReadOnly() {
+		return pushResult{Path: repoPath, Message: fmt.Sprintf("read-only workspace from %s; push skipped", source)}
+	}
 	// Get current branch
 	branchCmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD") // #nosec G204 -- fixed git query in the selected repository.
 	branchOut, err := branchCmd.Output()

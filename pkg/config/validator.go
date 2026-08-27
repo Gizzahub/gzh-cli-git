@@ -457,6 +457,10 @@ func (v *Validator) ValidateWorkspace(ws *Workspace, name string) error {
 		return fmt.Errorf("workspace is nil")
 	}
 
+	if !ws.Access.IsValid() {
+		return fmt.Errorf("invalid workspace access %q: must be 'read-write' or 'read-only'", ws.Access)
+	}
+
 	// Validate path
 	if ws.Path == "" {
 		return fmt.Errorf("workspace path is empty")

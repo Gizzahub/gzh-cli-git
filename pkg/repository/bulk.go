@@ -355,6 +355,12 @@ type BulkPushOptions struct {
 	// IgnoreDirty skips dirty status check after push (useful for CI/CD)
 	IgnoreDirty bool
 
+	// PushAccess optionally decides whether a repository may be pushed. It is
+	// evaluated before the repository is opened or any remote is contacted.
+	// A denied repository is reported as skipped and the rest of the batch
+	// continues.
+	PushAccess func(repoPath string) (allowed bool, reason string, err error)
+
 	// Policy restricts which branches may be pushed to and how. A nil policy
 	// permits every push. Repositories it refuses are reported as StatusBlocked
 	// and the rest of the batch still runs.
@@ -2201,6 +2207,23 @@ func (c *client) processPushRepository(ctx context.Context, rootDir, repoPath st
 		Path:         repoPath,
 		RelativePath: getRelativePath(rootDir, repoPath),
 		Duration:     0,
+	}
+
+	if opts.PushAccess != nil {
+		allowed, reason, err := opts.PushAccess(repoPath)
+		if err != nil {
+			result.Status = StatusError
+			result.Message = "Failed to resolve repository push access"
+			result.Error = err
+			result.Duration = time.Since(startTime)
+			return result
+		}
+		if !allowed {
+			result.Status = StatusSkipped
+			result.Message = reason
+			result.Duration = time.Since(startTime)
+			return result
+		}
 	}
 
 	// Open repository

@@ -103,6 +103,46 @@ func TestBulkPush(t *testing.T) {
 	}
 }
 
+func TestBulkPushSkipsRepositoryDeniedByPushAccess(t *testing.T) {
+	rootDir := t.TempDir()
+	repoPath := filepath.Join(rootDir, "foreign")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := initGitRepo(repoPath); err != nil {
+		t.Skipf("Skipping test: git not available: %v", err)
+	}
+
+	called := false
+	result, err := NewClient().BulkPush(context.Background(), BulkPushOptions{
+		Directory: rootDir,
+		MaxDepth:  2,
+		Logger:    NewNoopLogger(),
+		PushAccess: func(path string) (bool, string, error) {
+			called = true
+			if path != repoPath {
+				t.Fatalf("PushAccess path = %q, want %q", path, repoPath)
+			}
+			return false, "read-only workspace; push disabled", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BulkPush() error = %v", err)
+	}
+	if !called {
+		t.Fatal("PushAccess was not called")
+	}
+	if len(result.Repositories) != 1 {
+		t.Fatalf("len(Repositories) = %d, want 1", len(result.Repositories))
+	}
+	if result.Repositories[0].Status != StatusSkipped {
+		t.Fatalf("status = %q, want %q", result.Repositories[0].Status, StatusSkipped)
+	}
+	if !strings.Contains(result.Repositories[0].Message, "push disabled") {
+		t.Fatalf("message = %q", result.Repositories[0].Message)
+	}
+}
+
 func TestBulkPushSetUpstreamWhenMissingAndAheadIsZero(t *testing.T) {
 	rootDir := t.TempDir()
 	repoPath := filepath.Join(rootDir, "repo")

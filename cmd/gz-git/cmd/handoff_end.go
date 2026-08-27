@@ -208,10 +208,21 @@ func checkpointMessage(effective *config.EffectiveConfig) string {
 	return effective.Identity.AppendTrailers(handoffEndMessage)
 }
 
-// applyPushPolicy splits off the repositories whose branch the policy will not
-// accept a push to.
+// applyPushPolicy splits off repositories that either belong to a read-only
+// workspace or whose branch the general push policy will not accept. This runs
+// before checkpointRepositories so a remote-write prohibition also prevents an
+// unattended local checkpoint commit.
 func applyPushPolicy(repos []handoff.RepoAssessment, policy *repository.PushPolicy) (allowed []handoff.RepoAssessment, blocked []blockedRepo) {
 	for _, repo := range repos {
+		pushAllowed, reason, err := configuredWorkspacePushAccess(repo.Path)
+		if err != nil {
+			blocked = append(blocked, blockedRepo{Repository: repo, Reason: fmt.Sprintf("workspace access check failed: %v", err)})
+			continue
+		}
+		if !pushAllowed {
+			blocked = append(blocked, blockedRepo{Repository: repo, Reason: reason})
+			continue
+		}
 		denial := policy.Check(repository.PushIntent{Branch: repo.Branch})
 		if denial == nil {
 			allowed = append(allowed, repo)
@@ -318,6 +329,7 @@ func checkpointRepositories(ctx context.Context, directory string, repos []hando
 		// A checkpoint on a brand new branch is the common case, and without
 		// this the push has no target to fail against.
 		SetUpstream: true,
+		PushAccess:  configuredWorkspacePushAccess,
 		// Redundant with the pre-commit gate, but a policy belongs on every
 		// path that writes to a remote, not only the one that remembered.
 		Policy:   guards.policy,
@@ -334,7 +346,7 @@ func checkpointRepositories(ctx context.Context, directory string, repos []hando
 		case repository.StatusPushed:
 			report.Pushed = append(report.Pushed, r.RelativePath)
 		case repository.StatusUpToDate, repository.StatusSkipped:
-			// The remote already had everything.
+			// No remote write was required or permitted.
 		default:
 			// Anything else — auth refused, no upstream, a rejected push —
 			// means the work is still only on this machine.

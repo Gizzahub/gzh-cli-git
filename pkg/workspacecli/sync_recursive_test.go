@@ -191,14 +191,15 @@ repositories:
 		ConfigPath: filepath.Join(tmpDir, ".gz-git.yaml"),
 		Workspaces: map[string]*config.Workspace{
 			"mywork": {
-				Path: wsDir,
-				Sync: &config.SyncConfig{Recursive: true},
+				Path:   wsDir,
+				Access: config.WorkspaceAccessReadOnly,
+				Sync:   &config.SyncConfig{Recursive: true},
 			},
 		},
 	}
 
 	var buf bytes.Buffer
-	actions, err := planConfigWorkspaces(context.Background(), cfg, tmpDir, &buf, "")
+	actions, err := planConfigWorkspaces(context.Background(), cfg, tmpDir, &buf, "reset")
 	if err != nil {
 		t.Fatalf("planConfigWorkspaces failed: %v", err)
 	}
@@ -209,6 +210,9 @@ repositories:
 
 	if actions[0].Repo.Name != "my-repo" {
 		t.Errorf("expected repo name 'my-repo', got %q", actions[0].Repo.Name)
+	}
+	if !actions[0].ReadOnly || actions[0].Strategy != reposync.StrategyPull {
+		t.Fatalf("action readOnly/strategy = %v/%q, want true/%q", actions[0].ReadOnly, actions[0].Strategy, reposync.StrategyPull)
 	}
 
 	output := buf.String()

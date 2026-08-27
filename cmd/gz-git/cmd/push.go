@@ -139,6 +139,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 		Remotes:           pushRemotes,
 		AllRemotes:        pushAllRemotes,
 		IgnoreDirty:       pushIgnoreDirty,
+		PushAccess:        configuredWorkspacePushAccess,
 		Policy:            guards.policy,
 		Identity:          guards.identity,
 		IncludeSubmodules: pushFlags.IncludeSubmodules,

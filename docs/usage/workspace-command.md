@@ -84,7 +84,24 @@ workspaces:
   project2:
     path: project2
     url: git@github.com:user/project2.git
+
+  # 다른 소유자의 저장소: 최신 상태는 pull하되 push는 금지
+  upstream-reference:
+    path: upstream-reference
+    url: https://github.com:other-owner/project.git
+    access: read-only
+    sync:
+      strategy: pull
 ```
+
+`access: read-only`는 외부·참조 저장소용 안전 계약입니다. 해당 workspace는
+`--strategy` override와 관계없이 `pull`로 동기화되며, `gz-git push`와
+`workspace sync --push`, `gz-git handoff end`에서는 실패가 아닌 `skipped`로
+보고되어 원격 쓰기를 하지 않습니다. 이 계약은 forge/config workspace 아래의
+모든 하위 저장소와 workspace 경로가 가리키는 심볼릭 링크 대상에도 적용됩니다.
+절대경로 외부 workspace는 첫 동기화 때 repository-local Git config에도 계약을
+기록하므로, 이후 소유 config 바깥에서 직접 실행한 push/handoff도 차단됩니다.
+`access`를 생략하면 기존과 같은 `read-write` 동작입니다.
 
 **repositories**:
 

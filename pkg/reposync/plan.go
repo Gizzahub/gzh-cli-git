@@ -68,6 +68,7 @@ type Action struct {
 	Repo      RepoSpec
 	Type      ActionType
 	Strategy  Strategy
+	ReadOnly  bool // remote writes are forbidden by the declaring workspace
 	Reason    string
 	PlannedBy string
 	Workspace string // workspace name for grouping display (empty = flat repositories)

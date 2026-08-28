@@ -17,13 +17,14 @@ import (
 )
 
 type makeProbe struct {
-	Target    string
-	Defined   bool
-	Skipped   bool
-	MissingCD string
-	Output    string
-	Err       error
-	Code      int
+	Target      string
+	Defined     bool
+	Skipped     bool
+	MissingCD   string
+	Output      string
+	Err         error
+	Code        int
+	Unavailable string
 }
 
 const (
@@ -53,6 +54,7 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 			return probe
 		}
 		if attempt == golangciLockAttempts {
+			probe.Unavailable = fmt.Sprintf("golangci-lint lock persisted after %d attempts", golangciLockAttempts)
 			return probe
 		}
 		if err := waitForRetry(ctx, golangciLockRetryWait); err != nil {
@@ -248,6 +250,9 @@ func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe,
 	if !probe.Defined {
 		return CheckItem{Name: name, Status: checkSkip, Detail: "undefined"}
 	}
+	if probe.Unavailable != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: " + probe.Unavailable}
+	}
 	if probe.Target == "lint" {
 		if err := foreignDiagnosticError("branch", probe.Output); err != nil {
 			return CheckItem{
@@ -297,6 +302,9 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	defer func() { _ = g.worktreeRemoveForce(ctx, wt) }()
 
 	baseProbe := runMakeTarget(ctx, wt, probe.Target)
+	if baseProbe.Unavailable != "" {
+		return BaselineResult{}, fmt.Errorf("measurement unavailable: baseline make %s: %s", probe.Target, baseProbe.Unavailable)
+	}
 	if baseProbe.MissingCD != "" {
 		return BaselineResult{}, fmt.Errorf(
 			"baseline make %s did not run — %q missing in target tree",

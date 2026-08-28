@@ -114,6 +114,9 @@ func TestRunMakeTarget_LintLockFailsAfterRetries(t *testing.T) {
 	if string(got) != "xxx" {
 		t.Fatalf("attempts = %q, want three runs", got)
 	}
+	if probe.Unavailable == "" {
+		t.Fatal("exhausted pure lint lock must report measurement unavailable")
+	}
 }
 
 func TestRunMakeTarget_LintLockWithDiagnosticDoesNotRetryOrSkip(t *testing.T) {
@@ -210,6 +213,9 @@ func TestRunMakeTarget_LintCancellationDuringFinalLockAttemptIsNotUnavailable(t 
 	if !errors.Is(probe.Err, context.Canceled) {
 		t.Fatalf("canceled final lock attempt error = %v, want context.Canceled", probe.Err)
 	}
+	if probe.Unavailable != "" {
+		t.Fatalf("canceled final lock attempt unavailable = %q, want empty", probe.Unavailable)
+	}
 	got, err := os.ReadFile(count)
 	if err != nil {
 		t.Fatalf("read attempts: %v", err)
@@ -263,6 +269,17 @@ func TestJudgeMake_MissingCDFailsEvenWhenSkippedChecksAreAllowed(t *testing.T) {
 		}, allowSkipped)
 		if item.Status != checkFail || !strings.Contains(item.Detail, "not run") {
 			t.Fatalf("allowSkipped=%v missing cd = %+v", allowSkipped, item)
+		}
+	}
+}
+
+func TestJudgeMake_UnavailableFailsBeforeBaselineEvenWhenSkippedChecksAreAllowed(t *testing.T) {
+	for _, allowSkipped := range []bool{false, true} {
+		item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+			Target: "lint", Defined: true, Unavailable: "golangci-lint lock persisted after 3 attempts",
+		}, allowSkipped)
+		if item.Status != checkFail || !strings.Contains(item.Detail, "measurement unavailable") {
+			t.Fatalf("allowSkipped=%v unavailable = %+v", allowSkipped, item)
 		}
 	}
 }

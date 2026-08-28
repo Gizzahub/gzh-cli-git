@@ -319,6 +319,54 @@ func TestCheck_DirectToDefaultWithoutIntegration(t *testing.T) {
 	}
 }
 
+func TestCheck_ExhaustedLintLockIsMeasurementUnavailableOnBranchAndBaseline(t *testing.T) {
+	t.Run("branch", func(t *testing.T) {
+		fx := readyTaskFixture(t)
+		writeRepoFile(t, fx.Worktree, "Makefile", "check:\n\t@true\nlint:\n\t@printf '%s\\n' 'Error: parallel golangci-lint is running'; false\n")
+		runGit(t, fx.Worktree, "add", "Makefile")
+		runGit(t, fx.Worktree, "commit", "-m", "lock lint")
+		runGit(t, fx.Worktree, "push", fx.Remote, "HEAD")
+		report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{RepoPath: fx.Worktree, Branch: "dev/actor/feat/task", AllowSkippedChecks: true})
+		if err != nil {
+			t.Fatalf("Check: %v", err)
+		}
+		if report.Ready || !hasCheckDetail(report, "make lint", checkFail, "measurement unavailable") {
+			t.Fatalf("branch lock must be NOT READY:\n%s", FormatCheck(report))
+		}
+	})
+	t.Run("baseline", func(t *testing.T) {
+		fx := testutil.TempWorktreeWithBareOrigin(t)
+		runGit(t, fx.Clone, "branch", "develop")
+		runGit(t, fx.Clone, "checkout", "develop")
+		writeRepoFile(t, fx.Clone, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n")
+		writeRepoFile(t, fx.Clone, "Makefile", "check:\n\t@true\nlint:\n\t@printf '%s\\n' 'Error: parallel golangci-lint is running'; false\n")
+		runGit(t, fx.Clone, "add", ".")
+		runGit(t, fx.Clone, "commit", "-m", "locked target lint")
+		runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+		runGit(t, fx.Worktree, "checkout", "-B", "dev/actor/feat/task", "develop")
+		writeRepoFile(t, fx.Worktree, "Makefile", "check:\n\t@true\nlint:\n\t@printf '%s\\n' 'task.go:1: broken'; false\n")
+		runGit(t, fx.Worktree, "add", "Makefile")
+		runGit(t, fx.Worktree, "commit", "-m", "task lint failure")
+		runGit(t, fx.Worktree, "push", "-u", fx.Remote, "HEAD")
+		report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{RepoPath: fx.Worktree, Branch: "dev/actor/feat/task", AllowSkippedChecks: true})
+		if err != nil {
+			t.Fatalf("Check: %v", err)
+		}
+		if report.Ready || !hasCheckDetail(report, "make lint", checkFail, "measurement unavailable: baseline") {
+			t.Fatalf("baseline lock must be NOT READY:\n%s", FormatCheck(report))
+		}
+	})
+}
+
+func hasCheckDetail(report *CheckReport, name, status, detail string) bool {
+	for _, item := range report.Items {
+		if item.Name == name && item.Status == status && strings.Contains(item.Detail, detail) {
+			return true
+		}
+	}
+	return false
+}
+
 func readyTaskFixture(t *testing.T) *testutil.WorktreeOrigin {
 	t.Helper()
 	fx := readyTaskFixtureNoGate(t)

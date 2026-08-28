@@ -9,7 +9,7 @@ import (
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 )
 
-// integrateCmd groups the read-only queue and the later check/run commands.
+// integrateCmd groups queue, readiness, and integration commands.
 var integrateCmd = &cobra.Command{
 	Use:   "integrate",
 	Short: "Inspect and apply task-branch integration",

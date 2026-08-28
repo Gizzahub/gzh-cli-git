@@ -61,9 +61,12 @@ func loadReadinessManifest(ctx context.Context, g gitRepo, sha, name string, man
 	if manifest.Type != "blob" || (manifest.Mode != "100644" && manifest.Mode != "100755") {
 		return readinessContract{}, false, nil
 	}
-	data, _, err := g.showFile(ctx, sha, name)
+	data, present, err := g.showFile(ctx, sha, name)
 	if err != nil {
 		return readinessContract{}, false, err
+	}
+	if !present {
+		return readinessContract{}, false, nil
 	}
 	decl, present, err := config.ParseReadinessDocument(data, strings.HasSuffix(name, ".json"))
 	if err != nil {

@@ -100,6 +100,75 @@ func TestRun_ReclaimsMatchingPattern(t *testing.T) {
 	}
 }
 
+func TestRun_ReclaimPreservesSiblingTaskWorktreeAndParent(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "branch", "develop")
+	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+
+	parent := filepath.Join(t.TempDir(), "task-worktrees")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatalf("create sibling worktree parent: %v", err)
+	}
+	branchA := "dev/actor/feat/task-a"
+	branchB := "dev/actor/feat/task-b"
+	worktreeA := filepath.Join(parent, "task-a")
+	worktreeB := filepath.Join(parent, "task-b")
+	runGit(t, fx.Clone, "worktree", "add", "-b", branchA, worktreeA, "develop")
+	writeFile(t, worktreeA, "task-a.txt", "task a\n")
+	writeRepoFile(t, worktreeA, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n  taskPattern: dev/*\n")
+	writeGateMakefile(t, worktreeA)
+	runGit(t, worktreeA, "add", ".")
+	runGit(t, worktreeA, "commit", "-m", "task a")
+	runGit(t, worktreeA, "push", "-u", fx.Remote, "HEAD")
+
+	runGit(t, fx.Clone, "worktree", "add", "-b", branchB, worktreeB, "develop")
+	writeFile(t, worktreeB, "sibling-sentinel.txt", "must survive reclaim\n")
+
+	report, err := Run(context.Background(), gitcmd.NewExecutor(), RunOptions{
+		CheckOptions: CheckOptions{
+			RepoPath: worktreeA,
+			Branch:   branchA,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !report.Integrated || report.Reclaim.Incomplete() {
+		t.Fatalf("want completed integration and reclaim: %s", FormatRun(report))
+	}
+	if _, err := os.Stat(worktreeA); !os.IsNotExist(err) {
+		t.Fatalf("reclaimed task worktree = %v, want removed", err)
+	}
+	if _, err := os.Stat(parent); err != nil {
+		t.Fatalf("sibling parent removed: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(worktreeB, "sibling-sentinel.txt")); err != nil || string(got) != "must survive reclaim\n" {
+		t.Fatalf("sibling sentinel = %q, %v; want preserved", got, err)
+	}
+	if !refExists(t, fx.Clone, "refs/heads/"+branchB) {
+		t.Fatalf("sibling branch %s should remain", branchB)
+	}
+	siblingInfo, err := os.Stat(worktreeB)
+	if err != nil {
+		t.Fatalf("stat sibling worktree: %v", err)
+	}
+	worktrees, err := newGitRepo(gitcmd.NewExecutor(), fx.Clone).listWorktrees(context.Background())
+	if err != nil {
+		t.Fatalf("list worktrees: %v", err)
+	}
+	registered := false
+	for _, worktree := range worktrees {
+		info, statErr := os.Stat(worktree.Path)
+		if statErr == nil && os.SameFile(siblingInfo, info) && worktree.Branch == branchB {
+			registered = true
+			break
+		}
+	}
+	if !registered {
+		t.Fatalf("sibling worktree %s on %s is not registered: %+v", worktreeB, branchB, worktrees)
+	}
+}
+
 func TestReclaimRemoteBranch_LeaseRefusesMovedTip(t *testing.T) {
 	fx := runFixture(t, "dev/*")
 	task := "dev/actor/feat/task"

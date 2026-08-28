@@ -226,6 +226,19 @@ cheapest way to confirm the command is finding your repositories at all.
 
 ## `integrate check` says bootstrap required or readiness contract changed
 
+Before bootstrapping a repository, every wrapper or policy hook that can invoke
+integration should require this exact probe to succeed:
+
+```bash
+gz-git capability integrate-readiness-v1
+```
+
+Unlike a version-string floor, this is the binary's explicit declaration that
+it implements the named contract. Success exits zero and writes exactly
+`integrate-readiness-v1` plus a newline to stdout, including with `--quiet`;
+an older client, unknown capability, wrong arity, or output failure exits
+nonzero and must fail closed.
+
 Readiness V1 is owned by the target branch, not by a task branch. Add the
 contract to the target in a separately approved bootstrap change, then rebase
 task branches onto that target. A task branch cannot introduce, remove, or

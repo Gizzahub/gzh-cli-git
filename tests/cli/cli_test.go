@@ -88,6 +88,44 @@ func TestCLIVersion(t *testing.T) {
 	}
 }
 
+func TestCLICapabilityProbeContract(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantStdout string
+	}{
+		{name: "supported", args: []string{"capability", "integrate-readiness-v1"}, wantCode: 0, wantStdout: "integrate-readiness-v1\n"},
+		{name: "supported quiet", args: []string{"--quiet", "capability", "integrate-readiness-v1"}, wantCode: 0, wantStdout: "integrate-readiness-v1\n"},
+		{name: "unknown", args: []string{"capability", "future-capability"}, wantCode: 1},
+		{name: "missing", args: []string{"capability"}, wantCode: 1},
+		{name: "extra", args: []string{"capability", "integrate-readiness-v1", "extra"}, wantCode: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(getBinaryPath(), tt.args...) //nolint:noctx // short-lived CLI contract probe
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			err := cmd.Run()
+			gotCode := 0
+			if err != nil {
+				var exitErr *exec.ExitError
+				if !errors.As(err, &exitErr) {
+					t.Fatalf("Run() error = %v", err)
+				}
+				gotCode = exitErr.ExitCode()
+			}
+			if gotCode != tt.wantCode {
+				t.Fatalf("exit code = %d, want %d; stderr=%q", gotCode, tt.wantCode, stderr.String())
+			}
+			if got := stdout.String(); got != tt.wantStdout {
+				t.Fatalf("stdout = %q, want %q", got, tt.wantStdout)
+			}
+		})
+	}
+}
+
 // TestCLIHelp tests the help command.
 func TestCLIHelp(t *testing.T) {
 	cmd := exec.Command(getBinaryPath(), "--help") //nolint:noctx // test helper, no context needed

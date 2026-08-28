@@ -32,6 +32,9 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ### Added
 
+- `gz-git capability integrate-readiness-v1` now provides a fail-closed machine
+  probe for wrappers and hooks that must reject clients which would ignore the
+  target-owned readiness contract.
 - `integrate check` can now use a target-owned `branch.readiness` V1 contract
   instead of executing a task branch's Makefile. The contract binds an executable
   runner tree to both checked commits, runs it in detached worktrees with bounded

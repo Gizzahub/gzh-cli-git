@@ -8,6 +8,13 @@ gz-git --help
 gz-git <command> --help
 ```
 
+## Readiness transactions
+
+Target-owned readiness contracts use narrow, separately reviewed procedures:
+[bootstrap](integrate-bootstrap.md) creates a missing contract, while
+[readiness contract update](integrate-readiness-update.md) changes one that
+already exists.
+
 ## Global Flags
 
 | Flag        | Short | Description               |

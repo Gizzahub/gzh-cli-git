@@ -111,6 +111,9 @@ func (v *Validator) ValidateProfile(p *Profile) error {
 			return fmt.Errorf("invalid sync config: %w", err)
 		}
 	}
+	if p.Branch != nil && p.Branch.Readiness != nil {
+		return fmt.Errorf("branch.readiness is allowed only in a repository-root project config")
+	}
 
 	return nil
 }
@@ -163,6 +166,11 @@ func (v *Validator) ValidateProjectConfig(p *ProjectConfig) error {
 	if p.Sync != nil {
 		if err := v.ValidateSyncConfig(p.Sync); err != nil {
 			return fmt.Errorf("invalid sync config: %w", err)
+		}
+	}
+	if p.Branch != nil && p.Branch.Readiness != nil {
+		if err := ValidateReadiness(*p.Branch.Readiness); err != nil {
+			return fmt.Errorf("invalid readiness config: %w", err)
 		}
 	}
 
@@ -378,6 +386,9 @@ func (v *Validator) ValidateConfig(c *Config) error {
 	if c == nil {
 		return nil // nil config is valid (optional)
 	}
+	if c.Branch != nil && c.Branch.Readiness != nil {
+		return fmt.Errorf("branch.readiness is allowed only in a repository-root project config")
+	}
 
 	// Validate parent path if specified
 	if c.Parent != "" {
@@ -453,8 +464,8 @@ func (v *Validator) ValidateConfig(c *Config) error {
 
 // ValidateWorkspace validates a workspace entry.
 func (v *Validator) ValidateWorkspace(ws *Workspace, name string) error {
-	if ws == nil {
-		return fmt.Errorf("workspace is nil")
+	if err := validateWorkspaceReadinessScope(ws); err != nil {
+		return err
 	}
 
 	if !ws.Access.IsValid() {
@@ -534,6 +545,16 @@ func (v *Validator) ValidateWorkspace(ws *Workspace, name string) error {
 		}
 	}
 
+	return nil
+}
+
+func validateWorkspaceReadinessScope(ws *Workspace) error {
+	if ws == nil {
+		return fmt.Errorf("workspace is nil")
+	}
+	if ws.Branch != nil && ws.Branch.Readiness != nil {
+		return fmt.Errorf("branch.readiness is allowed only in a repository-root project config")
+	}
 	return nil
 }
 

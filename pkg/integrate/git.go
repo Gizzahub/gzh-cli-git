@@ -231,6 +231,57 @@ func (g gitRepo) diffNames(ctx context.Context, a, b string) ([]string, error) {
 	return splitNonEmpty(out), nil
 }
 
+type treeEntry struct {
+	Mode string
+	Type string
+	OID  string
+}
+
+func (g gitRepo) treeEntry(ctx context.Context, sha, name string) (treeEntry, bool, error) {
+	res, err := g.run(ctx, "ls-tree", sha, "--", name)
+	if err != nil {
+		return treeEntry{}, false, err
+	}
+	if res.ExitCode != 0 {
+		return treeEntry{}, false, fmt.Errorf("git ls-tree %s: %s", name, strings.TrimSpace(res.Stderr))
+	}
+	line := strings.TrimSpace(res.Stdout)
+	if line == "" {
+		return treeEntry{}, false, nil
+	}
+	fields := strings.Fields(strings.SplitN(line, "\t", 2)[0])
+	if len(fields) != 3 {
+		return treeEntry{}, false, fmt.Errorf("unexpected ls-tree output for %s", name)
+	}
+	return treeEntry{Mode: fields[0], Type: fields[1], OID: fields[2]}, true, nil
+}
+
+func (g gitRepo) showFile(ctx context.Context, sha, name string) (data []byte, present bool, err error) {
+	entry, ok, err := g.treeEntry(ctx, sha, name)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	if entry.Type != "blob" {
+		return nil, false, fmt.Errorf("%s is not a regular file", name)
+	}
+	res, err := g.run(ctx, "show", sha+":"+name)
+	if err != nil {
+		return nil, false, err
+	}
+	if res.ExitCode != 0 {
+		return nil, false, fmt.Errorf("git show %s:%s failed: %s", sha, name, strings.TrimSpace(res.Stderr))
+	}
+	return []byte(res.Stdout), true, nil
+}
+
+func (g gitRepo) objectSize(ctx context.Context, oid string) (int64, error) {
+	out, err := g.output(ctx, "cat-file", "-s", oid)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(out, 10, 64)
+}
+
 func (g gitRepo) worktreeAddDetach(ctx context.Context, path, sha string) error {
 	res, err := g.run(ctx, "worktree", "add", "--detach", path, sha)
 	if err != nil {

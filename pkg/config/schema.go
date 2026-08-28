@@ -113,6 +113,17 @@ branch:
     - develop
     - release/*
 
+  # Repository-root integration branch and reclaim namespace. These values are
+  # never inherited from a parent, profile, workspace, or global config.
+  integrationBranch: develop
+  taskPattern: dev/*/*/*
+
+  # Target-owned integration gate. The runner is a tracked executable regular
+  # file below .gz-git/readiness/ and receives only the fixed V1 arguments.
+  readiness:
+    version: 1
+    runner: .gz-git/readiness/check
+
   # Branch-name templates used by 'gz-git branch name <task>', one per role.
   # Placeholders: {task}, {device}, {agent}. Each is slugified before it is
   # substituted, so a hostname like Daves-MacBook.local becomes a legal segment.

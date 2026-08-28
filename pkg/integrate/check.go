@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
@@ -45,6 +46,16 @@ type CheckReport struct {
 	Failures  int
 	Warnings  int
 	RootFacts []string
+	// Gate provenance is recorded so run can repeat the exact checked state.
+	GateMode          string
+	ManifestPath      string
+	ContractDigest    string
+	ManifestOID       string
+	RunnerPath        string
+	RunnerOID         string
+	ReadinessTreeOID  string
+	ReadinessStatus   string
+	ReadinessDuration time.Duration
 }
 
 // Check answers whether the branch can land on the target.
@@ -99,26 +110,33 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 	add(checkWorkingTree(ctx, g, plan))
 	add(checkPushed(ctx, g, plan))
 
-	if plan.HeadSHA != plan.BranchSHA {
-		add(CheckItem{Name: "make", Status: checkFail, Detail: "HEAD is not the branch; cannot run tests"})
-	} else {
-		declared := 0
-		for _, target := range []string{"check", "lint"} {
-			probe := runMakeTarget(ctx, g.dir, target)
-			item := judgeMake(ctx, g, plan, probe, opts.AllowSkippedChecks)
-			if item.Status != checkSkip {
-				declared++
-				add(item)
+	contractItem := checkReadinessContract(ctx, g, plan, report)
+	add(contractItem)
+	switch report.GateMode {
+	case "contract-v1":
+		// The contract runner deliberately replaces every head-owned Makefile.
+	case "legacy-make":
+		if plan.HeadSHA != plan.BranchSHA {
+			add(CheckItem{Name: "make", Status: checkFail, Detail: "HEAD is not the branch; cannot run tests"})
+		} else {
+			declared := 0
+			for _, target := range []string{"check", "lint"} {
+				probe := runMakeTarget(ctx, g.dir, target)
+				item := judgeMake(ctx, g, plan, probe, opts.AllowSkippedChecks)
+				if item.Status != checkSkip {
+					declared++
+					add(item)
+				}
 			}
-		}
-		if declared == 0 {
-			status := checkFail
-			detail := "undefined — this repo declares no integration gate"
-			if opts.AllowSkippedChecks {
-				status = checkWarn
-				detail += "; allowed by --allow-skipped-checks"
+			if declared == 0 {
+				status := checkFail
+				detail := "undefined — this repo declares no integration gate"
+				if opts.AllowSkippedChecks {
+					status = checkWarn
+					detail += "; allowed by --allow-skipped-checks"
+				}
+				add(CheckItem{Name: "make check/lint", Status: status, Detail: detail})
 			}
-			add(CheckItem{Name: "make check/lint", Status: status, Detail: detail})
 		}
 	}
 	report.Ready = report.Failures == 0
@@ -274,6 +292,13 @@ func FormatCheck(r *CheckReport) string {
 	b.WriteString(")\n\n")
 	for _, item := range r.Items {
 		fmt.Fprintf(&b, "  %s  %s — %s\n", item.Status, item.Name, item.Detail)
+	}
+	if r.GateMode != "" {
+		fmt.Fprintf(&b, "  INFO  readiness provenance — mode=%s source=%s target=%s", r.GateMode, r.Plan.BranchSHA, r.Plan.TargetSHA)
+		if r.GateMode == "contract-v1" {
+			fmt.Fprintf(&b, " ManifestPath=%s ContractDigest=%s ManifestOID=%s RunnerPath=%s RunnerOID=%s ReadinessTreeOID=%s Status=%s Duration=%s", r.ManifestPath, r.ContractDigest, r.ManifestOID, r.RunnerPath, r.RunnerOID, r.ReadinessTreeOID, r.ReadinessStatus, r.ReadinessDuration.Round(time.Millisecond))
+		}
+		b.WriteByte('\n')
 	}
 	b.WriteByte('\n')
 	if r.Ready {

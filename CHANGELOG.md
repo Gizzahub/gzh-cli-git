@@ -30,7 +30,13 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ## [Unreleased]
 
-No changes yet.
+### Added
+
+- `integrate check` can now use a target-owned `branch.readiness` V1 contract
+  instead of executing a task branch's Makefile. The contract binds an executable
+  runner tree to both checked commits, runs it in detached worktrees with bounded
+  output and time, and makes `integrate run` revalidate the target SHA and push it
+  with an exact lease before reclaiming anything.
 
 ______________________________________________________________________
 

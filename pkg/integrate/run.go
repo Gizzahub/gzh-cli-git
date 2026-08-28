@@ -38,6 +38,19 @@ func Run(ctx context.Context, exec *gitcmd.Executor, opts RunOptions) (*RunRepor
 	if err != nil {
 		return nil, err
 	}
+	return runChecked(ctx, exec, opts, check)
+}
+
+// runChecked continues an integration from an immutable readiness report.
+// It deliberately revalidates source, target, and contract provenance before
+// any push or reclaim action.
+func runChecked(ctx context.Context, exec *gitcmd.Executor, opts RunOptions, check *CheckReport) (*RunReport, error) {
+	if exec == nil {
+		return nil, fmt.Errorf("git executor is nil")
+	}
+	if check == nil {
+		return nil, fmt.Errorf("readiness report is nil")
+	}
 	report := &RunReport{Check: check, Source: check.Plan.Branch, Target: check.Plan.Target}
 	if !check.Ready {
 		return report, fmt.Errorf("not ready")
@@ -54,37 +67,9 @@ func Run(ctx context.Context, exec *gitcmd.Executor, opts RunOptions) (*RunRepor
 	}
 	g.dir = root
 
-	sourceSHA, ok, err := g.revParse(ctx, check.Plan.Branch)
+	sourceSHA, targetSHA, targetName, err := revalidateCheckedRefs(ctx, g, check)
 	if err != nil {
 		return report, err
-	}
-	if !ok || sourceSHA != check.Plan.BranchSHA {
-		return report, fmt.Errorf("source branch changed during readiness; re-run check")
-	}
-
-	if check.Plan.Remote != "" {
-		if err := g.fetchPrune(ctx, check.Plan.Remote); err != nil {
-			return report, err
-		}
-	}
-
-	targetName := targetBranchName(check.Plan.Target, check.Plan.Remote)
-	targetRef := check.Plan.Target
-	if check.Plan.Remote != "" {
-		targetRef = check.Plan.Remote + "/" + targetName
-	}
-	targetSHA, ok, err := g.revParse(ctx, targetRef)
-	if err != nil {
-		return report, err
-	}
-	if !ok {
-		targetSHA, ok, err = g.revParse(ctx, check.Plan.Target)
-		if err != nil {
-			return report, err
-		}
-		if !ok {
-			return report, fmt.Errorf("target ref not found after fetch: %s", check.Plan.Target)
-		}
 	}
 
 	anc, err := g.isAncestor(ctx, targetSHA, sourceSHA)
@@ -95,7 +80,7 @@ func Run(ctx context.Context, exec *gitcmd.Executor, opts RunOptions) (*RunRepor
 		return report, fmt.Errorf("%s is not an ancestor of %s; rebase and re-check", check.Plan.Target, check.Plan.Branch)
 	}
 
-	if err := pushFastForward(ctx, g, check.Plan.Remote, sourceSHA, targetName); err != nil {
+	if err := pushFastForward(ctx, g, check.Plan.Remote, sourceSHA, targetName, check.Plan.TargetSHA); err != nil {
 		return report, err
 	}
 	if err := ffTargetWorktrees(ctx, exec, g, targetName, sourceSHA); err != nil {
@@ -108,12 +93,60 @@ func Run(ctx context.Context, exec *gitcmd.Executor, opts RunOptions) (*RunRepor
 	return finishRunReclaim(ctx, exec, g, root, targetName, report)
 }
 
-func pushFastForward(ctx context.Context, g gitRepo, remote, sourceSHA, targetName string) error {
+func revalidateCheckedRefs(ctx context.Context, g gitRepo, check *CheckReport) (sourceSHA, targetSHA, targetName string, err error) {
+	sourceSHA, ok, err := g.revParse(ctx, check.Plan.Branch)
+	if err != nil {
+		return "", "", "", err
+	}
+	if !ok || sourceSHA != check.Plan.BranchSHA {
+		return "", "", "", fmt.Errorf("source branch changed during readiness; re-run check")
+	}
+	if check.Plan.Remote != "" {
+		if err := g.fetchPrune(ctx, check.Plan.Remote); err != nil {
+			return "", "", "", err
+		}
+	}
+	targetName = targetBranchName(check.Plan.Target, check.Plan.Remote)
+	targetRef := check.Plan.Target
+	if check.Plan.Remote != "" {
+		targetRef = check.Plan.Remote + "/" + targetName
+	}
+	targetSHA, ok, err = g.revParse(ctx, targetRef)
+	if err != nil {
+		return "", "", "", err
+	}
+	if !ok {
+		targetSHA, ok, err = g.revParse(ctx, check.Plan.Target)
+		if err != nil {
+			return "", "", "", err
+		}
+		if !ok {
+			return "", "", "", fmt.Errorf("target ref not found after fetch: %s", check.Plan.Target)
+		}
+	}
+	if targetSHA != check.Plan.TargetSHA {
+		return "", "", "", fmt.Errorf("target branch changed during readiness; re-run check")
+	}
+	if check.GateMode != "contract-v1" {
+		return sourceSHA, targetSHA, targetName, nil
+	}
+	targetContract, present, err := loadReadinessContract(ctx, g, targetSHA)
+	if err != nil {
+		return "", "", "", err
+	}
+	if !present || targetContract.Digest != check.ContractDigest || targetContract.ManifestOID != check.ManifestOID || targetContract.TreeOID != check.ReadinessTreeOID || targetContract.RunnerOID != check.RunnerOID {
+		return "", "", "", fmt.Errorf("target readiness contract changed during readiness; re-run check")
+	}
+	return sourceSHA, targetSHA, targetName, nil
+}
+
+func pushFastForward(ctx context.Context, g gitRepo, remote, sourceSHA, targetName, checkedTargetSHA string) error {
 	if remote == "" {
 		return fmt.Errorf("no remote; cannot push the fast-forward")
 	}
 	refspec := sourceSHA + ":refs/heads/" + targetName
-	push, err := g.run(ctx, "push", remote, refspec)
+	lease := "--force-with-lease=refs/heads/" + targetName + ":" + checkedTargetSHA
+	push, err := g.run(ctx, "push", lease, remote, refspec)
 	if err != nil {
 		return err
 	}

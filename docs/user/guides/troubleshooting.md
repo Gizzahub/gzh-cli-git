@@ -224,6 +224,53 @@ gz-git pull -d3; echo "EXIT=$?"
 `--dry-run` reports the same scan without touching anything, which is the
 cheapest way to confirm the command is finding your repositories at all.
 
+## `integrate check` says bootstrap required or readiness contract changed
+
+Readiness V1 is owned by the target branch, not by a task branch. Add the
+contract to the target in a separately approved bootstrap change, then rebase
+task branches onto that target. A task branch cannot introduce, remove, or
+weaken its own gate.
+
+Repositories where neither target nor source declares readiness keep the
+legacy head-owned Make gate and print an explicit warning. A source-only
+declaration fails with `bootstrap required`; once the target declares V1, every
+source must carry the identical readiness declaration and runner tree.
+
+```yaml
+branch:
+  readiness:
+    version: 1
+    runner: .gz-git/readiness/check
+```
+
+The runner must be a tracked executable regular file (`100755`) below
+`.gz-git/readiness/`. Contract runners are supported on macOS and Linux; on
+Windows the check fails closed. `gz-git` runs it from a detached target-SHA worktree
+with fixed `--source-dir`, `--source-sha`, `--target-sha`, and
+`--result-format json-v1` arguments. It must return one JSON value such as:
+
+```json
+{"version":1,"status":"ready","summary":"validation passed"}
+```
+
+`ready`, `not_ready`, and `unavailable` are the only statuses. An unavailable
+measurement, malformed result, timeout, changed runner tree, or changed
+contract is never downgraded by `--allow-skipped-checks`.
+
+V1 has a fixed 15-minute execution timeout. Standard output and standard error
+are each limited to 1 MiB. Standard output must contain exactly one
+duplicate-free JSON object with the three fields `version`, `status`, and
+`summary`; unknown fields and trailing values are rejected. `summary` must be
+valid UTF-8, nonempty, single-line text without control characters and at most
+4096 bytes. A nonzero runner exit is an unavailable measurement.
+
+The runner is isolated from the source checkout but is not a sandbox: it
+inherits the normal toolchain, cache, credential, and temporary-directory
+environment needed by repository validation. Selected shell-startup controls
+and Git repository override variables are removed, and `LC_ALL`/`LANG` are
+forced to `C`. The manifest cannot configure arguments, environment, cwd, or
+timeout.
+
 ## `integrate check` reports a lint baseline that is not there
 
 The lint gate can report hundreds of issues under a directory that no longer

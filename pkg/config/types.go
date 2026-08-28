@@ -232,6 +232,11 @@ type BranchConfig struct {
 	// Load it only via LoadRepoRootTaskPattern — never findConfigUpward.
 	TaskPattern BranchList `yaml:"taskPattern,omitempty"`
 
+	// Readiness is a target-owned integration gate. Like TaskPattern, it is
+	// preserved here for project-config round trips but must never be inherited
+	// or merged from a parent, profile, workspace, or global configuration.
+	Readiness *Readiness `yaml:"readiness,omitempty" json:"readiness,omitempty"`
+
 	// Naming templates the branch names that `gz-git branch name` builds, so a
 	// task branch is spelled the same way on every machine and by every agent.
 	Naming *branch.Naming `yaml:"naming,omitempty"`

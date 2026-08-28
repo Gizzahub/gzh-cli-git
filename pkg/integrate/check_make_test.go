@@ -6,10 +6,12 @@ package integrate
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunMakeTarget_LintUsesIsolatedTemporaryCache(t *testing.T) {
@@ -73,6 +75,147 @@ func TestRunMakeTarget_LintCleansCacheAfterFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(string(cache)); !os.IsNotExist(err) {
 		t.Fatalf("failed lint cache %q must be removed, stat err = %v", cache, err)
+	}
+}
+
+func TestRunMakeTarget_LintRetriesGlobalLock(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "attempts")
+	writeRepoFile(t, dir, "Makefile", "lint:\n\t@count=0; if test -f \"$$COUNT_FILE\"; then count=$$(cat \"$$COUNT_FILE\"); fi; count=$$((count + 1)); printf '%s' \"$$count\" > \"$$COUNT_FILE\"; if test \"$$count\" -lt 3; then printf '%s\\n' 'Error: parallel golangci-lint is running'; false; fi\n")
+	t.Setenv("COUNT_FILE", count)
+
+	probe := runMakeTarget(context.Background(), dir, "lint")
+	if probe.Err != nil {
+		t.Fatalf("lint must succeed after transient global lock: %v\n%s", probe.Err, probe.Output)
+	}
+	got, err := os.ReadFile(count)
+	if err != nil {
+		t.Fatalf("read attempts: %v", err)
+	}
+	if string(got) != "3" {
+		t.Fatalf("attempts = %q, want 3", got)
+	}
+}
+
+func TestRunMakeTarget_LintLockFailsAfterRetries(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "attempts")
+	writeRepoFile(t, dir, "Makefile", "lint:\n\t@printf x >> \"$$COUNT_FILE\"; printf '%s\\n' 'Error: parallel golangci-lint is running'; false\n")
+	t.Setenv("COUNT_FILE", count)
+
+	probe := runMakeTarget(context.Background(), dir, "lint")
+	if probe.Err == nil {
+		t.Fatal("locked lint must fail")
+	}
+	got, err := os.ReadFile(count)
+	if err != nil {
+		t.Fatalf("read attempts: %v", err)
+	}
+	if string(got) != "xxx" {
+		t.Fatalf("attempts = %q, want three runs", got)
+	}
+}
+
+func TestRunMakeTarget_LintLockWithDiagnosticDoesNotRetryOrSkip(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "attempts")
+	writeRepoFile(t, dir, "Makefile", "lint:\n\t@printf x >> \"$$COUNT_FILE\"; printf '%s\\n' 'Error: parallel golangci-lint is running' 'main.go:12:3: actual diagnostic'; false\n")
+	t.Setenv("COUNT_FILE", count)
+
+	probe := runMakeTarget(context.Background(), dir, "lint")
+	if probe.Err == nil {
+		t.Fatalf("mixed lock and diagnostic must remain a failure: %+v", probe)
+	}
+	got, err := os.ReadFile(count)
+	if err != nil {
+		t.Fatalf("read attempts: %v", err)
+	}
+	if string(got) != "x" {
+		t.Fatalf("mixed output retried %q, want one run", got)
+	}
+}
+
+func TestGolangciLintLocked_RejectsOtherFailureOutput(t *testing.T) {
+	if golangciLintLocked("Error: parallel golangci-lint is running\nother tool failed\n") {
+		t.Fatal("lock text mixed with another failure must not be retried or skipped")
+	}
+}
+
+func TestGolangciLintLocked_ObservedMakeOutputWithANSI(t *testing.T) {
+	output := "\x1b[36mRunning golangci-lint...\x1b[0m\n" +
+		"GOWORK=off golangci-lint run ./...\n" +
+		"golangci-lint run ./...\n" +
+		"Error: parallel golangci-lint is running\n" +
+		"make[1]: *** [Makefile:165: lint] Error 3\n"
+	if !golangciLintLocked(output) {
+		t.Fatalf("observed pure lock output was not recognized:\n%s", output)
+	}
+}
+
+func TestGolangciLintLocked_MakeWrapperTargets(t *testing.T) {
+	for _, line := range []string{
+		"make[1]: *** [Makefile:165: lint] Error 3",
+		"make[2]: *** [.make/quality.mk:165: lint-check] Error 3",
+		"make: *** [lint] Error 3",
+		"make: *** [lint-check] Error 3",
+		"-e Running golangci-lint...",
+	} {
+		output := "Running golangci-lint...\nGOWORK=off golangci-lint run ./...\nError: parallel golangci-lint is running\n" + line + "\n"
+		if !golangciLintLocked(output) {
+			t.Fatalf("known lock wrapper was rejected: %q", line)
+		}
+	}
+	for _, line := range []string{
+		"make[1]: *** [Makefile:165: lint-extra] Error 3",
+		"make[1]: *** [Makefile:165: check] Error 3",
+		"make[1]: *** [Makefile:165: lint] Error nope",
+		"make[1]: *** [Makefile:165: lint] other failure",
+	} {
+		output := "Running golangci-lint...\nError: parallel golangci-lint is running\n" + line + "\n"
+		if golangciLintLocked(output) {
+			t.Fatalf("non-lint wrapper was accepted: %q", line)
+		}
+	}
+}
+
+func TestWaitForRetry_ContextCancellationWins(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForRetry(ctx, time.Second); !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForRetry error = %v, want context cancellation", err)
+	}
+}
+
+func TestRunMakeTarget_LintCancellationDuringFinalLockAttemptIsNotUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "attempts")
+	started := filepath.Join(dir, "third-attempt-started")
+	writeRepoFile(t, dir, "Makefile", "lint:\n\t@count=0; if test -f \"$$COUNT_FILE\"; then count=$$(cat \"$$COUNT_FILE\"); fi; count=$$((count + 1)); printf '%s' \"$$count\" > \"$$COUNT_FILE\"; if test \"$$count\" -eq 3; then : > \"$$THIRD_ATTEMPT_FILE\"; sleep 1; fi; printf '%s\\n' 'Error: parallel golangci-lint is running'; false\n")
+	t.Setenv("COUNT_FILE", count)
+	t.Setenv("THIRD_ATTEMPT_FILE", started)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(started); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	probe := runMakeTarget(ctx, dir, "lint")
+	if !errors.Is(probe.Err, context.Canceled) {
+		t.Fatalf("canceled final lock attempt error = %v, want context.Canceled", probe.Err)
+	}
+	got, err := os.ReadFile(count)
+	if err != nil {
+		t.Fatalf("read attempts: %v", err)
+	}
+	if string(got) != "3" {
+		t.Fatalf("attempts = %q, want cancellation during third run", got)
 	}
 }
 

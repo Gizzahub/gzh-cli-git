@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 )
 
 type makeProbe struct {
@@ -23,6 +25,11 @@ type makeProbe struct {
 	Err       error
 	Code      int
 }
+
+const (
+	golangciLockAttempts  = 3
+	golangciLockRetryWait = 250 * time.Millisecond
+)
 
 // allowedMakeTargets is the closed set runMakeTarget may launch. check.go
 // probes exactly this set; the guard keeps that invariant enforced if a
@@ -36,6 +43,26 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 	if _, ok := allowedMakeTargets[target]; !ok {
 		return makeProbe{Target: target, Err: fmt.Errorf("undeclared make target %q", target)}
 	}
+	for attempt := 1; ; attempt++ {
+		probe := runMakeTargetOnce(ctx, dir, target)
+		if err := ctx.Err(); err != nil {
+			probe.Err = err
+			return probe
+		}
+		if target != "lint" || probe.Err == nil || !golangciLintLocked(probe.Output) {
+			return probe
+		}
+		if attempt == golangciLockAttempts {
+			return probe
+		}
+		if err := waitForRetry(ctx, golangciLockRetryWait); err != nil {
+			probe.Err = err
+			return probe
+		}
+	}
+}
+
+func runMakeTargetOnce(ctx context.Context, dir, target string) makeProbe {
 	var lintCache string
 	if target == "lint" {
 		var err error
@@ -77,6 +104,57 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 		probe.MissingCD = missing
 	}
 	return probe
+}
+
+func golangciLintLocked(out string) bool {
+	locked := false
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(stripANSI(line))
+		if line == "" {
+			continue
+		}
+		if findLocationMatch(line) != "" {
+			return false
+		}
+		switch {
+		case line == "Error: parallel golangci-lint is running":
+			locked = true
+		case isGolangciLockBoilerplate(line):
+			// Command echo and make's exit wrapper carry no independent result.
+		default:
+			// A pure lock failure must not contain another tool failure.
+			return false
+		}
+	}
+	return locked
+}
+
+var (
+	ansiEscape             = regexp.MustCompile(`\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]`)
+	recursiveMakeLintError = regexp.MustCompile(`^make(?:\[\d+\])?: \*\*\* \[(?:.+: )?(?:lint|lint-check)\] Error \d+$`)
+)
+
+func stripANSI(s string) string {
+	return ansiEscape.ReplaceAllString(s, "")
+}
+
+func isGolangciLockBoilerplate(line string) bool {
+	return line == "Running golangci-lint..." ||
+		line == "-e Running golangci-lint..." ||
+		strings.HasPrefix(line, "golangci-lint run ") ||
+		strings.HasPrefix(line, "GOWORK=off golangci-lint run ") ||
+		recursiveMakeLintError.MatchString(line)
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func withoutEnv(env []string, key string) []string {

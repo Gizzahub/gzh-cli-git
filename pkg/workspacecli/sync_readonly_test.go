@@ -68,8 +68,8 @@ func TestPushOneRepoSkipsReadOnlyBeforeGitAccess(t *testing.T) {
 }
 
 func TestReconcileIntegrationParticipationOnlyTouchesSuccessfulRepos(t *testing.T) {
-	succeeded := initSyncParticipationRepo(t, "master")
-	failed := initSyncParticipationRepo(t, "master")
+	succeeded := initSyncParticipationRepo(t)
+	failed := initSyncParticipationRepo(t)
 	result := reposync.ExecutionResult{
 		Succeeded: []reposync.ActionResult{{Action: reposync.Action{Type: reposync.ActionUpdate, Repo: reposync.RepoSpec{TargetPath: succeeded}}}},
 		Failed:    []reposync.ActionResult{{Action: reposync.Action{Repo: reposync.RepoSpec{TargetPath: failed}}}},
@@ -82,7 +82,7 @@ func TestReconcileIntegrationParticipationOnlyTouchesSuccessfulRepos(t *testing.
 }
 
 func TestReconcileIntegrationParticipationSkipsSuccessfulDelete(t *testing.T) {
-	repo := initSyncParticipationRepo(t, "master")
+	repo := initSyncParticipationRepo(t)
 	result := reposync.ExecutionResult{Succeeded: []reposync.ActionResult{{Action: reposync.Action{Type: reposync.ActionDelete, Repo: reposync.RepoSpec{TargetPath: repo}}}}}
 	if err := reconcileIntegrationParticipation(t.Context(), result, ""); err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestControllerWorkspaceExcludesRepoRootParticipation(t *testing.T) {
 
 func TestMixedControllerAndRepoRootParticipation(t *testing.T) {
 	controller := testutil.TempWorktreeWithBareOrigin(t)
-	legacy := initSyncParticipationRepo(t, "master")
+	legacy := initSyncParticipationRepo(t)
 	result := reposync.ExecutionResult{Succeeded: []reposync.ActionResult{
 		{Action: reposync.Action{Type: reposync.ActionUpdate, Workspace: "engine", Repo: reposync.RepoSpec{TargetPath: controller.Clone}}},
 		{Action: reposync.Action{Type: reposync.ActionUpdate, Workspace: "legacy", Repo: reposync.RepoSpec{TargetPath: legacy}}},
@@ -164,7 +164,7 @@ func TestControllerParticipationDoesNotFallbackOnPartialFailure(t *testing.T) {
 
 func TestRepoRootParticipationFailurePreventsControllerApply(t *testing.T) {
 	controller := testutil.TempWorktreeWithBareOrigin(t)
-	legacy := initSyncParticipationRepo(t, "master")
+	legacy := initSyncParticipationRepo(t)
 	if err := os.WriteFile(filepath.Join(legacy, ".gz-git.yaml"), []byte("branch:\n  integrationBranch: [missing]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -187,8 +187,9 @@ func TestRepoRootParticipationFailurePreventsControllerApply(t *testing.T) {
 	}
 }
 
-func initSyncParticipationRepo(t *testing.T, branch string) string {
+func initSyncParticipationRepo(t *testing.T) string {
 	t.Helper()
+	const branch = "master"
 	repo := t.TempDir()
 	cmd := exec.CommandContext(t.Context(), "git", "-C", repo, "init", "--initial-branch="+branch) //nolint:gosec // test-controlled branch.
 	if output, err := cmd.CombinedOutput(); err != nil {

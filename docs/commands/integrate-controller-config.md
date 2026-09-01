@@ -1,11 +1,12 @@
 # Controller-config integration
 
-`integrate check` and `integrate run` normally use only the repository-root
-declaration. A devbox/controller config is opt-in:
+`integrate check`, `integrate run`, and `integrate queue` normally use only
+the repository-root declaration. A devbox/controller config is opt-in:
 
 ```sh
 gz-git integrate check --controller-config /path/to/devbox/.gz-git.yaml
 gz-git integrate run --controller-config /path/to/devbox/.gz-git.yaml
+gz-git integrate queue --controller-config /path/to/devbox/.gz-git.yaml
 ```
 
 The file is never searched for in parent directories. It must contain exactly
@@ -13,6 +14,14 @@ one `workspaces` entry whose `url` canonically equals the selected repository
 remote. That entry must declare exactly one `branch.integrationBranch`; its
 `branch.taskPattern` is the only reclaim policy used by this mode. The file's
 resolved path and content digest are rechecked before push and reclaim.
+
+`integrate queue` uses the same explicit binding without searching for a
+controller. Its comparison base is always the selected controller remote plus
+the declared integration branch. `--base` is accepted only when it normalizes
+to that same branch (for example `origin/develop` or `develop`). When
+`branch.taskPattern` is non-empty, queue lists only matching task refs; an
+empty pattern deliberately leaves the queue unfiltered. Controller resolution
+errors remain exit 2 even with `--quiet`.
 
 The only preparation profile is the closed `familybook-ent-v1` value:
 

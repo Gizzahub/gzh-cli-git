@@ -5,6 +5,7 @@ package integrate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +95,264 @@ func TestCollectQueue_LoadsDeclaredIntegrationBranch(t *testing.T) {
 	}
 }
 
+func TestCollectQueue_ControllerUsesDeclaredRemoteBaseAndTaskPattern(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "checkout", "-b", "develop")
+	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+	runGit(t, fx.Worktree, "checkout", "-b", "dev/task")
+	writeFile(t, fx.Worktree, "task.txt", "task\n")
+	runGit(t, fx.Worktree, "add", "task.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "task")
+	runGit(t, fx.Worktree, "branch", "feat/not-a-task")
+	writeFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: main\n")
+
+	remoteURL := strings.TrimSpace(runGitInTest(t, fx.Worktree, "remote", "get-url", fx.Remote))
+	controller := filepath.Join(t.TempDir(), "devbox.yaml")
+	writeFile(t, filepath.Dir(controller), filepath.Base(controller), fmt.Sprintf("workspaces:\n  component:\n    url: %q\n    branch:\n      integrationBranch: develop\n      taskPattern: dev/*\n    integration: {}\n", remoteURL))
+
+	report, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath:         fx.Worktree,
+		NoFetch:          true,
+		ControllerConfig: controller,
+	})
+	if err != nil {
+		t.Fatalf("CollectQueue: %v", err)
+	}
+	if report.Remote != fx.Remote || report.Base != fx.Remote+"/develop" || report.BaseSource != "controller" {
+		t.Fatalf("controller base = remote=%q base=%q source=%q", report.Remote, report.Base, report.BaseSource)
+	}
+	if !report.Integration.Participates || report.Integration.Name != "develop" {
+		t.Fatalf("integration = %+v, want controller develop", report.Integration)
+	}
+	got := refsOf(report)
+	if !contains(got, "dev/task") {
+		t.Fatalf("controller task ref missing: %v", got)
+	}
+	if contains(got, "feat/not-a-task") {
+		t.Fatalf("controller task pattern did not filter ref: %v", got)
+	}
+	if contains(got, "develop") || contains(got, fx.Remote+"/develop") {
+		t.Fatalf("controller integration leaked into queue: %v", got)
+	}
+}
+
+func TestCollectQueue_ControllerRejectsDifferentBase(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	remoteURL := strings.TrimSpace(runGitInTest(t, fx.Worktree, "remote", "get-url", fx.Remote))
+	controller := filepath.Join(t.TempDir(), "devbox.yaml")
+	writeFile(t, filepath.Dir(controller), filepath.Base(controller), fmt.Sprintf("workspaces:\n  component: {url: %q, branch: {integrationBranch: develop}, integration: {}}\n", remoteURL))
+
+	_, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath:         fx.Worktree,
+		Base:             "main",
+		NoFetch:          true,
+		ControllerConfig: controller,
+	})
+	if err == nil || !strings.Contains(err.Error(), "--base must equal controller integration branch develop") {
+		t.Fatalf("controller base mismatch = %v", err)
+	}
+}
+
+func TestResolveQueueBase_ControllerRejectsOtherRemoteSpellings(t *testing.T) {
+	controller := &controllerBinding{Integration: []string{"develop"}}
+	for _, base := range []string{"other/develop", "refs/remotes/other/develop", "refs/remotes/origin/other/develop"} {
+		t.Run(base, func(t *testing.T) {
+			_, _, _, err := resolveQueueBase(context.Background(), gitRepo{}, base, "origin", controller)
+			if err == nil || !strings.Contains(err.Error(), "--base must equal controller integration branch develop") {
+				t.Fatalf("base %q error = %v", base, err)
+			}
+		})
+	}
+}
+
+func TestResolveQueueBase_ControllerAcceptsOnlyDeclaredSpellings(t *testing.T) {
+	controller := &controllerBinding{Integration: []string{"develop"}}
+	for _, base := range []string{"develop", "refs/heads/develop", "origin/develop", "refs/remotes/origin/develop"} {
+		t.Run(base, func(t *testing.T) {
+			got, source, ok, err := resolveQueueBase(context.Background(), gitRepo{}, base, "origin", controller)
+			if err != nil || !ok || got != "origin/develop" || source != "controller-flag" {
+				t.Fatalf("base %q = (%q, %q, %t, %v)", base, got, source, ok, err)
+			}
+		})
+	}
+}
+
+func TestCollectQueue_ControllerAcceptsQualifiedDeclaredBase(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "checkout", "-b", "develop")
+	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+	remoteURL := strings.TrimSpace(runGitInTest(t, fx.Worktree, "remote", "get-url", fx.Remote))
+	controller := filepath.Join(t.TempDir(), "devbox.yaml")
+	writeFile(t, filepath.Dir(controller), filepath.Base(controller), fmt.Sprintf("workspaces:\n  component: {url: %q, branch: {integrationBranch: develop}, integration: {}}\n", remoteURL))
+
+	report, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath:         fx.Worktree,
+		Base:             "refs/remotes/" + fx.Remote + "/develop",
+		NoFetch:          true,
+		ControllerConfig: controller,
+	})
+	if err != nil {
+		t.Fatalf("CollectQueue: %v", err)
+	}
+	if report.Base != fx.Remote+"/develop" || report.BaseSource != "controller-flag" {
+		t.Fatalf("controller qualified base = %q (%s)", report.Base, report.BaseSource)
+	}
+}
+
+func TestCollectQueue_ControllerEmptyTaskPatternLeavesRefsUnfiltered(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "checkout", "-b", "develop")
+	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+	remoteURL := strings.TrimSpace(runGitInTest(t, fx.Worktree, "remote", "get-url", fx.Remote))
+	controller := filepath.Join(t.TempDir(), "devbox.yaml")
+	writeFile(t, filepath.Dir(controller), filepath.Base(controller), fmt.Sprintf("workspaces:\n  component: {url: %q, branch: {integrationBranch: develop}, integration: {}}\n", remoteURL))
+
+	report, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath:         fx.Worktree,
+		NoFetch:          true,
+		ControllerConfig: controller,
+	})
+	if err != nil {
+		t.Fatalf("CollectQueue: %v", err)
+	}
+	if !contains(refsOf(report), "feature/worktree") {
+		t.Fatalf("empty controller taskPattern unexpectedly filtered queue: %v", refsOf(report))
+	}
+}
+
+func TestCollectQueueRefs_PreservesRemoteProvenance(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	external := cloneForRemoteQueueTest(t, fx.Origin)
+	runGit(t, external, "checkout", "-b", "dev/remote-only")
+	writeFile(t, external, "remote-only.txt", "remote\n")
+	runGit(t, external, "add", "remote-only.txt")
+	runGit(t, external, "commit", "-m", "remote task")
+	runGit(t, external, "push", "-u", fx.Remote, "dev/remote-only")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+
+	refs, err := collectQueueRefs(context.Background(), newGitRepo(gitcmd.NewExecutor(), fx.Worktree), fx.Remote, fx.Remote+"/main", Resolution{}, []string{"dev/*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasQueueRef(refs, "refs/remotes/"+fx.Remote+"/dev/remote-only") {
+		t.Fatalf("remote-only ref missing: %#v", refs)
+	}
+}
+
+func TestCollectQueueRefs_DeduplicatesOnlyIdenticalLocalAndRemote(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Worktree, "checkout", "-b", "dev/same")
+	writeFile(t, fx.Worktree, "same.txt", "same\n")
+	runGit(t, fx.Worktree, "add", "same.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "same task")
+	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "dev/same")
+
+	refs, err := collectQueueRefs(context.Background(), newGitRepo(gitcmd.NewExecutor(), fx.Worktree), fx.Remote, fx.Remote+"/main", Resolution{}, []string{"dev/*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasQueueRef(refs, "refs/heads/dev/same") || hasQueueRef(refs, "refs/remotes/"+fx.Remote+"/dev/same") {
+		t.Fatalf("identical pair was not deduplicated correctly: %#v", refs)
+	}
+}
+
+func TestCollectQueueRefs_KeepsDivergentLocalAndRemote(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Worktree, "checkout", "-b", "dev/divergent")
+	writeFile(t, fx.Worktree, "divergent.txt", "remote\n")
+	runGit(t, fx.Worktree, "add", "divergent.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "remote task")
+	runGit(t, fx.Worktree, "push", "-u", fx.Remote, "dev/divergent")
+	writeFile(t, fx.Worktree, "divergent.txt", "local\n")
+	runGit(t, fx.Worktree, "add", "divergent.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "local task")
+
+	refs, err := collectQueueRefs(context.Background(), newGitRepo(gitcmd.NewExecutor(), fx.Worktree), fx.Remote, fx.Remote+"/main", Resolution{}, []string{"dev/*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, full := range []string{"refs/heads/dev/divergent", "refs/remotes/" + fx.Remote + "/dev/divergent"} {
+		if !hasQueueRef(refs, full) {
+			t.Fatalf("divergent ref %q missing: %#v", full, refs)
+		}
+	}
+}
+
+func TestCollectQueueRefs_SlashContainingRemoteAndLocalPrefixCollision(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOriginRemote(t, "team/upstream")
+	external := cloneForRemoteQueueTest(t, fx.Origin)
+	runGit(t, external, "checkout", "-b", "dev/remote")
+	writeFile(t, external, "remote.txt", "remote\n")
+	runGit(t, external, "add", "remote.txt")
+	runGit(t, external, "commit", "-m", "remote task")
+	runGit(t, external, "push", "-u", "origin", "dev/remote")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+	runGit(t, fx.Worktree, "branch", "team/upstream/dev/remote")
+
+	refs, err := collectQueueRefs(context.Background(), newGitRepo(gitcmd.NewExecutor(), fx.Worktree), fx.Remote, fx.Remote+"/main", Resolution{}, []string{"dev/*", "team/upstream/*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, full := range []string{"refs/remotes/team/upstream/dev/remote", "refs/heads/team/upstream/dev/remote"} {
+		if !hasQueueRef(refs, full) {
+			t.Fatalf("slash remote/prefix-collision ref %q missing: %#v", full, refs)
+		}
+	}
+}
+
+func TestCollectQueue_ControllerFormatsLocalRemotePrefixCollisionDistinctly(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOriginRemote(t, "team/upstream")
+	external := cloneForRemoteQueueTest(t, fx.Origin)
+	runGit(t, external, "checkout", "-b", "dev/collision")
+	writeFile(t, external, "collision.txt", "remote\n")
+	runGit(t, external, "add", "collision.txt")
+	runGit(t, external, "commit", "-m", "remote task")
+	runGit(t, external, "push", "-u", "origin", "dev/collision")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+	runGit(t, fx.Worktree, "branch", "team/upstream/dev/collision")
+
+	remoteURL := strings.TrimSpace(runGitInTest(t, fx.Worktree, "remote", "get-url", fx.Remote))
+	controller := filepath.Join(t.TempDir(), "devbox.yaml")
+	writeFile(t, filepath.Dir(controller), filepath.Base(controller), fmt.Sprintf("workspaces:\n  component:\n    url: %q\n    branch:\n      integrationBranch: main\n      taskPattern: [dev/*, team/upstream/*]\n    integration: {}\n", remoteURL))
+	report, err := CollectQueue(context.Background(), gitcmd.NewExecutor(), QueueOptions{
+		RepoPath:         fx.Worktree,
+		NoFetch:          true,
+		ControllerConfig: controller,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"heads/team/upstream/dev/collision", "remotes/team/upstream/dev/collision"} {
+		if !contains(refsOf(report), want) {
+			t.Fatalf("collision display %q missing: %v", want, refsOf(report))
+		}
+		if !strings.Contains(FormatQueue(report), want) {
+			t.Fatalf("formatted collision display %q missing:\n%s", want, FormatQueue(report))
+		}
+	}
+}
+
+func hasQueueRef(refs []queueRef, full string) bool {
+	for _, ref := range refs {
+		if ref.full == full {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneForRemoteQueueTest(t *testing.T, origin string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "external")
+	runGit(t, "", "clone", origin, dir)
+	runGit(t, dir, "config", "user.name", "Queue Test")
+	runGit(t, dir, "config", "user.email", "queue-test@example.invalid")
+	return dir
+}
+
 func TestCollectQueue_BaseReleaseKeepsSlash(t *testing.T) {
 	fx := testutil.TempWorktreeWithBareOrigin(t)
 	dir := fx.Clone
@@ -112,6 +371,59 @@ func TestCollectQueue_BaseReleaseKeepsSlash(t *testing.T) {
 	got := refsOf(report)
 	if contains(got, "release/2.0") || contains(got, "2.0") {
 		t.Fatalf("base release/2.0 leaked into queue as %v", got)
+	}
+}
+
+func TestCollectQueueRefs_LegacyHeadsFullBaseExcludesDivergentLocalAndRemote(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	runGit(t, fx.Clone, "checkout", "main")
+	writeFile(t, fx.Clone, "local-main.txt", "local main\n")
+	runGit(t, fx.Clone, "add", "local-main.txt")
+	runGit(t, fx.Clone, "commit", "-m", "local main moves")
+	runGit(t, fx.Worktree, "checkout", "-b", "feat/task")
+	writeFile(t, fx.Worktree, "task.txt", "task\n")
+	runGit(t, fx.Worktree, "add", "task.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "task")
+
+	refs, err := collectQueueRefs(context.Background(), newGitRepo(gitcmd.NewExecutor(), fx.Worktree), fx.Remote, "refs/heads/main", Resolution{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyFullBaseExcluded(t, refs, fx.Remote)
+	if !hasQueueRef(refs, "refs/heads/feat/task") {
+		t.Fatalf("task disappeared with legacy full base: %#v", refs)
+	}
+}
+
+func TestCollectQueueRefs_LegacyRemoteFullBaseExcludesDivergentLocalAndRemote(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	external := cloneForRemoteQueueTest(t, fx.Origin)
+	writeFile(t, external, "remote-main.txt", "remote main\n")
+	runGit(t, external, "add", "remote-main.txt")
+	runGit(t, external, "commit", "-m", "remote main moves")
+	runGit(t, external, "push", "origin", "main")
+	runGit(t, fx.Worktree, "fetch", fx.Remote)
+	runGit(t, fx.Worktree, "checkout", "-b", "feat/task")
+	writeFile(t, fx.Worktree, "task.txt", "task\n")
+	runGit(t, fx.Worktree, "add", "task.txt")
+	runGit(t, fx.Worktree, "commit", "-m", "task")
+
+	refs, err := collectQueueRefs(context.Background(), newGitRepo(gitcmd.NewExecutor(), fx.Worktree), fx.Remote, "refs/remotes/"+fx.Remote+"/main", Resolution{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyFullBaseExcluded(t, refs, fx.Remote)
+	if !hasQueueRef(refs, "refs/heads/feat/task") {
+		t.Fatalf("task disappeared with legacy full base: %#v", refs)
+	}
+}
+
+func assertLegacyFullBaseExcluded(t *testing.T, refs []queueRef, remote string) {
+	t.Helper()
+	for _, full := range []string{"refs/heads/main", "refs/remotes/" + remote + "/main"} {
+		if hasQueueRef(refs, full) {
+			t.Fatalf("legacy full base leaked %q: %#v", full, refs)
+		}
 	}
 }
 

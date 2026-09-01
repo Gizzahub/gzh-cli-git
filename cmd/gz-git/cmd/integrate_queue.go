@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,9 +16,10 @@ import (
 )
 
 var (
-	integrateQueueBase       string
-	integrateQueueExpiryDays int
-	integrateQueueNoFetch    bool
+	integrateQueueBase             string
+	integrateQueueExpiryDays       int
+	integrateQueueNoFetch          bool
+	integrateQueueControllerConfig string
 )
 
 var integrateQueueCmd = &cobra.Command{
@@ -28,6 +30,9 @@ var integrateQueueCmd = &cobra.Command{
 
   # Compare against a specific base
   gz-git integrate queue --base origin/develop
+
+  # Use an explicitly selected devbox/controller policy
+  gz-git integrate queue --controller-config /path/to/devbox/.gz-git.yaml
 
   # Skip fetch (offline / already fetched)
   gz-git integrate queue --no-fetch
@@ -51,6 +56,7 @@ func init() {
 	integrateQueueCmd.Flags().StringVar(&integrateQueueBase, "base", "", "comparison base (default: remote HEAD)")
 	integrateQueueCmd.Flags().IntVar(&integrateQueueExpiryDays, "expiry-days", integrate.DefaultExpiryDays, "age in days after which a branch is expired")
 	integrateQueueCmd.Flags().BoolVar(&integrateQueueNoFetch, "no-fetch", false, "do not fetch before scanning")
+	integrateQueueCmd.Flags().StringVar(&integrateQueueControllerConfig, "controller-config", "", "explicit devbox/controller config; never searched automatically")
 }
 
 func runIntegrateQueue(cmd *cobra.Command, _ []string) error {
@@ -65,14 +71,18 @@ func runIntegrateQueue(cmd *cobra.Command, _ []string) error {
 	}
 
 	report, err := integrate.CollectQueue(ctx, gitcmd.NewExecutor(), integrate.QueueOptions{
-		RepoPath:   dir,
-		Base:       integrateQueueBase,
-		ExpiryDays: integrateQueueExpiryDays,
-		NoFetch:    integrateQueueNoFetch,
-		Quiet:      quiet,
+		RepoPath:         dir,
+		Base:             integrateQueueBase,
+		ExpiryDays:       integrateQueueExpiryDays,
+		NoFetch:          integrateQueueNoFetch,
+		Quiet:            quiet,
+		ControllerConfig: integrateQueueControllerConfig,
 	})
 	if err != nil {
-		if quiet {
+		// A controller is an explicit authorization boundary.  Do not hide a
+		// typo, ambiguous match, or read-only policy merely because this is a
+		// hook-style invocation.
+		if quiet && strings.TrimSpace(integrateQueueControllerConfig) == "" {
 			return nil
 		}
 		return cliutil.NewExitError(2, err)

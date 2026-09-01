@@ -15,7 +15,7 @@ import (
 
 func TestIntegrateQueueHelp(t *testing.T) {
 	cmd := findCommand(t, rootCmd, "integrate", "queue")
-	for _, name := range []string{"base", "expiry-days", "no-fetch"} {
+	for _, name := range []string{"base", "expiry-days", "no-fetch", "controller-config"} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("integrate queue missing --%s", name)
 		}
@@ -69,6 +69,20 @@ func TestIntegrateQueueNotRepoExitsTwo(t *testing.T) {
 	}
 }
 
+func TestIntegrateQueueQuietControllerFailureExitsTwo(t *testing.T) {
+	restore := setIntegrateQueueGlobals(t)
+	defer restore()
+
+	dir := testutil.TempGitRepoWithCommit(t)
+	t.Chdir(dir)
+	integrateQueueControllerConfig = t.TempDir() + "/missing.yaml"
+	quiet = true
+	err := runIntegrateQueue(integrateQueueCmd, nil)
+	if got := cliutil.ExitCodeForError(err); got != 2 {
+		t.Fatalf("quiet controller error exit = %d, want 2; err=%v", got, err)
+	}
+}
+
 func TestBranchListFlagsUnchanged(t *testing.T) {
 	// queue is not an extension of branch list. These opts must stay.
 	if !strings.Contains(integrateQueueCmd.Use, "queue") {
@@ -82,15 +96,18 @@ func setIntegrateQueueGlobals(t *testing.T) func() {
 	origBase := integrateQueueBase
 	origDays := integrateQueueExpiryDays
 	origNoFetch := integrateQueueNoFetch
+	origController := integrateQueueControllerConfig
 	origQuiet := quiet
 	integrateQueueBase = ""
 	integrateQueueExpiryDays = integrate.DefaultExpiryDays
 	integrateQueueNoFetch = false
+	integrateQueueControllerConfig = ""
 	quiet = false
 	return func() {
 		integrateQueueBase = origBase
 		integrateQueueExpiryDays = origDays
 		integrateQueueNoFetch = origNoFetch
+		integrateQueueControllerConfig = origController
 		quiet = origQuiet
 	}
 }

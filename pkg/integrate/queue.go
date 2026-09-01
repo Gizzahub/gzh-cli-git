@@ -28,6 +28,10 @@ type QueueOptions struct {
 	ExpiryDays int
 	NoFetch    bool
 	Quiet      bool
+	// ControllerConfig is an explicitly selected devbox/controller file. It is
+	// never discovered from ancestors and, when set, supplies the authoritative
+	// remote, integration branch, and optional task-branch namespace.
+	ControllerConfig string
 	// ConfigValues is the declared integrationBranch list. Empty means
 	// load the repo-root .gz-git.yaml, same as check/run.
 	ConfigValues []string
@@ -83,12 +87,9 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 	}
 	g.dir = root
 
-	if len(opts.ConfigValues) == 0 {
-		decl, err := config.LoadRepoRootTaskPattern(root)
-		if err != nil {
-			return nil, err
-		}
-		opts.ConfigValues = decl.IntegrationBranch
+	controller, err := resolveQueueController(ctx, g, root, &opts)
+	if err != nil {
+		return nil, err
 	}
 
 	expiry := opts.ExpiryDays
@@ -101,11 +102,11 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 	}
 
 	report := &QueueReport{ExpiryDays: expiry}
-	remotes, err := g.remotes(ctx)
+	remote, err := resolveQueueRemote(ctx, g, controller)
 	if err != nil {
 		return nil, err
 	}
-	report.Remote = preferredRemote(remotes)
+	report.Remote = remote
 
 	noFetch := opts.NoFetch || opts.Quiet
 	if !noFetch && report.Remote != "" {
@@ -114,7 +115,7 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 		}
 	}
 
-	base, source, ok, err := resolveQueueBase(ctx, g, opts.Base, report.Remote)
+	base, source, ok, err := resolveQueueBase(ctx, g, opts.Base, report.Remote, controller)
 	if err != nil {
 		return nil, err
 	}
@@ -134,13 +135,17 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 		return report, nil
 	}
 
-	integ, err := ResolveIntegrationBranch(ctx, exec, g.dir, opts.ConfigValues)
+	integ, err := resolveQueueIntegration(ctx, exec, g.dir, controller, opts.ConfigValues)
 	if err != nil {
 		return nil, err
 	}
 	report.Integration = integ
 
-	refs, err := collectQueueRefs(ctx, g, report.Remote, base, integ)
+	patterns := []string(nil)
+	if controller != nil {
+		patterns = controller.TaskPattern
+	}
+	refs, err := collectQueueRefs(ctx, g, report.Remote, base, integ, patterns)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +157,49 @@ func CollectQueue(ctx context.Context, exec *gitcmd.Executor, opts QueueOptions)
 	return fillQueueEntries(ctx, g, report, refs, baseSHA, expiry, now, opts.Quiet)
 }
 
-func fillQueueEntries(ctx context.Context, g gitRepo, report *QueueReport, refs []string, baseSHA string, expiry int, now time.Time, quiet bool) (*QueueReport, error) {
+func resolveQueueController(ctx context.Context, g gitRepo, root string, opts *QueueOptions) (*controllerBinding, error) {
+	if strings.TrimSpace(opts.ControllerConfig) == "" {
+		if len(opts.ConfigValues) != 0 {
+			return nil, nil //nolint:nilnil // no explicit controller was selected
+		}
+		decl, err := config.LoadRepoRootTaskPattern(root)
+		if err != nil {
+			return nil, err
+		}
+		opts.ConfigValues = decl.IntegrationBranch
+		return nil, nil //nolint:nilnil // no explicit controller was selected
+	}
+	branch, err := g.currentBranch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	controller, err := resolveController(ctx, g, opts.ControllerConfig, branch)
+	if err != nil {
+		return nil, err
+	}
+	opts.ConfigValues = append([]string(nil), controller.Integration...)
+	return controller, nil
+}
+
+func resolveQueueRemote(ctx context.Context, g gitRepo, controller *controllerBinding) (string, error) {
+	if controller != nil {
+		return controller.Remote, nil
+	}
+	remotes, err := g.remotes(ctx)
+	if err != nil {
+		return "", err
+	}
+	return preferredRemote(remotes), nil
+}
+
+func resolveQueueIntegration(ctx context.Context, exec *gitcmd.Executor, repoPath string, controller *controllerBinding, configValues []string) (Resolution, error) {
+	if controller != nil {
+		return Resolution{Participates: true, Name: controller.Integration[0], Source: SourceConfigPrefix + "0]"}, nil
+	}
+	return ResolveIntegrationBranch(ctx, exec, repoPath, configValues)
+}
+
+func fillQueueEntries(ctx context.Context, g gitRepo, report *QueueReport, refs []queueRef, baseSHA string, expiry int, now time.Time, quiet bool) (*QueueReport, error) {
 	for _, ref := range refs {
 		entry, skip, err := inspectQueueRef(ctx, g, ref, baseSHA, expiry, now)
 		if err != nil {
@@ -181,7 +228,26 @@ func fillQueueEntries(ctx context.Context, g gitRepo, report *QueueReport, refs 
 	return report, nil
 }
 
-func resolveQueueBase(ctx context.Context, g gitRepo, flagBase, remote string) (name, source string, ok bool, err error) {
+func resolveQueueBase(ctx context.Context, g gitRepo, flagBase, remote string, controller *controllerBinding) (name, source string, ok bool, err error) {
+	if controller != nil {
+		declared := controller.Integration[0]
+		if strings.TrimSpace(flagBase) != "" {
+			if err := gitcmd.SanitizeBranchName(flagBase); err != nil {
+				return flagBase, "flag", false, fmt.Errorf("invalid --base: %w", err)
+			}
+			accepted := []string{
+				declared,
+				"refs/heads/" + declared,
+				remote + "/" + declared,
+				"refs/remotes/" + remote + "/" + declared,
+			}
+			if !containsString(accepted, flagBase) {
+				return flagBase, "flag", false, fmt.Errorf("--base must equal controller integration branch %s", declared)
+			}
+			return remote + "/" + declared, "controller-flag", true, nil
+		}
+		return remote + "/" + declared, "controller", true, nil
+	}
 	if strings.TrimSpace(flagBase) != "" {
 		if err := gitcmd.SanitizeBranchName(flagBase); err != nil {
 			return flagBase, "flag", false, fmt.Errorf("invalid --base: %w", err)
@@ -205,34 +271,48 @@ func resolveQueueBase(ctx context.Context, g gitRepo, flagBase, remote string) (
 	return short, "remote-head", true, nil
 }
 
-func collectQueueRefs(ctx context.Context, g gitRepo, remote, base string, integ Resolution) ([]string, error) {
-	prefixes := []string{"refs/heads"}
-	if remote != "" {
-		prefixes = append(prefixes, "refs/remotes/"+remote)
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
 	}
-	raw, err := g.shortRefs(ctx, prefixes...)
+	return false
+}
+
+// queueRef retains the full ref identity until inspection. display preserves
+// QueueEntry.Ref's historical short-ref rendering for callers.
+type queueRef struct {
+	full, display, branch string
+	remote                bool
+}
+
+func collectQueueRefs(ctx context.Context, g gitRepo, remote, base string, integ Resolution, taskPatterns []string) ([]queueRef, error) {
+	raw, err := g.refNames(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	exclude, err := queueExcludeSet(ctx, g, remote, base, integ)
-	if err != nil {
-		return nil, err
-	}
+	exclude := queueExcludeSet(raw, remote, base, integ)
 
-	var out []string
-	seen := make(map[string]struct{}, len(raw))
-	for _, ref := range raw {
-		if _, skip := exclude[ref]; skip {
+	var out []queueRef
+	for _, full := range raw {
+		ref, include := makeQueueRef(full, remote)
+		if !include {
 			continue
 		}
-		if remote != "" && strings.HasPrefix(ref, remote+"/") {
-			local := strings.TrimPrefix(ref, remote+"/")
-			localSHA, localOK, err := g.revParse(ctx, "refs/heads/"+local)
+		if _, skip := exclude[ref.full]; skip {
+			continue
+		}
+		if len(taskPatterns) > 0 && !config.MatchesAnyTaskPattern(ref.branch, taskPatterns) {
+			continue
+		}
+		if ref.remote {
+			localSHA, localOK, err := g.revParse(ctx, "refs/heads/"+ref.branch)
 			if err != nil {
 				return nil, err
 			}
-			remoteSHA, remoteOK, err := g.revParse(ctx, ref)
+			remoteSHA, remoteOK, err := g.revParse(ctx, ref.full)
 			if err != nil {
 				return nil, err
 			}
@@ -240,61 +320,90 @@ func collectQueueRefs(ctx context.Context, g gitRepo, remote, base string, integ
 				continue
 			}
 		}
-		if _, dup := seen[ref]; dup {
-			continue
-		}
-		seen[ref] = struct{}{}
 		out = append(out, ref)
 	}
-	sort.Strings(out)
+	disambiguateQueueRefDisplays(out, remote)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].display == out[j].display {
+			return out[i].full < out[j].full
+		}
+		return out[i].display < out[j].display
+	})
 	return out, nil
 }
 
-func queueExcludeSet(ctx context.Context, g gitRepo, remote, base string, integ Resolution) (map[string]struct{}, error) {
-	exclude := map[string]struct{}{base: {}}
-	remotes := []string(nil)
-	if remote != "" {
-		remotes = []string{remote}
+// disambiguateQueueRefDisplays leaves the historical short names alone unless
+// a local branch name is textually identical to a selected remote-tracking
+// ref. In that exceptional case QueueEntry.Ref must still identify one row.
+func disambiguateQueueRefDisplays(refs []queueRef, remote string) {
+	counts := make(map[string]int, len(refs))
+	for _, ref := range refs {
+		counts[ref.display]++
 	}
-	if bare := NormalizeName(base, remotes); bare != "" && bare != base {
-		exclude[bare] = struct{}{}
-		if remote != "" {
-			exclude[remote+"/"+bare] = struct{}{}
+	for i := range refs {
+		if counts[refs[i].display] < 2 {
+			continue
 		}
+		if refs[i].remote {
+			refs[i].display = "remotes/" + remote + "/" + refs[i].branch
+			continue
+		}
+		refs[i].display = "heads/" + refs[i].branch
 	}
+}
+
+func makeQueueRef(full, remote string) (queueRef, bool) {
+	if branch, ok := strings.CutPrefix(full, "refs/heads/"); ok {
+		return queueRef{full: full, display: branch, branch: branch}, true
+	}
+	prefix := "refs/remotes/" + remote + "/"
+	if remote != "" && strings.HasPrefix(full, prefix) {
+		branch := strings.TrimPrefix(full, prefix)
+		return queueRef{full: full, display: remote + "/" + branch, branch: branch, remote: true}, true
+	}
+	return queueRef{}, false
+}
+
+func queueExcludeSet(refs []string, remote, base string, integ Resolution) map[string]struct{} {
+	exclude := make(map[string]struct{})
+	baseBranch := NormalizeName(base, []string{remote})
+	if baseBranch == "" {
+		baseBranch = base
+	}
+	// Keep an explicit full ref excluded too. This restores the legacy
+	// --base refs/heads/... and refs/remotes/<remote>/... behavior while the
+	// variants below cover its local/selected-remote counterpart.
+	exclude[base] = struct{}{}
+	exclude["refs/heads/"+baseBranch] = struct{}{}
 	if remote != "" {
-		exclude[remote] = struct{}{}
-		exclude[remote+"/HEAD"] = struct{}{}
+		exclude["refs/remotes/"+remote+"/"+baseBranch] = struct{}{}
+		exclude["refs/remotes/"+remote+"/HEAD"] = struct{}{}
 	}
 	if !integ.Participates || integ.Name == "" {
-		return exclude, nil
+		return exclude
 	}
-	exclude[integ.Name] = struct{}{}
+	exclude["refs/heads/"+integ.Name] = struct{}{}
 	if remote != "" {
-		exclude[remote+"/"+integ.Name] = struct{}{}
-	}
-	allRemotes, err := g.shortRefs(ctx, "refs/remotes")
-	if err != nil {
-		return nil, err
+		exclude["refs/remotes/"+remote+"/"+integ.Name] = struct{}{}
 	}
 	suffix := "/" + integ.Name
-	for _, r := range allRemotes {
-		if strings.HasSuffix(r, suffix) {
-			exclude[r] = struct{}{}
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, "refs/remotes/") && strings.HasSuffix(ref, suffix) {
+			exclude[ref] = struct{}{}
 		}
 	}
-	return exclude, nil
+	return exclude
 }
 
 func queueRefAllowed(ref string) bool {
 	return gitcmd.SanitizeBranchName(ref) == nil
 }
 
-func inspectQueueRef(ctx context.Context, g gitRepo, ref, baseSHA string, expiryDays int, now time.Time) (QueueEntry, bool, error) {
-	if !queueRefAllowed(ref) {
+func inspectQueueRef(ctx context.Context, g gitRepo, ref queueRef, baseSHA string, expiryDays int, now time.Time) (QueueEntry, bool, error) {
+	if !queueRefAllowed(ref.branch) {
 		return QueueEntry{}, true, nil
 	}
-	_, ok, err := g.revParse(ctx, ref)
+	_, ok, err := g.revParse(ctx, ref.full)
 	if err != nil {
 		return QueueEntry{}, false, err
 	}
@@ -302,18 +411,18 @@ func inspectQueueRef(ctx context.Context, g gitRepo, ref, baseSHA string, expiry
 		return QueueEntry{}, true, nil
 	}
 
-	ahead, behind, err := g.aheadBehind(ctx, ref, baseSHA)
+	ahead, behind, err := g.aheadBehind(ctx, ref.full, baseSHA)
 	if err != nil {
 		return QueueEntry{}, false, err
 	}
 
 	entry := QueueEntry{
-		Ref:    ref,
+		Ref:    ref.display,
 		Ahead:  ahead,
 		Behind: behind,
 	}
 
-	mb, err := g.mergeBase(ctx, ref, baseSHA)
+	mb, err := g.mergeBase(ctx, ref.full, baseSHA)
 	if err != nil {
 		return QueueEntry{}, false, err
 	}
@@ -331,7 +440,7 @@ func inspectQueueRef(ctx context.Context, g gitRepo, ref, baseSHA string, expiry
 	case 0:
 		entry.MergeState = "-"
 	default:
-		clean, err := g.mergeTreeClean(ctx, baseSHA, ref)
+		clean, err := g.mergeTreeClean(ctx, baseSHA, ref.full)
 		if err != nil {
 			return QueueEntry{}, false, err
 		}
@@ -342,7 +451,7 @@ func inspectQueueRef(ctx context.Context, g gitRepo, ref, baseSHA string, expiry
 		}
 	}
 
-	epoch, err := g.commitTime(ctx, ref)
+	epoch, err := g.commitTime(ctx, ref.full)
 	if err != nil {
 		return QueueEntry{}, false, err
 	}

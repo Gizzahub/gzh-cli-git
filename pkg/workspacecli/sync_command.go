@@ -5,6 +5,7 @@ package workspacecli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -369,10 +370,12 @@ Config File Structure (Reference):
 					return fmt.Errorf("workspace sync failed: %w", orchErr)
 				}
 			}
+			var participationErr error
 			if !dryRun {
 				if err := recordReadOnlyWorkspaceAccess(ctx, execResult, configDir); err != nil {
 					return err
 				}
+				participationErr = reconcileIntegrationParticipation(ctx, execResult, configDir)
 			}
 
 			// Display machine output if requested
@@ -382,13 +385,22 @@ Config File Structure (Reference):
 					return fmt.Errorf("failed to display JSON output: %w", err)
 				}
 				// Skip recursive child diff printing for machine format for now
+				if participationErr != nil {
+					return fmt.Errorf("workspace integration participation reconcile failed: %w", participationErr)
+				}
 				return errSyncPartialFailure(execResult)
 			case "llm":
 				if err := displaySyncResultsLLM(out, execResult, durationMs); err != nil {
 					return fmt.Errorf("failed to display LLM output: %w", err)
 				}
 				// Skip recursive child diff printing for machine format for now
+				if participationErr != nil {
+					return fmt.Errorf("workspace integration participation reconcile failed: %w", participationErr)
+				}
 				return errSyncPartialFailure(execResult)
+			}
+			if participationErr != nil {
+				return fmt.Errorf("workspace integration participation reconcile failed: %w", participationErr)
 			}
 
 			// Recursive child workspace sync
@@ -471,6 +483,26 @@ func recordReadOnlyWorkspaceAccess(ctx context.Context, result reposync.Executio
 		}
 	}
 	return nil
+}
+
+// reconcileIntegrationParticipation applies repo-root branch.integrationBranch
+// declarations only after the repository action itself succeeded. Its separate
+// error path makes a policy/configuration failure distinguishable from sync.
+func reconcileIntegrationParticipation(ctx context.Context, result reposync.ExecutionResult, configDir string) error {
+	var errs []error
+	for _, actionResult := range result.Succeeded {
+		if actionResult.Action.Type != reposync.ActionClone && actionResult.Action.Type != reposync.ActionUpdate {
+			continue
+		}
+		path := actionResult.Action.Repo.TargetPath
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(configDir, path)
+		}
+		if _, err := config.ReconcileIntegrationParticipation(ctx, path); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", path, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // createActionsFromFlatConfig converts flat config PlanRequest to Actions.

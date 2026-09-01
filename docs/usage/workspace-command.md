@@ -178,6 +178,22 @@ Proceed with sync? (y/N)
 
 **참고**: CI 환경 (non-TTY)에서는 interactive prompt가 비활성화됩니다.
 
+### Integration 참여 설정
+
+성공한 각 저장소 동기화 뒤에는 저장소 루트의 `.gz-git.yaml`에 선언한
+`branch.integrationBranch` 후보 중 로컬 또는 remote-tracking ref로 존재하는 첫
+브랜치를 선택하여 `workflow.integrationBranch` 로컬 Git 설정에 기록합니다. 이
+설정은 `gz-git`이 기록한 소유 marker가 있는 경우에만 이후 선언 변경 또는 삭제에
+맞춰 갱신·정리됩니다. 기존 수동 설정이 선언과 다르면 sync는 해당 저장소의 정책
+충돌을 보고하고 덮어쓰지 않습니다. `--dry-run`은 이 설정도 바꾸지 않습니다.
+
+일반 `git clone`은 이 동작을 가로채지 않습니다. 해당 clone을 참여 저장소로
+명시하려면 선언을 확인한 뒤 직접 설정합니다.
+
+```bash
+git -C /path/to/repo config --local workflow.integrationBranch master
+```
+
 ### Output Format
 
 `workspace sync`는 다음 포맷을 지원합니다.

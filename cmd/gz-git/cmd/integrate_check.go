@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -33,6 +34,7 @@ var integrateCheckCmd = &cobra.Command{
   gz-git integrate check --target origin/main --direct-to-default
 
 This is read-only. It never pushes and never reclaims.
+Run a bare check from a task-branch worktree, not from the target checkout.
 
 Exit Codes:
   0  READY
@@ -73,7 +75,7 @@ func runIntegrateCheck(cmd *cobra.Command, args []string) error {
 	})
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "--target") || strings.Contains(msg, "integration branch") {
+		if errors.Is(err, integrate.ErrImplicitSourceIsTarget) || strings.Contains(msg, "--target") || strings.Contains(msg, "integration branch") {
 			if !quiet {
 				fmt.Fprintln(cmd.ErrOrStderr(), "integrate check:", msg)
 			}

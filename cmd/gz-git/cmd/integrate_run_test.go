@@ -4,11 +4,15 @@
 package cmd
 
 import (
+	"errors"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/integrate"
 )
 
 func TestIntegrateRunHelp(t *testing.T) {
@@ -17,6 +21,29 @@ func TestIntegrateRunHelp(t *testing.T) {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("integrate run missing --%s", name)
 		}
+	}
+}
+
+func TestIntegrateRunBareTargetCheckoutExitsOneWithoutMovingRemote(t *testing.T) {
+	restore := setIntegrateRunGlobals(t)
+	defer restore()
+
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	target := gitOutputForIntegrateRun(t, fx.Clone, "branch", "--show-current")
+	writeFile(t, fx.Clone, ".gz-git.yaml", "branch:\n  integrationBranch: "+target+"\n")
+	before := gitOutputForIntegrateRun(t, fx.Origin, "rev-parse", "refs/heads/"+target)
+	t.Chdir(fx.Clone)
+	quiet = true
+	err := runIntegrateRun(integrateRunCmd, nil)
+	if got := cliutil.ExitCodeForError(err); got != 1 {
+		t.Fatalf("bare target checkout exit = %d, want 1; err=%v", got, err)
+	}
+	if !errors.Is(err, integrate.ErrImplicitSourceIsTarget) {
+		t.Fatalf("error = %v, want ErrImplicitSourceIsTarget", err)
+	}
+	after := gitOutputForIntegrateRun(t, fx.Origin, "rev-parse", "refs/heads/"+target)
+	if after != before {
+		t.Fatalf("remote master moved: before=%s after=%s", before, after)
 	}
 }
 
@@ -79,4 +106,15 @@ func setIntegrateRunGlobals(t *testing.T) func() {
 		integrateRunControllerConfig = origController
 		quiet = origQuiet
 	}
+}
+
+func gitOutputForIntegrateRun(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+	return strings.TrimSpace(string(out))
 }

@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -35,6 +36,7 @@ var integrateRunCmd = &cobra.Command{
 Reclaim only runs for names matching the repo-root taskPattern.
 No declaration means reclaim nothing. Remote branch delete uses
 --force-with-lease against the commit that just landed.
+Run a bare integrate from a task-branch worktree, not from the target checkout.
 
 Exit Codes:
   0  integrated (reclaim finished or intentionally skipped)
@@ -81,7 +83,7 @@ func runIntegrateRun(cmd *cobra.Command, args []string) error {
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "not ready") || strings.Contains(msg, "--target") || strings.Contains(msg, "integration branch") {
+		if errors.Is(err, integrate.ErrImplicitSourceIsTarget) || strings.Contains(msg, "not ready") || strings.Contains(msg, "--target") || strings.Contains(msg, "integration branch") {
 			return cliutil.NewExitError(1, err)
 		}
 		return cliutil.NewExitError(2, err)

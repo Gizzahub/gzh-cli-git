@@ -4,11 +4,13 @@
 package cmd
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/integrate"
 )
 
 func TestIntegrateCheckHelp(t *testing.T) {
@@ -17,6 +19,24 @@ func TestIntegrateCheckHelp(t *testing.T) {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("integrate check missing --%s", name)
 		}
+	}
+}
+
+func TestIntegrateCheckBareTargetCheckoutExitsOne(t *testing.T) {
+	restore := setIntegrateCheckGlobals(t)
+	defer restore()
+
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	target := gitOutputForIntegrateRun(t, fx.Clone, "branch", "--show-current")
+	writeFile(t, fx.Clone, ".gz-git.yaml", "branch:\n  integrationBranch: "+target+"\n")
+	t.Chdir(fx.Clone)
+	quiet = true
+	err := runIntegrateCheck(integrateCheckCmd, nil)
+	if got := cliutil.ExitCodeForError(err); got != 1 {
+		t.Fatalf("bare target checkout exit = %d, want 1; err=%v", got, err)
+	}
+	if !errors.Is(err, integrate.ErrImplicitSourceIsTarget) {
+		t.Fatalf("error = %v, want ErrImplicitSourceIsTarget", err)
 	}
 }
 

@@ -5,11 +5,16 @@ package integrate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 )
+
+// ErrImplicitSourceIsTarget reports a bare integrate invocation from the
+// resolved target branch. Callers should retry from a task-branch worktree.
+var ErrImplicitSourceIsTarget = errors.New("implicit source branch is the integration target")
 
 // TargetPlan is the resolved check/run destination.
 type TargetPlan struct {
@@ -26,6 +31,7 @@ type TargetPlan struct {
 func resolveTarget(ctx context.Context, g gitRepo, exec *gitcmd.Executor, opts CheckOptions) (TargetPlan, error) {
 	var plan TargetPlan
 
+	implicitSource := strings.TrimSpace(opts.Branch) == ""
 	branch := strings.TrimSpace(opts.Branch)
 	if branch == "" {
 		cur, err := g.currentBranch(ctx)
@@ -94,6 +100,9 @@ func resolveTarget(ctx context.Context, g gitRepo, exec *gitcmd.Executor, opts C
 	}
 	if err := validateTarget(plan, target, opts); err != nil {
 		return plan, err
+	}
+	if implicitSource && plan.Branch == targetBranchName(target, plan.Remote) {
+		return plan, fmt.Errorf("%w: %s; run branch-integrate from a task-branch worktree", ErrImplicitSourceIsTarget, plan.Branch)
 	}
 	tsha, ok, err := g.revParse(ctx, target)
 	if err != nil {

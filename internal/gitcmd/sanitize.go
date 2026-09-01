@@ -136,6 +136,54 @@ func SanitizeURL(value string) error {
 	return nil
 }
 
+// CanonicalRemoteEndpoint returns the strict, credential-free representation
+// used when a configuration must bind to one exact Git remote endpoint. It is
+// intentionally narrower than SanitizeURL: a URL that is safe to pass to Git
+// is not necessarily safe to use as an authorization identity.
+func CanonicalRemoteEndpoint(raw string) (string, error) {
+	if raw == "" || strings.HasPrefix(raw, "-") || strings.IndexFunc(raw, func(r rune) bool { return r <= 0x20 || r == 0x7f }) >= 0 {
+		return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+	}
+	if strings.Contains(raw, "@") && !strings.Contains(raw, "://") { // credential-free scp syntax: user@host:path
+		at := strings.IndexByte(raw, '@')
+		colon := strings.IndexByte(raw[at+1:], ':')
+		if at <= 0 || colon <= 0 || at+1+colon+1 >= len(raw) || strings.Contains(raw[:at], ":") {
+			return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+		}
+		return raw, nil
+	}
+	u, err := url.Parse(raw)
+	hasPassword := false
+	if u != nil && u.User != nil {
+		_, hasPassword = u.User.Password()
+	}
+	if err != nil || hasPassword || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+	}
+	switch u.Scheme {
+	case "": // Local filesystem paths are textual identities to Git. URL
+		// serialization can percent-encode reserved characters and collapse two
+		// distinct paths onto one authorization identity, so preserve the
+		// validated input exactly.
+		return raw, nil
+	case "file":
+		if u.User != nil {
+			return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+		}
+	case "http", "https":
+		if u.Host == "" || u.User != nil {
+			return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+		}
+	case "ssh", "git":
+		if u.Host == "" {
+			return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+		}
+	default:
+		return "", fmt.Errorf("remote endpoint must be a credential-free URL")
+	}
+	return u.String(), nil
+}
+
 func looksLikeSCPURL(value string) bool {
 	colon := strings.IndexByte(value, ':')
 	if colon <= 0 || strings.Contains(value[:colon], "/") {

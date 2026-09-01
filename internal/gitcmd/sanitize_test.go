@@ -354,6 +354,29 @@ func TestSanitizeURL(t *testing.T) {
 	}
 }
 
+func TestCanonicalRemoteEndpointPreservesDistinctLocalPaths(t *testing.T) {
+	plain := "/tmp/repo[name].git"
+	encoded := "/tmp/repo%5Bname%5D.git"
+
+	plainCanonical, err := CanonicalRemoteEndpoint(plain)
+	if err != nil {
+		t.Fatalf("canonicalize plain local path: %v", err)
+	}
+	encodedCanonical, err := CanonicalRemoteEndpoint(encoded)
+	if err != nil {
+		t.Fatalf("canonicalize encoded local path: %v", err)
+	}
+	if plainCanonical != plain {
+		t.Fatalf("plain local path canonicalized to %q, want exact %q", plainCanonical, plain)
+	}
+	if encodedCanonical != encoded {
+		t.Fatalf("encoded local path canonicalized to %q, want exact %q", encodedCanonical, encoded)
+	}
+	if plainCanonical == encodedCanonical {
+		t.Fatalf("distinct local paths collapsed to one identity: %q", plainCanonical)
+	}
+}
+
 // TestSanitizeCommitMessage tests commit message sanitization.
 func TestSanitizeCommitMessage(t *testing.T) {
 	tests := []struct {

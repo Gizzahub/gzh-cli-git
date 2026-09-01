@@ -372,10 +372,20 @@ Config File Structure (Reference):
 			}
 			var participationErr error
 			if !dryRun {
+				integrationTxn, err := prepareWorkspaceIntegrationBranches(ctx, execResult, recursiveCfg, writeLocalIntegrationBranch)
+				if err != nil {
+					return err
+				}
 				if err := recordReadOnlyWorkspaceAccess(ctx, execResult, configDir); err != nil {
 					return err
 				}
-				participationErr = reconcileIntegrationParticipation(ctx, execResult, configDir)
+				participationErr = reconcileIntegrationParticipationExcept(ctx, execResult, configDir, controllerIntegrationWorkspaces(recursiveCfg))
+				if participationErr == nil {
+					err = integrationTxn.apply(ctx)
+				}
+				if err != nil {
+					return err
+				}
 			}
 
 			// Display machine output if requested
@@ -489,9 +499,16 @@ func recordReadOnlyWorkspaceAccess(ctx context.Context, result reposync.Executio
 // declarations only after the repository action itself succeeded. Its separate
 // error path makes a policy/configuration failure distinguishable from sync.
 func reconcileIntegrationParticipation(ctx context.Context, result reposync.ExecutionResult, configDir string) error {
+	return reconcileIntegrationParticipationExcept(ctx, result, configDir, nil)
+}
+
+func reconcileIntegrationParticipationExcept(ctx context.Context, result reposync.ExecutionResult, configDir string, excluded map[string]struct{}) error {
 	var errs []error
 	for _, actionResult := range result.Succeeded {
 		if actionResult.Action.Type != reposync.ActionClone && actionResult.Action.Type != reposync.ActionUpdate {
+			continue
+		}
+		if _, skip := excluded[actionResult.Action.Workspace]; skip {
 			continue
 		}
 		path := actionResult.Action.Repo.TargetPath
@@ -503,6 +520,324 @@ func reconcileIntegrationParticipation(ctx context.Context, result reposync.Exec
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func controllerIntegrationWorkspaces(cfg *config.Config) map[string]struct{} {
+	selected := make(map[string]struct{})
+	if cfg == nil {
+		return selected
+	}
+	for name, ws := range config.GetGitWorkspaces(cfg) {
+		if ws.Integration != nil {
+			selected[name] = struct{}{}
+		}
+	}
+	return selected
+}
+
+// recordWorkspaceIntegrationBranches binds an explicitly controller-managed
+// workspace checkout to its configured integration branch. The sync result is
+// deliberately its input: no failed, skipped, or dry-run action can write the
+// local setting.
+func recordWorkspaceIntegrationBranches(ctx context.Context, result reposync.ExecutionResult, cfg *config.Config) error {
+	return recordWorkspaceIntegrationBranchesWithWriter(ctx, result, cfg, writeLocalIntegrationBranch)
+}
+
+type integrationBranchWriter func(context.Context, string, string) error
+
+// recordWorkspaceIntegrationBranchesWithWriter is split out so the rollback
+// contract can be exercised deterministically without weakening production Git
+// command handling.
+func recordWorkspaceIntegrationBranchesWithWriter(ctx context.Context, result reposync.ExecutionResult, cfg *config.Config, write integrationBranchWriter) error {
+	txn, err := prepareWorkspaceIntegrationBranches(ctx, result, cfg, write)
+	if err != nil {
+		return err
+	}
+	return txn.apply(ctx)
+}
+
+type integrationBranchSetting struct {
+	path, branch string
+}
+
+type integrationBranchTransaction struct {
+	settings []integrationBranchSetting
+	previous map[string]localIntegrationBranchState
+	write    integrationBranchWriter
+}
+
+// prepareWorkspaceIntegrationBranches performs every fallible read and
+// identity check without mutating any checkout. The caller may therefore run
+// other post-sync bookkeeping before apply without leaking this setting if that
+// bookkeeping fails.
+func prepareWorkspaceIntegrationBranches(ctx context.Context, result reposync.ExecutionResult, cfg *config.Config, write integrationBranchWriter) (*integrationBranchTransaction, error) {
+	txn := &integrationBranchTransaction{write: write}
+	if cfg == nil {
+		return txn, nil
+	}
+	if len(result.Failed) > 0 {
+		return txn, nil
+	}
+
+	workspaces := config.GetGitWorkspaces(cfg)
+	seen := make(map[string]bool)
+
+	// Validate every eligible binding before mutating any checkout. A controller
+	// URL mismatch therefore fails closed without a partial configuration update.
+	for _, actionResult := range result.Succeeded {
+		action := actionResult.Action
+		ws, ok := workspaces[action.Workspace]
+		if !ok || ws.Integration == nil {
+			continue
+		}
+		if seen[action.Workspace] {
+			return nil, fmt.Errorf("workspace %q produced multiple successful sync actions", action.Workspace)
+		}
+		seen[action.Workspace] = true
+		expectedPath, err := canonicalConfiguredWorkspacePath(cfg, ws)
+		if err != nil {
+			return nil, fmt.Errorf("controller workspace %q path: %w", action.Workspace, err)
+		}
+		actualPath, err := canonicalExistingWorkspacePath(action.Repo.TargetPath)
+		if err != nil {
+			return nil, fmt.Errorf("controller workspace %q target path: %w", action.Workspace, err)
+		}
+		if expectedPath != actualPath {
+			return nil, fmt.Errorf("controller workspace %q sync target does not match configured workspace path", action.Workspace)
+		}
+		if ws.Branch == nil || len(ws.Branch.IntegrationBranch) != 1 {
+			return nil, fmt.Errorf("controller workspace %q requires exactly one branch.integrationBranch", action.Workspace)
+		}
+		branch := strings.TrimSpace(ws.Branch.IntegrationBranch[0])
+		if err := gitcmd.SanitizeBranchName(branch); err != nil {
+			return nil, fmt.Errorf("controller workspace %q integration branch: %w", action.Workspace, err)
+		}
+		if err := verifyWorkspaceOriginBinding(ctx, actualPath, ws.URL); err != nil {
+			return nil, fmt.Errorf("controller workspace %q: %w", action.Workspace, err)
+		}
+		txn.settings = append(txn.settings, integrationBranchSetting{path: actualPath, branch: branch})
+	}
+
+	txn.previous = make(map[string]localIntegrationBranchState, len(txn.settings))
+	for _, setting := range txn.settings {
+		if _, duplicate := txn.previous[setting.path]; duplicate {
+			return nil, fmt.Errorf("multiple controller workspaces target %s", setting.path)
+		}
+		state, err := readLocalIntegrationBranch(ctx, setting.path)
+		if err != nil {
+			return nil, err
+		}
+		if marker, found, err := gitConfigValues(ctx, setting.path, true, "gz-git.managedWorkflowIntegrationBranch"); err != nil {
+			return nil, fmt.Errorf("read managed integration marker in %s: %w", setting.path, err)
+		} else if found {
+			return nil, fmt.Errorf("controller workspace %s has repo-root managed integration marker %q", setting.path, marker)
+		}
+		txn.previous[setting.path] = state
+	}
+	return txn, nil
+}
+
+func (txn *integrationBranchTransaction) apply(ctx context.Context) error {
+	applied := make([]localIntegrationBranchState, 0, len(txn.settings))
+	for _, setting := range txn.settings {
+		state := txn.previous[setting.path]
+		applied = append(applied, state)
+		if err := txn.write(ctx, setting.path, setting.branch); err != nil {
+			rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			rollbackErr := rollbackLocalIntegrationBranches(rollbackCtx, applied)
+			cancel()
+			if rollbackErr != nil {
+				return fmt.Errorf("set local integration branch in %s: %w", setting.path, errors.Join(err, rollbackErr))
+			}
+			return fmt.Errorf("set local integration branch in %s: %w", setting.path, err)
+		}
+	}
+	return nil
+}
+
+func canonicalConfiguredWorkspacePath(cfg *config.Config, ws *config.Workspace) (string, error) {
+	base := "."
+	if cfg.ConfigPath != "" {
+		base = filepath.Dir(cfg.ConfigPath)
+	}
+	return canonicalExistingWorkspacePath(resolveWorkspacePath(ws.Path, base))
+}
+
+func canonicalExistingWorkspacePath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
+type localIntegrationBranchState struct {
+	path   string
+	values []string
+}
+
+func readLocalIntegrationBranch(ctx context.Context, repoPath string) (localIntegrationBranchState, error) {
+	values, found, err := gitConfigValues(ctx, repoPath, true, "workflow.integrationBranch")
+	if err != nil {
+		return localIntegrationBranchState{}, fmt.Errorf("read local integration branch in %s: %w", repoPath, err)
+	}
+	if !found {
+		values = nil
+	}
+	return localIntegrationBranchState{path: repoPath, values: values}, nil
+}
+
+func writeLocalIntegrationBranch(ctx context.Context, repoPath, branch string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--local", "--replace-all", "workflow.integrationBranch", branch) // #nosec G204 -- selected checkout and validated branch are passed as separate argv values.
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func rollbackLocalIntegrationBranches(ctx context.Context, states []localIntegrationBranchState) error {
+	var rollbackErr error
+	for i := len(states) - 1; i >= 0; i-- {
+		state := states[i]
+		if err := restoreLocalIntegrationBranch(ctx, state); err != nil {
+			rollbackErr = errors.Join(rollbackErr, err)
+		}
+	}
+	return rollbackErr
+}
+
+func restoreLocalIntegrationBranch(ctx context.Context, state localIntegrationBranchState) error {
+	if len(state.values) == 0 {
+		cmd := exec.CommandContext(ctx, "git", "-C", state.path, "config", "--local", "--unset-all", "workflow.integrationBranch") // #nosec G204 -- fixed local key in selected checkout.
+		if output, err := cmd.CombinedOutput(); err != nil {
+			_, found, readErr := gitConfigValues(ctx, state.path, true, "workflow.integrationBranch")
+			if readErr == nil && !found {
+				return nil // The key was originally unset and remains unset.
+			}
+			return fmt.Errorf("restore unset integration branch in %s: %w: %s", state.path, err, strings.TrimSpace(string(output)))
+		}
+		return nil
+	}
+	if err := writeLocalIntegrationBranch(ctx, state.path, state.values[0]); err != nil {
+		return fmt.Errorf("restore integration branch in %s: %w", state.path, err)
+	}
+	for _, value := range state.values[1:] {
+		cmd := exec.CommandContext(ctx, "git", "-C", state.path, "config", "--local", "--add", "workflow.integrationBranch", value) // #nosec G204 -- previously read local value is restored as a separate argv value.
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("restore integration branch in %s: %w: %s", state.path, err, strings.TrimSpace(string(output)))
+		}
+	}
+	return nil
+}
+
+// verifyWorkspaceOriginBinding proves that the URL declared by an opted-in
+// controller workspace names the exact raw origin configuration used for both
+// fetching and pushing. It intentionally reads config values rather than
+// `remote get-url`, whose output can already have url.* rewrites applied.
+func verifyWorkspaceOriginBinding(ctx context.Context, repoPath, configuredURL string) error {
+	want, err := gitcmd.CanonicalRemoteEndpoint(strings.TrimSpace(configuredURL))
+	if err != nil {
+		return fmt.Errorf("canonicalize configured URL: %w", err)
+	}
+	fetchRaw, found, err := gitConfigValues(ctx, repoPath, false, "remote.origin.url")
+	if err != nil {
+		return fmt.Errorf("read raw origin fetch endpoint: %w", err)
+	}
+	if !found || len(fetchRaw) != 1 {
+		return fmt.Errorf("origin has ambiguous fetch endpoint")
+	}
+	fetch, err := gitcmd.CanonicalRemoteEndpoint(fetchRaw[0])
+	if err != nil {
+		return fmt.Errorf("canonicalize raw origin fetch endpoint: %w", err)
+	}
+	pushRaw, pushConfigured, err := gitConfigValues(ctx, repoPath, false, "remote.origin.pushurl")
+	if err != nil {
+		return fmt.Errorf("read raw origin push endpoint: %w", err)
+	}
+	push := fetch
+	pushEndpointRaw := fetchRaw[0]
+	if pushConfigured {
+		if len(pushRaw) != 1 {
+			return fmt.Errorf("origin has ambiguous push endpoint")
+		}
+		push, err = gitcmd.CanonicalRemoteEndpoint(pushRaw[0])
+		if err != nil {
+			return fmt.Errorf("canonicalize raw origin push endpoint: %w", err)
+		}
+		pushEndpointRaw = pushRaw[0]
+	}
+	if want != fetch || want != push {
+		return fmt.Errorf("configured URL does not match origin fetch and push endpoints")
+	}
+	if err := rejectApplicableURLRewrite(ctx, repoPath, fetchRaw[0], false); err != nil {
+		return err
+	}
+	if err := rejectApplicableURLRewrite(ctx, repoPath, pushEndpointRaw, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+// gitConfigValues returns every raw value visible to Git after normal scope and
+// include processing. Git's -z form preserves exact whitespace and embedded
+// newlines; values are never trimmed or normalized at this boundary.
+func gitConfigValues(ctx context.Context, repoPath string, localOnly bool, key string) ([]string, bool, error) {
+	args := []string{"-C", repoPath, "config"}
+	if localOnly {
+		args = append(args, "--local")
+	} else {
+		args = append(args, "--includes")
+	}
+	args = append(args, "-z", "--get-all", key)
+	cmd := exec.CommandContext(ctx, "git", args...) // #nosec G204 -- fixed configuration key is queried in the selected checkout.
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	values, err := splitNULConfigValues(output)
+	if err != nil {
+		return nil, false, err
+	}
+	return values, len(values) > 0, nil
+}
+
+func rejectApplicableURLRewrite(ctx context.Context, repoPath, endpoint string, push bool) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--includes", "--get-regexp", `^url\.`) // #nosec G204 -- fixed Git query against selected checkout.
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil // No rewrite rules are the normal case.
+		}
+		return fmt.Errorf("inspect URL rewrites: %w", err)
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		key := strings.ToLower(fields[0])
+		isInsteadOf := strings.HasSuffix(key, ".insteadof")
+		isPushInsteadOf := push && strings.HasSuffix(key, ".pushinsteadof")
+		if (isInsteadOf || isPushInsteadOf) && strings.HasPrefix(endpoint, fields[len(fields)-1]) {
+			return fmt.Errorf("origin endpoint is subject to a URL rewrite")
+		}
+	}
+	return nil
+}
+
+func splitNULConfigValues(raw []byte) ([]string, error) {
+	if len(raw) == 0 || raw[len(raw)-1] != 0 {
+		return nil, fmt.Errorf("git config returned malformed NUL-delimited values")
+	}
+	parts := strings.Split(string(raw[:len(raw)-1]), "\x00")
+	return parts, nil
 }
 
 // createActionsFromFlatConfig converts flat config PlanRequest to Actions.

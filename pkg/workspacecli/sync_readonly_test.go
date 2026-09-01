@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/reposync"
 )
 
@@ -87,6 +88,103 @@ func TestReconcileIntegrationParticipationSkipsSuccessfulDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertSyncGitConfig(t, repo, "workflow.integrationBranch", "")
+}
+
+func TestControllerWorkspaceExcludesRepoRootParticipation(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	if err := os.WriteFile(filepath.Join(fx.Clone, ".gz-git.yaml"), []byte("branch:\n  integrationBranch: [master]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := successfulWorkspaceSync(fx.Clone, "engine")
+	result.Succeeded[0].Action.Type = reposync.ActionUpdate
+	cfg := integrationWorkspaceConfig("engine", fx.Clone, fx.Origin, "release/1.27")
+
+	txn, err := prepareWorkspaceIntegrationBranches(t.Context(), result, cfg, writeLocalIntegrationBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileIntegrationParticipationExcept(t.Context(), result, "", controllerIntegrationWorkspaces(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.apply(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	assertSyncGitConfig(t, fx.Clone, "workflow.integrationBranch", "release/1.27")
+	assertSyncGitConfig(t, fx.Clone, "gz-git.managedWorkflowIntegrationBranch", "")
+}
+
+func TestMixedControllerAndRepoRootParticipation(t *testing.T) {
+	controller := testutil.TempWorktreeWithBareOrigin(t)
+	legacy := initSyncParticipationRepo(t, "master")
+	result := reposync.ExecutionResult{Succeeded: []reposync.ActionResult{
+		{Action: reposync.Action{Type: reposync.ActionUpdate, Workspace: "engine", Repo: reposync.RepoSpec{TargetPath: controller.Clone}}},
+		{Action: reposync.Action{Type: reposync.ActionUpdate, Workspace: "legacy", Repo: reposync.RepoSpec{TargetPath: legacy}}},
+	}}
+	cfg := integrationWorkspaceConfig("engine", controller.Clone, controller.Origin, "release/1.27")
+
+	txn, err := prepareWorkspaceIntegrationBranches(t.Context(), result, cfg, writeLocalIntegrationBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileIntegrationParticipationExcept(t.Context(), result, "", controllerIntegrationWorkspaces(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.apply(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	assertSyncGitConfig(t, controller.Clone, "workflow.integrationBranch", "release/1.27")
+	assertSyncGitConfig(t, controller.Clone, "gz-git.managedWorkflowIntegrationBranch", "")
+	assertSyncGitConfig(t, legacy, "workflow.integrationBranch", "master")
+	assertSyncGitConfig(t, legacy, "gz-git.managedWorkflowIntegrationBranch", "master")
+}
+
+func TestControllerParticipationDoesNotFallbackOnPartialFailure(t *testing.T) {
+	fx := testutil.TempWorktreeWithBareOrigin(t)
+	if err := os.WriteFile(filepath.Join(fx.Clone, ".gz-git.yaml"), []byte("branch:\n  integrationBranch: [master]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := successfulWorkspaceSync(fx.Clone, "engine")
+	result.Succeeded[0].Action.Type = reposync.ActionUpdate
+	result.Failed = []reposync.ActionResult{{Action: reposync.Action{Workspace: "other"}}}
+	cfg := integrationWorkspaceConfig("engine", fx.Clone, fx.Origin, "release/1.27")
+
+	txn, err := prepareWorkspaceIntegrationBranches(t.Context(), result, cfg, writeLocalIntegrationBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileIntegrationParticipationExcept(t.Context(), result, "", controllerIntegrationWorkspaces(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.apply(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	assertSyncGitConfig(t, fx.Clone, "workflow.integrationBranch", "")
+	assertSyncGitConfig(t, fx.Clone, "gz-git.managedWorkflowIntegrationBranch", "")
+}
+
+func TestRepoRootParticipationFailurePreventsControllerApply(t *testing.T) {
+	controller := testutil.TempWorktreeWithBareOrigin(t)
+	legacy := initSyncParticipationRepo(t, "master")
+	if err := os.WriteFile(filepath.Join(legacy, ".gz-git.yaml"), []byte("branch:\n  integrationBranch: [missing]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := reposync.ExecutionResult{Succeeded: []reposync.ActionResult{
+		{Action: reposync.Action{Type: reposync.ActionUpdate, Workspace: "engine", Repo: reposync.RepoSpec{TargetPath: controller.Clone}}},
+		{Action: reposync.Action{Type: reposync.ActionUpdate, Workspace: "legacy", Repo: reposync.RepoSpec{TargetPath: legacy}}},
+	}}
+	cfg := integrationWorkspaceConfig("engine", controller.Clone, controller.Origin, "release/1.27")
+
+	txn, err := prepareWorkspaceIntegrationBranches(t.Context(), result, cfg, writeLocalIntegrationBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileIntegrationParticipationExcept(t.Context(), result, "", controllerIntegrationWorkspaces(cfg)); err == nil {
+		t.Fatal("invalid repo-root participation unexpectedly succeeded")
+	}
+	assertSyncGitConfig(t, controller.Clone, "workflow.integrationBranch", "")
+	if len(txn.settings) != 1 {
+		t.Fatalf("prepared controller settings = %d, want 1", len(txn.settings))
+	}
 }
 
 func initSyncParticipationRepo(t *testing.T, branch string) string {

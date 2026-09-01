@@ -284,6 +284,20 @@ and Git repository override variables are removed, and `LC_ALL`/`LANG` are
 forced to `C`. The manifest cannot configure arguments, environment, cwd, or
 timeout.
 
+## Controller-backed `integrate queue` is unavailable
+
+Hooks or wrappers that require explicit controller queue semantics must probe
+the exact capability before invoking `integrate queue --controller-config`:
+
+```bash
+gz-git capability integrate-queue-controller-v1
+```
+
+Success writes exactly `integrate-queue-controller-v1` plus a newline. A
+missing or older binary must fail closed rather than falling back to repository
+configuration: controller mode binds the selected remote, declared integration
+branch, and optional task-pattern filter explicitly.
+
 ## `integrate check` reports a lint baseline that is not there
 
 The lint gate can report hundreds of issues under a directory that no longer

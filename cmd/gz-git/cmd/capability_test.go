@@ -14,23 +14,27 @@ func (failingCapabilityWriter) Write([]byte) (int, error) {
 }
 
 func TestCapabilityCommandReportsSupportedCapability(t *testing.T) {
-	cmd := newCapabilityCommand()
-	var stdout bytes.Buffer
-	cmd.SetOut(&stdout)
-	cmd.SetArgs([]string{integrateReadinessV1Capability})
+	for _, capability := range []string{integrateReadinessV1Capability, integrateQueueControllerV1Capability} {
+		t.Run(capability, func(t *testing.T) {
+			cmd := newCapabilityCommand()
+			var stdout bytes.Buffer
+			cmd.SetOut(&stdout)
+			cmd.SetArgs([]string{capability})
 
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if got, want := stdout.String(), integrateReadinessV1Capability+"\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if got, want := stdout.String(), capability+"\n"; got != want {
+				t.Fatalf("stdout = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
 func TestCapabilityCommandFailsWhenOutputCannotBeWritten(t *testing.T) {
 	cmd := newCapabilityCommand()
 	cmd.SetOut(failingCapabilityWriter{})
-	cmd.SetArgs([]string{integrateReadinessV1Capability})
+	cmd.SetArgs([]string{integrateQueueControllerV1Capability})
 
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "write capability result") {
@@ -46,7 +50,7 @@ func TestCapabilityCommandFailsClosed(t *testing.T) {
 	}{
 		{name: "unknown", args: []string{"future-capability"}, want: "unsupported capability"},
 		{name: "missing", args: nil, want: "accepts 1 arg"},
-		{name: "extra", args: []string{integrateReadinessV1Capability, "extra"}, want: "accepts 1 arg"},
+		{name: "extra", args: []string{integrateQueueControllerV1Capability, "extra"}, want: "accepts 1 arg"},
 	}
 
 	for _, tt := range tests {

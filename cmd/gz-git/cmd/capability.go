@@ -6,7 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const integrateReadinessV1Capability = "integrate-readiness-v1"
+const (
+	integrateReadinessV1Capability       = "integrate-readiness-v1"
+	integrateQueueControllerV1Capability = "integrate-queue-controller-v1"
+)
 
 func newCapabilityCommand() *cobra.Command {
 	return &cobra.Command{
@@ -27,7 +30,7 @@ func newCapabilityCommand() *cobra.Command {
 
 func supportsCapability(name string) bool {
 	switch name {
-	case integrateReadinessV1Capability:
+	case integrateReadinessV1Capability, integrateQueueControllerV1Capability:
 		return true
 	default:
 		return false

@@ -730,9 +730,13 @@ type Workspace struct {
 	SSHKeyPath    string        `yaml:"sshKeyPath,omitempty"`    // SSH private key file path
 	SSHKeyContent string        `yaml:"sshKeyContent,omitempty"` // SSH private key content
 	Branch        *BranchConfig `yaml:"branch,omitempty"`
-	Fetch         *FetchConfig  `yaml:"fetch,omitempty"`
-	Pull          *PullConfig   `yaml:"pull,omitempty"`
-	Push          *PushConfig   `yaml:"push,omitempty"`
+	// Integration is an opt-in controller-owned integration policy. It is read
+	// only when a caller explicitly selects this workspace config; it is never
+	// inherited by a repository project config.
+	Integration *IntegrationControl `yaml:"integration,omitempty"`
+	Fetch       *FetchConfig        `yaml:"fetch,omitempty"`
+	Pull        *PullConfig         `yaml:"pull,omitempty"`
+	Push        *PushConfig         `yaml:"push,omitempty"`
 
 	// Filter patterns (override parent patterns)
 	IncludePatterns []string `yaml:"includePatterns,omitempty"` // Include repos matching these patterns
@@ -752,6 +756,13 @@ type Workspace struct {
 	// ChildConfigMode controls how child config files are generated during sync.
 	// Values: "repositories" (default), "workspaces", "none"
 	ChildConfigMode ChildConfigMode `yaml:"childConfigMode,omitempty"`
+}
+
+// IntegrationControl is deliberately small: it selects a closed preparation
+// profile, while branch.integrationBranch and branch.taskPattern on the same
+// workspace remain the target and reclaim declarations.
+type IntegrationControl struct {
+	PrepareProfile string `yaml:"prepareProfile,omitempty"`
 }
 
 // WorkspaceAccess describes the remote-write contract for a workspace.

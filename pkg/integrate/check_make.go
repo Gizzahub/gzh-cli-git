@@ -245,7 +245,9 @@ func shellCDPrefix(prefix string) bool {
 	return strings.HasSuffix(shell, "sh")
 }
 
-func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe, allowSkipped bool) CheckItem {
+// judgeMakeLegacy preserves the repository-owned baseline comparison used when
+// no controller has captured a prepared target probe.
+func judgeMakeLegacy(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe, allowSkipped bool) CheckItem {
 	name := "make " + probe.Target
 	if !probe.Defined {
 		return CheckItem{Name: name, Status: checkSkip, Detail: "undefined"}
@@ -283,6 +285,69 @@ func judgeMake(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe,
 	if err != nil {
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
+	if verdict.Status == BaselineFail {
+		return CheckItem{Name: name, Status: checkFail, Detail: verdict.Reason}
+	}
+	return CheckItem{Name: name, Status: checkWarn, Detail: "baseline failure, non-worsening: " + verdict.Reason}
+}
+
+// judgeMakeAgainstProbe consumes a target measurement captured before source
+// code exists. Parser and baseline rules remain exactly the legacy rules.
+func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe, allowSkipped bool, base makeProbe) CheckItem {
+	if base.Target == "" {
+		return judgeMakeLegacy(ctx, g, plan, probe, allowSkipped)
+	}
+	name := "make " + probe.Target
+	if !probe.Defined {
+		return CheckItem{Name: name, Status: checkSkip, Detail: "undefined"}
+	}
+	if probe.Unavailable != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: " + probe.Unavailable}
+	}
+	if probe.Target == "lint" {
+		if err := foreignDiagnosticError("branch", probe.Output); err != nil {
+			return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
+		}
+	}
+	if probe.MissingCD != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: fmt.Sprintf("not run — %q missing in this tree", probe.MissingCD)}
+	}
+	if probe.Err == nil {
+		if probe.Skipped && !allowSkipped {
+			return CheckItem{Name: name, Status: checkFail, Detail: "SKIPPED CHECK (not a pass); pass --allow-skipped-checks to downgrade"}
+		}
+		if probe.Skipped {
+			return CheckItem{Name: name, Status: checkWarn, Detail: "SKIPPED CHECK downgraded by --allow-skipped-checks"}
+		}
+		return CheckItem{Name: name, Status: checkPass, Detail: "ok"}
+	}
+	if base.Unavailable != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: baseline make " + probe.Target + ": " + base.Unavailable}
+	}
+	if base.MissingCD != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: fmt.Sprintf("baseline make %s did not run — %q missing in target tree", probe.Target, base.MissingCD)}
+	}
+	if probe.Target == "lint" {
+		if err := foreignDiagnosticError("baseline", base.Output); err != nil {
+			return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
+		}
+	}
+	if base.Err == nil {
+		return CheckItem{Name: name, Status: checkFail, Detail: fmt.Sprintf("failed here (rc=%d) but target tip passes", probe.Code)}
+	}
+	branchTracked, err := g.lsTreeNames(ctx, plan.BranchSHA)
+	if err != nil {
+		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
+	}
+	baseTracked, err := g.lsTreeNames(ctx, plan.TargetSHA)
+	if err != nil {
+		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
+	}
+	changed, err := g.diffNames(ctx, plan.TargetSHA, plan.BranchSHA)
+	if err != nil {
+		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
+	}
+	verdict := EvaluateBaseline(BaselineInput{BranchLocations: ExtractLocations(probe.Output, branchTracked), BaseLocations: ExtractLocations(base.Output, baseTracked), ChangedPaths: changed})
 	if verdict.Status == BaselineFail {
 		return CheckItem{Name: name, Status: checkFail, Detail: verdict.Reason}
 	}

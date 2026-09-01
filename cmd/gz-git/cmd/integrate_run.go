@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	integrateRunTarget          string
-	integrateRunDirectToDefault bool
-	integrateRunRelease         bool
-	integrateRunAllowSkipped    bool
+	integrateRunTarget           string
+	integrateRunDirectToDefault  bool
+	integrateRunRelease          bool
+	integrateRunAllowSkipped     bool
+	integrateRunControllerConfig string
 )
 
 var integrateRunCmd = &cobra.Command{
@@ -50,6 +51,7 @@ func init() {
 	integrateRunCmd.Flags().BoolVar(&integrateRunDirectToDefault, "direct-to-default", false, "allow targeting the default branch when no integration branch exists")
 	integrateRunCmd.Flags().BoolVar(&integrateRunRelease, "release", false, "promote the integration branch onto the default branch")
 	integrateRunCmd.Flags().BoolVar(&integrateRunAllowSkipped, "allow-skipped-checks", false, "allow a repo with no check/lint gate, and downgrade SKIPPED CHECK banners to warnings")
+	integrateRunCmd.Flags().StringVar(&integrateRunControllerConfig, "controller-config", "", "explicit devbox/controller config; never searched automatically")
 }
 
 func runIntegrateRun(cmd *cobra.Command, args []string) error {
@@ -71,6 +73,7 @@ func runIntegrateRun(cmd *cobra.Command, args []string) error {
 			DirectToDefault:    integrateRunDirectToDefault,
 			Release:            integrateRunRelease,
 			AllowSkippedChecks: integrateRunAllowSkipped,
+			ControllerConfig:   integrateRunControllerConfig,
 		},
 	})
 	if report != nil && !quiet {

@@ -15,6 +15,10 @@ Target-owned readiness contracts use narrow, separately reviewed procedures:
 [readiness contract update](integrate-readiness-update.md) changes one that
 already exists.
 
+[Controller-config integration](integrate-controller-config.md) is the
+explicit devbox-only policy path for repositories that have no target-owned
+readiness contract.
+
 ## Global Flags
 
 | Flag        | Short | Description               |
@@ -318,7 +322,7 @@ have unpushed commits but `push` says up-to-date":
 | Column   | Compares HEAD against                        | Moved by           |
 | -------- | -------------------------------------------- | ------------------ |
 | `BRANCH` | its upstream (`@{upstream}`)                 | `push` / `pull`    |
-| `BASE`   | the **local** base branch (`master`, `main`)  | `merge` / `rebase` |
+| `BASE`   | the **local** base branch (`master`, `main`) | `merge` / `rebase` |
 
 A legend under the summary line names both. `push` acts on the `BRANCH` axis
 only, so a repository with a blank `BRANCH` and a large `BASE` is genuinely

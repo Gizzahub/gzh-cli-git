@@ -239,7 +239,7 @@ func TestForeignDiagnosticLocations(t *testing.T) {
 }
 
 func TestJudgeMake_ForeignBranchDiagnosticFailsDespiteSuccessfulExit(t *testing.T) {
-	item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+	item := judgeMakeLegacy(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
 		Target:  "lint",
 		Defined: true,
 		Output:  "../deleted-worktree/pkg/check.go:12: stale\n",
@@ -250,7 +250,7 @@ func TestJudgeMake_ForeignBranchDiagnosticFailsDespiteSuccessfulExit(t *testing.
 }
 
 func TestJudgeMake_CheckAllowsForeignDiagnosticOutput(t *testing.T) {
-	item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+	item := judgeMakeLegacy(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
 		Target:  "check",
 		Defined: true,
 		Output:  "../other-worktree/pkg/check.go:12: diagnostic\n",
@@ -262,7 +262,7 @@ func TestJudgeMake_CheckAllowsForeignDiagnosticOutput(t *testing.T) {
 
 func TestJudgeMake_MissingCDFailsEvenWhenSkippedChecksAreAllowed(t *testing.T) {
 	for _, allowSkipped := range []bool{false, true} {
-		item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+		item := judgeMakeLegacy(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
 			Target:    "lint",
 			Defined:   true,
 			MissingCD: "missing-component",
@@ -275,12 +275,23 @@ func TestJudgeMake_MissingCDFailsEvenWhenSkippedChecksAreAllowed(t *testing.T) {
 
 func TestJudgeMake_UnavailableFailsBeforeBaselineEvenWhenSkippedChecksAreAllowed(t *testing.T) {
 	for _, allowSkipped := range []bool{false, true} {
-		item := judgeMake(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+		item := judgeMakeLegacy(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
 			Target: "lint", Defined: true, Unavailable: "golangci-lint lock persisted after 3 attempts",
 		}, allowSkipped)
 		if item.Status != checkFail || !strings.Contains(item.Detail, "measurement unavailable") {
 			t.Fatalf("allowSkipped=%v unavailable = %+v", allowSkipped, item)
 		}
+	}
+}
+
+func TestJudgeMakeAgainstProbeRejectsBaselineMissingCD(t *testing.T) {
+	item := judgeMakeAgainstProbe(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
+		Target: "lint", Defined: true, Err: errors.New("branch lint failed"), Code: 1,
+	}, false, makeProbe{
+		Target: "lint", Defined: true, Err: errors.New("baseline lint failed"), MissingCD: "ent/generated",
+	})
+	if item.Status != checkFail || !strings.Contains(item.Detail, "baseline make lint did not run") {
+		t.Fatalf("baseline missing cd = %+v", item)
 	}
 }
 

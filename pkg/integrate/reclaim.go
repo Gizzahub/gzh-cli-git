@@ -32,6 +32,7 @@ type reclaimOpts struct {
 	DefaultName  string
 	Integration  string
 	Remote       string
+	PushRemote   string
 	TaskSHA      string
 	Patterns     []string
 	Facts        []string
@@ -177,12 +178,16 @@ func reclaimRemoteBranch(ctx context.Context, sg gitRepo, opts reclaimOpts, out 
 	// tip would drop work that never landed on the target.
 	ref := "refs/heads/" + opts.Branch
 	lease := "--force-with-lease=" + ref + ":" + opts.TaskSHA
-	del, err := sg.run(ctx, "push", lease, opts.Remote, ":"+ref)
+	pushRemote := opts.PushRemote
+	if pushRemote == "" {
+		pushRemote = opts.Remote
+	}
+	del, err := sg.run(ctx, "push", lease, pushRemote, ":"+ref)
 	if err == nil && (del == nil || del.ExitCode == 0) {
 		out.Done = append(out.Done, "remote-branch")
 		return true
 	}
-	heads, lsErr := sg.output(ctx, "ls-remote", "--heads", opts.Remote, opts.Branch)
+	heads, lsErr := sg.output(ctx, "ls-remote", "--heads", pushRemote, opts.Branch)
 	if lsErr != nil || strings.TrimSpace(heads) != "" {
 		detail := ""
 		if del != nil {

@@ -66,6 +66,9 @@ func runChecked(ctx context.Context, exec *gitcmd.Executor, opts RunOptions, che
 		return report, err
 	}
 	g.dir = root
+	if err := revalidateController(ctx, g, check); err != nil {
+		return report, err
+	}
 
 	sourceSHA, targetSHA, targetName, err := revalidateCheckedRefs(ctx, g, check)
 	if err != nil {
@@ -79,8 +82,15 @@ func runChecked(ctx context.Context, exec *gitcmd.Executor, opts RunOptions, che
 	if !anc {
 		return report, fmt.Errorf("%s is not an ancestor of %s; rebase and re-check", check.Plan.Target, check.Plan.Branch)
 	}
+	if err := revalidateController(ctx, g, check); err != nil {
+		return report, err
+	}
 
-	if err := pushFastForward(ctx, g, check.Plan.Remote, sourceSHA, targetName, check.Plan.TargetSHA); err != nil {
+	pushRemote := check.Plan.Remote
+	if check.Controller != nil {
+		pushRemote = check.Controller.RemoteURL
+	}
+	if err := pushFastForward(ctx, g, pushRemote, sourceSHA, targetName, check.Plan.TargetSHA); err != nil {
 		return report, err
 	}
 	if err := ffTargetWorktrees(ctx, exec, g, targetName, sourceSHA); err != nil {
@@ -183,7 +193,15 @@ func ffTargetWorktrees(ctx context.Context, exec *gitcmd.Executor, g gitRepo, ta
 }
 
 func finishRunReclaim(ctx context.Context, exec *gitcmd.Executor, g gitRepo, root, targetName string, report *RunReport) (*RunReport, error) {
+	if err := revalidateController(ctx, g, report.Check); err != nil {
+		return report, err
+	}
 	decl, loadErr := config.LoadRepoRootTaskPattern(root)
+	if report.Check.Controller != nil {
+		decl.Patterns = append([]string(nil), report.Check.Controller.TaskPattern...)
+		decl.Facts = nil
+		loadErr = nil
+	}
 	if loadErr != nil {
 		report.Reclaim.Skipped = "reclaim nothing: " + loadErr.Error()
 		report.Printed = append(report.Printed, "RECLAIM skipped: "+report.Reclaim.Skipped)
@@ -194,6 +212,7 @@ func finishRunReclaim(ctx context.Context, exec *gitcmd.Executor, g gitRepo, roo
 			DefaultName:  defaultBranchName(report.Check.Plan.DefaultRef, report.Check.Plan.Remote),
 			Integration:  report.Check.Plan.Integration.Name,
 			Remote:       report.Check.Plan.Remote,
+			PushRemote:   controllerPushRemote(report.Check),
 			TaskSHA:      report.SHA,
 			Patterns:     decl.Patterns,
 			Facts:        decl.Facts,
@@ -209,6 +228,13 @@ func finishRunReclaim(ctx context.Context, exec *gitcmd.Executor, g gitRepo, roo
 		}
 	}
 	return report, nil
+}
+
+func controllerPushRemote(check *CheckReport) string {
+	if check != nil && check.Controller != nil {
+		return check.Controller.RemoteURL
+	}
+	return ""
 }
 
 // FormatRun renders integrate/reclaim lines.

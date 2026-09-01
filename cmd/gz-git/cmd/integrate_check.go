@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	integrateCheckTarget          string
-	integrateCheckDirectToDefault bool
-	integrateCheckRelease         bool
-	integrateCheckAllowSkipped    bool
+	integrateCheckTarget           string
+	integrateCheckDirectToDefault  bool
+	integrateCheckRelease          bool
+	integrateCheckAllowSkipped     bool
+	integrateCheckControllerConfig string
 )
 
 var integrateCheckCmd = &cobra.Command{
@@ -47,6 +48,7 @@ func init() {
 	integrateCheckCmd.Flags().BoolVar(&integrateCheckDirectToDefault, "direct-to-default", false, "allow targeting the default branch when no integration branch exists")
 	integrateCheckCmd.Flags().BoolVar(&integrateCheckRelease, "release", false, "promote the integration branch onto the default branch")
 	integrateCheckCmd.Flags().BoolVar(&integrateCheckAllowSkipped, "allow-skipped-checks", false, "allow a repo with no check/lint gate, and downgrade SKIPPED CHECK banners to warnings")
+	integrateCheckCmd.Flags().StringVar(&integrateCheckControllerConfig, "controller-config", "", "explicit devbox/controller config; never searched automatically")
 }
 
 func runIntegrateCheck(cmd *cobra.Command, args []string) error {
@@ -67,6 +69,7 @@ func runIntegrateCheck(cmd *cobra.Command, args []string) error {
 		DirectToDefault:    integrateCheckDirectToDefault,
 		Release:            integrateCheckRelease,
 		AllowSkippedChecks: integrateCheckAllowSkipped,
+		ControllerConfig:   integrateCheckControllerConfig,
 	})
 	if err != nil {
 		msg := err.Error()

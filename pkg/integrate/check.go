@@ -29,6 +29,9 @@ type CheckOptions struct {
 	Release            bool
 	AllowSkippedChecks bool
 	IntegrationConfig  []string
+	// ControllerConfig is an explicit devbox/controller file. It is never
+	// discovered from ancestors and never inherits repository readiness.
+	ControllerConfig string
 }
 
 // CheckItem is one readiness row.
@@ -56,6 +59,7 @@ type CheckReport struct {
 	ReadinessTreeOID  string
 	ReadinessStatus   string
 	ReadinessDuration time.Duration
+	Controller        *controllerBinding
 }
 
 // Check answers whether the branch can land on the target.
@@ -77,6 +81,10 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 	}
 	g.dir = root
 
+	controller, err := resolveCheckController(ctx, g, &opts)
+	if err != nil {
+		return nil, err
+	}
 	if len(opts.IntegrationConfig) == 0 {
 		decl, err := config.LoadRepoRootTaskPattern(root)
 		if err != nil {
@@ -90,7 +98,7 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 		return nil, err
 	}
 
-	report := &CheckReport{Plan: plan}
+	report := &CheckReport{Plan: plan, Controller: controller}
 	add := func(item CheckItem) {
 		report.Items = append(report.Items, item)
 		switch item.Status {
@@ -120,13 +128,21 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 			add(CheckItem{Name: "make", Status: checkFail, Detail: "HEAD is not the branch; cannot run tests"})
 		} else {
 			declared := 0
+			prepared, prepErr := prepareLegacyTrees(ctx, g, plan, controller)
+			if prepErr != nil {
+				add(CheckItem{Name: "prepare", Status: checkFail, Detail: prepErr.Error()})
+				break
+			}
 			for _, target := range []string{"check", "lint"} {
-				probe := runMakeTarget(ctx, g.dir, target)
-				item := judgeMake(ctx, g, plan, probe, opts.AllowSkippedChecks)
+				probe := runMakeTarget(ctx, prepared.source, target)
+				item := judgeMakeAgainstProbe(ctx, g, plan, probe, opts.AllowSkippedChecks, prepared.baseline[target])
 				if item.Status != checkSkip {
 					declared++
 					add(item)
 				}
+			}
+			if err := prepared.cleanup(ctx); err != nil {
+				add(CheckItem{Name: "prepare cleanup", Status: checkFail, Detail: err.Error()})
 			}
 			if declared == 0 {
 				status := checkFail
@@ -141,6 +157,35 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 	}
 	report.Ready = report.Failures == 0
 	return report, nil
+}
+
+func resolveCheckController(ctx context.Context, g gitRepo, opts *CheckOptions) (*controllerBinding, error) {
+	if strings.TrimSpace(opts.ControllerConfig) == "" {
+		return nil, nil //nolint:nilnil // an omitted optional controller has no binding
+	}
+	branch := opts.Branch
+	if branch == "" {
+		var err error
+		branch, err = g.currentBranch(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	controller, err := resolveController(ctx, g, opts.ControllerConfig, branch)
+	if err != nil {
+		return nil, err
+	}
+	opts.IntegrationConfig = append([]string(nil), controller.Integration...)
+	controllerTarget := targetBranchName(opts.Target, controller.Remote)
+	if opts.Target != "" && controllerTarget != controller.Integration[0] {
+		return nil, fmt.Errorf("--target must equal controller integration branch %s", controller.Integration[0])
+	}
+	// The controller is authoritative: a spelling such as origin/develop
+	// selects its declared branch, never a same-named repository setting.
+	if opts.Target != "" {
+		opts.Target = controller.Remote + "/" + controller.Integration[0]
+	}
+	return controller, nil
 }
 
 func checkFreshness(ctx context.Context, g gitRepo, plan TargetPlan) CheckItem {

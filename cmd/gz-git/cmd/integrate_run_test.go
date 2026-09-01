@@ -13,7 +13,7 @@ import (
 
 func TestIntegrateRunHelp(t *testing.T) {
 	cmd := findCommand(t, rootCmd, "integrate", "run")
-	for _, name := range []string{"target", "direct-to-default", "release", "allow-skipped-checks"} {
+	for _, name := range []string{"target", "direct-to-default", "release", "allow-skipped-checks", "controller-config"} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("integrate run missing --%s", name)
 		}
@@ -63,17 +63,20 @@ func setIntegrateRunGlobals(t *testing.T) func() {
 	origDirect := integrateRunDirectToDefault
 	origRelease := integrateRunRelease
 	origSkip := integrateRunAllowSkipped
+	origController := integrateRunControllerConfig
 	origQuiet := quiet
 	integrateRunTarget = ""
 	integrateRunDirectToDefault = false
 	integrateRunRelease = false
 	integrateRunAllowSkipped = false
+	integrateRunControllerConfig = ""
 	quiet = false
 	return func() {
 		integrateRunTarget = origTarget
 		integrateRunDirectToDefault = origDirect
 		integrateRunRelease = origRelease
 		integrateRunAllowSkipped = origSkip
+		integrateRunControllerConfig = origController
 		quiet = origQuiet
 	}
 }

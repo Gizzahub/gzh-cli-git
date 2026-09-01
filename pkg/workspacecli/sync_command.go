@@ -785,7 +785,7 @@ func verifyWorkspaceOriginBinding(ctx context.Context, repoPath, configuredURL s
 // gitConfigValues returns every raw value visible to Git after normal scope and
 // include processing. Git's -z form preserves exact whitespace and embedded
 // newlines; values are never trimmed or normalized at this boundary.
-func gitConfigValues(ctx context.Context, repoPath string, localOnly bool, key string) ([]string, bool, error) {
+func gitConfigValues(ctx context.Context, repoPath string, localOnly bool, key string) (values []string, found bool, err error) {
 	args := []string{"-C", repoPath, "config"}
 	if localOnly {
 		args = append(args, "--local")
@@ -796,12 +796,13 @@ func gitConfigValues(ctx context.Context, repoPath string, localOnly bool, key s
 	cmd := exec.CommandContext(ctx, "git", args...) // #nosec G204 -- fixed configuration key is queried in the selected checkout.
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return nil, false, nil
 		}
 		return nil, false, err
 	}
-	values, err := splitNULConfigValues(output)
+	values, err = splitNULConfigValues(output)
 	if err != nil {
 		return nil, false, err
 	}
@@ -812,7 +813,8 @@ func rejectApplicableURLRewrite(ctx context.Context, repoPath, endpoint string, 
 	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "config", "--includes", "--get-regexp", `^url\.`) // #nosec G204 -- fixed Git query against selected checkout.
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return nil // No rewrite rules are the normal case.
 		}
 		return fmt.Errorf("inspect URL rewrites: %w", err)

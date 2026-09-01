@@ -27,7 +27,7 @@ func TestRecordWorkspaceIntegrationBranchesFreshExistingAndIdempotent(t *testing
 	if err := recordWorkspaceIntegrationBranches(context.Background(), result, cfg); err != nil {
 		t.Fatalf("record fresh workspace integration branch: %v", err)
 	}
-	if got := localGitConfig(t, fx.Clone, "workflow.integrationBranch"); got != "release/1.27" {
+	if got := localIntegrationBranch(t, fx.Clone); got != "release/1.27" {
 		t.Fatalf("fresh integration branch = %q, want release/1.27", got)
 	}
 
@@ -35,14 +35,14 @@ func TestRecordWorkspaceIntegrationBranchesFreshExistingAndIdempotent(t *testing
 	if err := recordWorkspaceIntegrationBranches(context.Background(), result, cfg); err != nil {
 		t.Fatalf("record existing workspace integration branch: %v", err)
 	}
-	if got := localGitConfig(t, fx.Clone, "workflow.integrationBranch"); got != "release/1.27" {
+	if got := localIntegrationBranch(t, fx.Clone); got != "release/1.27" {
 		t.Fatalf("existing integration branch = %q, want release/1.27", got)
 	}
 
 	if err := recordWorkspaceIntegrationBranches(context.Background(), result, cfg); err != nil {
 		t.Fatalf("record idempotent workspace integration branch: %v", err)
 	}
-	if got := localGitConfig(t, fx.Clone, "workflow.integrationBranch"); got != "release/1.27" {
+	if got := localIntegrationBranch(t, fx.Clone); got != "release/1.27" {
 		t.Fatalf("idempotent integration branch = %q, want release/1.27", got)
 	}
 }
@@ -265,13 +265,13 @@ func TestRecordWorkspaceIntegrationBranchesRollsBackCanceledMutatingWriter(t *te
 		return nil
 	}
 	if err := recordWorkspaceIntegrationBranchesWithWriter(ctx, result, cfg, writer); err == nil {
-		t.Fatal("cancelled mutating writer unexpectedly succeeded")
+		t.Fatal("canceled mutating writer unexpectedly succeeded")
 	}
-	if got := localGitConfig(t, first.Clone, "workflow.integrationBranch"); got != "before/first" {
-		t.Fatalf("first branch after cancelled rollback = %q", got)
+	if got := localIntegrationBranch(t, first.Clone); got != "before/first" {
+		t.Fatalf("first branch after canceled rollback = %q", got)
 	}
-	if got := localGitConfig(t, second.Clone, "workflow.integrationBranch"); got != "before/second" {
-		t.Fatalf("current branch after cancelled rollback = %q", got)
+	if got := localIntegrationBranch(t, second.Clone); got != "before/second" {
+		t.Fatalf("current branch after canceled rollback = %q", got)
 	}
 }
 
@@ -340,7 +340,7 @@ func TestWorkspaceSyncRecordsIntegrationBranchAfterSuccessfulClone(t *testing.T)
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("workspace sync run %d: %v\n%s", run+1, err, output.String())
 		}
-		if got := localGitConfig(t, target, "workflow.integrationBranch"); got != "release/1.27" {
+		if got := localIntegrationBranch(t, target); got != "release/1.27" {
 			t.Fatalf("sync run %d integration branch = %q, want release/1.27", run+1, got)
 		}
 	}
@@ -363,7 +363,7 @@ func TestWorkspaceSyncRecordsIntegrationBranchForRelativeWorkspacePath(t *testin
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("workspace sync relative path: %v\n%s", err, output.String())
 	}
-	if got := localGitConfig(t, filepath.Join(workspace, "engine"), "workflow.integrationBranch"); got != "release/1.27" {
+	if got := localIntegrationBranch(t, filepath.Join(workspace, "engine")); got != "release/1.27" {
 		t.Fatalf("relative workspace integration branch = %q", got)
 	}
 }
@@ -395,8 +395,9 @@ func writeIntegrationWorkspaceConfig(t *testing.T, workspace, target, remote, br
 	return configPath
 }
 
-func localGitConfig(t *testing.T, path, key string) string {
+func localIntegrationBranch(t *testing.T, path string) string {
 	t.Helper()
+	const key = "workflow.integrationBranch"
 	output, err := gitOutputE(path, "config", "--local", "--get", key)
 	if err != nil {
 		t.Fatalf("read %s: %v", key, err)

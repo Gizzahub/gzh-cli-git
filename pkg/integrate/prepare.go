@@ -21,6 +21,8 @@ type preparedLegacy struct {
 	g            gitRepo
 }
 
+const prepareProfileTimeout = 5 * time.Minute
+
 func (p preparedLegacy) cleanup(ctx context.Context) error {
 	if p.root == "" {
 		return nil
@@ -103,7 +105,7 @@ func runPrepareProfile(parent context.Context, g gitRepo, dir, profile string) e
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(parent, prepareProfileTimeout)
 	defer cancel()
 	isolated, err := os.MkdirTemp("", "gz-git-integrate-go-env-")
 	if err != nil {

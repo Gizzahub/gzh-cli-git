@@ -30,7 +30,9 @@ workspaces:
 It runs `go generate ./ent` in isolated detached source and target worktrees
 with isolated Go caches before the existing Make gates. Generated output must
 be untracked and below `ent/generated`; any tracked mutation or other output
-fails the check. No shell command is configurable.
+fails the check. Each preparation receives a fixed five-minute budget so a
+cold isolated module cache can be populated. No shell command or timeout is
+configurable.
 
 This is not a sandbox: as with the legacy Make gate, the selected task branch
 is trusted to execute repository-owned code. The command receives an isolated

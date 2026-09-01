@@ -1029,14 +1029,14 @@ func planForgeWorkspaces(ctx context.Context, cfg *config.Config, out io.Writer,
 		}
 
 		planner := reposync.NewForgePlanner(prov, plannerConfig)
+		defaultStrategy, err := workspaceSyncStrategy(ws, cfg, strategyOverride)
+		if err != nil {
+			return nil, fmt.Errorf("workspace %q strategy: %w", name, err)
+		}
 		planReq := reposync.PlanRequest{
 			Options: reposync.PlanOptions{
-				DefaultStrategy: workspaceSyncStrategy(ws, strategyOverride),
+				DefaultStrategy: defaultStrategy,
 			},
-		}
-
-		if planReq.Options.DefaultStrategy == "" {
-			planReq.Options.DefaultStrategy = reposync.StrategyReset
 		}
 
 		// Enable orphan cleanup if configured
@@ -1180,9 +1180,9 @@ func planGitWorkspaces(ctx context.Context, cfg *config.Config, configDir string
 		}
 
 		// Determine strategy
-		strategy := workspaceSyncStrategy(ws, strategyOverride)
-		if strategy == "" {
-			strategy = reposync.StrategyReset
+		strategy, err := workspaceSyncStrategy(ws, cfg, strategyOverride)
+		if err != nil {
+			return nil, fmt.Errorf("workspace %q strategy: %w", name, err)
 		}
 
 		// Extract branch from workspace config, falling back to root config
@@ -1229,20 +1229,28 @@ func planGitWorkspaces(ctx context.Context, cfg *config.Config, configDir string
 	return allActions, nil
 }
 
-func workspaceSyncStrategy(ws *config.Workspace, override reposync.Strategy) reposync.Strategy {
+func workspaceSyncStrategy(ws *config.Workspace, cfg *config.Config, override reposync.Strategy) (reposync.Strategy, error) {
 	if ws.Access.IsReadOnly() {
-		return reposync.StrategyPull
+		return reposync.StrategyPull, nil
 	}
 	if override != "" {
-		return override
+		return override, nil
 	}
 	if ws.Sync != nil && ws.Sync.Strategy != "" {
 		strategy, err := reposync.ParseStrategy(ws.Sync.Strategy)
-		if err == nil {
-			return strategy
+		if err != nil {
+			return "", err
 		}
+		return strategy, nil
 	}
-	return ""
+	if cfg != nil && cfg.GetSyncStrategy() != "" {
+		strategy, err := reposync.ParseStrategy(cfg.GetSyncStrategy())
+		if err != nil {
+			return "", err
+		}
+		return strategy, nil
+	}
+	return reposync.StrategyReset, nil
 }
 
 // planConfigWorkspaces loads child configs from type=config workspaces with sync.recursive=true

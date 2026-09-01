@@ -238,6 +238,262 @@ func TestForeignDiagnosticLocations(t *testing.T) {
 	}
 }
 
+func TestLexicallyForeignDiagnosticPath_PreservesLegacyAndSlashForms(t *testing.T) {
+	for _, path := range []string{"../old-worktree/pkg/x.go", "./../old-worktree/pkg/x.go", "subdir/../../outside.go", "/absolute/x.go"} {
+		if !isLexicallyForeignDiagnosticPath(path) {
+			t.Fatalf("%q must be lexically foreign", path)
+		}
+	}
+	if isLexicallyForeignDiagnosticPath("subdir/../file.go") {
+		t.Fatal("legacy internal subdir/../file.go must not become foreign")
+	}
+}
+
+func TestForeignDiagnosticLocationsForProbe_AllowsOnlyCapturedGoRootSrc(t *testing.T) {
+	root := t.TempDir()
+	work := filepath.Join(root, "work")
+	goRoot := filepath.Join(root, "go-real")
+	src := filepath.Join(goRoot, "src")
+	allowed := filepath.Join(src, "runtime", "runtime.go")
+	other := filepath.Join(root, "other", "outside.go")
+	prefixCollision := filepath.Join(root, "go-real", "src-sibling", "bad.go")
+	if err := os.MkdirAll(filepath.Dir(allowed), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(other), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(prefixCollision), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{allowed, other, prefixCollision} {
+		if err := os.WriteFile(path, []byte("fixture"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	relAllowed, err := filepath.Rel(work, allowed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "other"), filepath.Join(src, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	canonicalSrc, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := makeProbe{WorkDir: work, GoRootSrc: canonicalSrc, ControllerPrepared: true, Output: strings.Join([]string{
+		relAllowed + ":1: relative standard library",
+		allowed + ":2: absolute standard library",
+		other + ":3: other external file",
+		prefixCollision + ":4: prefix collision",
+		filepath.Join(src, "escape", "outside.go") + ":5: symlink escape",
+	}, "\n")}
+	probe = freezeGoRootDiagnosticApprovals(probe)
+	got := foreignDiagnosticLocationsForProbe(probe)
+	want := []string{
+		prefixCollision + ":4",
+		filepath.Join(src, "escape", "outside.go") + ":5",
+		other + ":3",
+	}
+	if !bytes.Equal([]byte(strings.Join(got, "\n")), []byte(strings.Join(want, "\n"))) {
+		t.Fatalf("foreign locations = %v, want %v", got, want)
+	}
+
+	probe.GoRootSrc = ""
+	probe.ApprovedForeignLocations = nil
+	if got := foreignDiagnosticLocationsForProbe(probe); len(got) != 5 {
+		t.Fatalf("no captured allowance must reject every external diagnostic, got %v", got)
+	}
+	probe.GoRootSrc = canonicalSrc
+	probe.ControllerPrepared = false
+	if got := foreignDiagnosticLocationsForProbe(probe); len(got) != 5 {
+		t.Fatalf("legacy probe must not consume a controller allowance, got %v", got)
+	}
+}
+
+func TestAnnotateControllerPreparedProbe_DiscoveryFailureLeavesNoAllowance(t *testing.T) {
+	probe := annotateControllerPreparedProbe(context.Background(), makeProbe{
+		WorkDir: filepath.Join(t.TempDir(), "does-not-exist"),
+		Output:  "/outside/file.go:1: diagnostic",
+	})
+	if probe.GoRootSrc != "" {
+		t.Fatalf("failed discovery allowance = %q, want empty", probe.GoRootSrc)
+	}
+	if got := foreignDiagnosticLocationsForProbe(probe); len(got) != 1 {
+		t.Fatalf("failed discovery must reject external diagnostic, got %v", got)
+	}
+}
+
+func TestFreezeGoRootDiagnosticApprovals_ResolvesSymlinksBeforeDotDotAndSurvivesTargetRemoval(t *testing.T) {
+	root := t.TempDir()
+	outerWork := filepath.Join(root, "outer", "work")
+	innerWork := filepath.Join(root, "inner", "work")
+	src := filepath.Join(root, "inner", "goroot", "src")
+	stdlib := filepath.Join(src, "runtime", "runtime.go")
+	if err := os.MkdirAll(outerWork, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(innerWork, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(stdlib), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stdlib, []byte("fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(innerWork, filepath.Join(outerWork, "step")); err != nil {
+		t.Fatal(err)
+	}
+	canonicalSrc, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Lexically cleaning this path would use outer/work/goroot. Component-order
+	// resolution first follows step to inner/work, then applies "..".
+	probe := freezeGoRootDiagnosticApprovals(makeProbe{
+		WorkDir:            outerWork,
+		GoRootSrc:          canonicalSrc,
+		ControllerPrepared: true,
+		Output:             "step/../goroot/src/runtime/runtime.go:1: toolchain",
+	})
+	if len(probe.ApprovedForeignLocations) != 1 {
+		t.Fatalf("symlink then dot-dot diagnostic was not approved: %#v", probe)
+	}
+
+	workLink := filepath.Join(root, "work-link")
+	if err := os.Symlink(innerWork, workLink); err != nil {
+		t.Fatal(err)
+	}
+	symlinkedWorkProbe := freezeGoRootDiagnosticApprovals(makeProbe{
+		WorkDir:            workLink,
+		GoRootSrc:          canonicalSrc,
+		ControllerPrepared: true,
+		Output:             "../goroot/src/runtime/runtime.go:2: toolchain",
+	})
+	if len(symlinkedWorkProbe.ApprovedForeignLocations) != 1 {
+		t.Fatalf("symlinked worktree diagnostic was not approved: %#v", symlinkedWorkProbe)
+	}
+	if err := os.Symlink(src, filepath.Join(outerWork, "stdlib-link")); err != nil {
+		t.Fatal(err)
+	}
+	relativeSymlinkProbe := freezeGoRootDiagnosticApprovals(makeProbe{
+		WorkDir:            outerWork,
+		GoRootSrc:          canonicalSrc,
+		ControllerPrepared: true,
+		Output:             "stdlib-link/runtime/runtime.go:3: toolchain",
+	})
+	if len(relativeSymlinkProbe.ApprovedForeignLocations) != 1 {
+		t.Fatalf("relative symlink into GOROOT was not approved: %#v", relativeSymlinkProbe)
+	}
+	if isLexicallyForeignDiagnosticPath("stdlib-link/runtime/runtime.go") {
+		t.Fatal("relative symlink candidate must not alter legacy foreign classification")
+	}
+	if got := extractLocationsForProbe(relativeSymlinkProbe, nil); len(got) != 0 {
+		t.Fatalf("relative symlink GOROOT location must be excluded from counts, got %v", got)
+	}
+
+	if err := os.RemoveAll(filepath.Join(root, "inner")); err != nil {
+		t.Fatal(err)
+	}
+	if got := foreignDiagnosticLocationsForProbe(probe); len(got) != 0 {
+		t.Fatalf("frozen target approval must survive target deletion, got %v", got)
+	}
+	if got := extractLocationsForProbe(probe, nil); len(got) != 0 {
+		t.Fatalf("frozen target approval must stay out of baseline counts, got %v", got)
+	}
+}
+
+func TestAnnotateControllerPreparedProbe_CapturesCanonicalGoRootSrc(t *testing.T) {
+	probe := annotateControllerPreparedProbe(context.Background(), makeProbe{WorkDir: t.TempDir()})
+	if !probe.ControllerPrepared {
+		t.Fatal("controller preparation marker was not retained")
+	}
+	if probe.GoRootSrc == "" {
+		t.Fatal("go env GOROOT did not produce an allowance")
+	}
+	if got, err := filepath.EvalSymlinks(probe.GoRootSrc); err != nil || got != probe.GoRootSrc {
+		t.Fatalf("GoRootSrc must itself be canonical: got %q canonical %q err=%v", probe.GoRootSrc, got, err)
+	}
+	if info, err := os.Stat(probe.GoRootSrc); err != nil || !info.IsDir() {
+		t.Fatalf("GoRootSrc must be a directory: info=%v err=%v", info, err)
+	}
+}
+
+func TestExtractLocationsForProbe_ExcludesAllowedGoRootLocationsFromCounts(t *testing.T) {
+	root := t.TempDir()
+	work := filepath.Join(root, "work")
+	src := filepath.Join(root, "goroot", "src")
+	stdlib := filepath.Join(src, "runtime", "runtime.go")
+	if err := os.MkdirAll(filepath.Dir(stdlib), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stdlib, []byte("fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	canonicalSrc, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := makeProbe{
+		WorkDir:            work,
+		GoRootSrc:          canonicalSrc,
+		ControllerPrepared: true,
+		Output:             stdlib + ":1: toolchain\nrepo.go:2: repository",
+	}
+	probe = freezeGoRootDiagnosticApprovals(probe)
+	if got, want := extractLocationsForProbe(probe, []string{"repo.go"}), []string{"repo.go:2"}; !bytes.Equal([]byte(strings.Join(got, "\n")), []byte(strings.Join(want, "\n"))) {
+		t.Fatalf("controller baseline locations = %v, want %v", got, want)
+	}
+	probe.ControllerPrepared = false
+	if got := extractLocationsForProbe(probe, []string{"repo.go"}); len(got) != 2 {
+		t.Fatalf("legacy extraction must preserve GOROOT location, got %v", got)
+	}
+}
+
+func TestForeignDiagnosticLocationsForProbe_TargetAndSourceKeepDistinctAllowances(t *testing.T) {
+	root := t.TempDir()
+	makeProbeFor := func(name string) (makeProbe, string) {
+		work := filepath.Join(root, name, "work")
+		src := filepath.Join(root, name, "goroot", "src")
+		file := filepath.Join(src, "runtime", "runtime.go")
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(work, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte("fixture"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		canonicalSrc, err := filepath.EvalSymlinks(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		probe := freezeGoRootDiagnosticApprovals(makeProbe{WorkDir: work, GoRootSrc: canonicalSrc, ControllerPrepared: true, Output: file + ":1: diagnostic"})
+		return probe, file
+	}
+	target, targetFile := makeProbeFor("target")
+	source, sourceFile := makeProbeFor("source")
+	if got := foreignDiagnosticLocationsForProbe(target); len(got) != 0 {
+		t.Fatalf("target's own allowance rejected %s: %v", targetFile, got)
+	}
+	if got := foreignDiagnosticLocationsForProbe(source); len(got) != 0 {
+		t.Fatalf("source's own allowance rejected %s: %v", sourceFile, got)
+	}
+	target.Output = sourceFile + ":1: wrong probe root"
+	if got := foreignDiagnosticLocationsForProbe(target); len(got) != 1 {
+		t.Fatalf("target must not inherit source allowance, got %v", got)
+	}
+}
+
 func TestJudgeMake_ForeignBranchDiagnosticFailsDespiteSuccessfulExit(t *testing.T) {
 	item := judgeMakeLegacy(context.Background(), gitRepo{}, TargetPlan{}, makeProbe{
 		Target:  "lint",

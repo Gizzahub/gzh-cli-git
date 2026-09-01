@@ -34,12 +34,26 @@ func TestPrepareLegacyTrees_TargetBeforeSourceAndNoRegistrationRemains(t *testin
 	if p.baseline["check"].Target != "check" || p.baseline["lint"].Target != "lint" {
 		t.Fatalf("baseline probes not captured: %#v", p.baseline)
 	}
+	if !p.controllerPrepared || !p.baseline["lint"].ControllerPrepared {
+		t.Fatalf("controller prepared evidence was not retained: %#v", p)
+	}
 	root := p.root
 	if err := p.cleanup(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("prepare root remains: %v", err)
+	}
+}
+
+func TestPreparedLegacyWithoutControllerDoesNotAnnotateProbe(t *testing.T) {
+	p, err := prepareLegacyTrees(context.Background(), gitRepo{dir: t.TempDir()}, TargetPlan{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := p.annotateProbe(context.Background(), makeProbe{WorkDir: p.source})
+	if probe.ControllerPrepared || probe.GoRootSrc != "" {
+		t.Fatalf("legacy probe gained controller allowance: %#v", probe)
 	}
 }
 

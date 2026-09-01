@@ -17,14 +17,22 @@ import (
 )
 
 type makeProbe struct {
-	Target      string
-	Defined     bool
-	Skipped     bool
-	MissingCD   string
-	Output      string
-	Err         error
-	Code        int
-	Unavailable string
+	Target string
+	// WorkDir records where Make was measured. GoRootSrc and
+	// ControllerPrepared are added only for controller-prepared probes; they
+	// retain the measurement-specific evidence because the target worktree is
+	// gone before the source probe runs.
+	WorkDir                  string
+	GoRootSrc                string
+	ApprovedForeignLocations []string
+	ControllerPrepared       bool
+	Defined                  bool
+	Skipped                  bool
+	MissingCD                string
+	Output                   string
+	Err                      error
+	Code                     int
+	Unavailable              string
 }
 
 const (
@@ -70,7 +78,7 @@ func runMakeTargetOnce(ctx context.Context, dir, target string) makeProbe {
 		var err error
 		lintCache, err = os.MkdirTemp("", "gz-git-integrate-golangci-lint-")
 		if err != nil {
-			return makeProbe{Target: target, Err: fmt.Errorf("create golangci-lint cache: %w", err)}
+			return makeProbe{Target: target, WorkDir: dir, Err: fmt.Errorf("create golangci-lint cache: %w", err)}
 		}
 		defer func() { _ = os.RemoveAll(lintCache) }()
 	}
@@ -86,7 +94,7 @@ func runMakeTargetOnce(ctx context.Context, dir, target string) makeProbe {
 	cmd.Stderr = &buf
 	err := cmd.Run()
 	out := buf.String()
-	probe := makeProbe{Target: target, Output: out, Err: err}
+	probe := makeProbe{Target: target, WorkDir: dir, Output: out, Err: err}
 	if err == nil {
 		probe.Defined = true
 		if hasSkippedCheck(out) {
@@ -256,7 +264,7 @@ func judgeMakeLegacy(ctx context.Context, g gitRepo, plan TargetPlan, probe make
 		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: " + probe.Unavailable}
 	}
 	if probe.Target == "lint" {
-		if err := foreignDiagnosticError("branch", probe.Output); err != nil {
+		if err := foreignDiagnosticErrorForProbe("branch", probe); err != nil {
 			return CheckItem{
 				Name:   name,
 				Status: checkFail,
@@ -305,7 +313,7 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: " + probe.Unavailable}
 	}
 	if probe.Target == "lint" {
-		if err := foreignDiagnosticError("branch", probe.Output); err != nil {
+		if err := foreignDiagnosticErrorForProbe("branch", probe); err != nil {
 			return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 		}
 	}
@@ -328,7 +336,7 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		return CheckItem{Name: name, Status: checkFail, Detail: fmt.Sprintf("baseline make %s did not run — %q missing in target tree", probe.Target, base.MissingCD)}
 	}
 	if probe.Target == "lint" {
-		if err := foreignDiagnosticError("baseline", base.Output); err != nil {
+		if err := foreignDiagnosticErrorForProbe("baseline", base); err != nil {
 			return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 		}
 	}
@@ -347,7 +355,7 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	if err != nil {
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
-	verdict := EvaluateBaseline(BaselineInput{BranchLocations: ExtractLocations(probe.Output, branchTracked), BaseLocations: ExtractLocations(base.Output, baseTracked), ChangedPaths: changed})
+	verdict := EvaluateBaseline(BaselineInput{BranchLocations: extractLocationsForProbe(probe, branchTracked), BaseLocations: extractLocationsForProbe(base, baseTracked), ChangedPaths: changed})
 	if verdict.Status == BaselineFail {
 		return CheckItem{Name: name, Status: checkFail, Detail: verdict.Reason}
 	}
@@ -378,7 +386,7 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		)
 	}
 	if probe.Target == "lint" {
-		if err := foreignDiagnosticError("baseline", baseProbe.Output); err != nil {
+		if err := foreignDiagnosticErrorForProbe("baseline", baseProbe); err != nil {
 			return BaselineResult{}, err
 		}
 	}
@@ -399,8 +407,8 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		return BaselineResult{}, err
 	}
 	return EvaluateBaseline(BaselineInput{
-		BranchLocations: ExtractLocations(probe.Output, branchTracked),
-		BaseLocations:   ExtractLocations(baseProbe.Output, baseTracked),
+		BranchLocations: extractLocationsForProbe(probe, branchTracked),
+		BaseLocations:   extractLocationsForProbe(baseProbe, baseTracked),
 		ChangedPaths:    changed,
 	}), nil
 }

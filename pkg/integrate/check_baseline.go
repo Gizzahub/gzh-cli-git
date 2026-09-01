@@ -4,7 +4,11 @@
 package integrate
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -132,12 +136,20 @@ func EvaluateBaseline(in BaselineInput) BaselineResult {
 // them against the revision's tracked paths (strip leading components until
 // a tracked path matches). Unmatched paths are kept, fail-closed.
 func ExtractLocations(output string, tracked []string) []string {
+	return extractLocationsForProbe(makeProbe{Output: output}, tracked)
+}
+
+// extractLocationsForProbe preserves legacy extraction unless this is a
+// controller-prepared probe with a verified standard-library allowance. Such
+// external locations are toolchain diagnostics, not repository baseline
+// locations, and therefore must not affect count comparisons.
+func extractLocationsForProbe(probe makeProbe, tracked []string) []string {
 	known := make(map[string]struct{}, len(tracked))
 	for _, p := range tracked {
 		known[p] = struct{}{}
 	}
 	var out []string
-	for _, line := range strings.Split(output, "\n") {
+	for _, line := range strings.Split(probe.Output, "\n") {
 		match := findLocationMatch(line)
 		if match == "" {
 			continue
@@ -146,40 +158,180 @@ func ExtractLocations(output string, tracked []string) []string {
 		if !ok {
 			continue
 		}
+		if probe.approvedForeignLocation(match) {
+			continue
+		}
 		path = normalizeTrackedPath(path, known)
 		out = append(out, path+":"+lineNo)
 	}
 	return uniqueSorted(out)
 }
 
-// foreignDiagnosticLocations finds diagnostic locations that start outside
-// the repository. It must run before normalizeTrackedPath, which intentionally
-// strips leading path components to match tracked files.
+// foreignDiagnosticLocations finds absolute and parent-traversing diagnostic
+// locations before normalizeTrackedPath can erase their provenance.
 func foreignDiagnosticLocations(output string) []string {
+	return foreignDiagnosticLocationsForProbe(makeProbe{Output: output})
+}
+
+func foreignDiagnosticError(scope, output string) error {
+	return foreignDiagnosticErrorForProbe(scope, makeProbe{Output: output})
+}
+
+// annotateControllerPreparedProbe records the canonical standard-library
+// source root observed by this exact prepared worktree. It deliberately does
+// not surface discovery failures: without the evidence, external diagnostics
+// remain rejected by foreignDiagnosticErrorForProbe.
+func annotateControllerPreparedProbe(ctx context.Context, probe makeProbe) makeProbe {
+	probe.ControllerPrepared = true
+	if probe.WorkDir == "" {
+		return probe
+	}
+	cmd := exec.CommandContext(ctx, "go", "env", "GOROOT") // #nosec G204 -- fixed Go subcommand.
+	cmd.Dir = probe.WorkDir
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
+	if err != nil {
+		return probe
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" || !filepath.IsAbs(root) {
+		return probe
+	}
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return probe
+	}
+	canonicalSrc, err := filepath.EvalSymlinks(filepath.Join(canonicalRoot, "src"))
+	if err != nil {
+		return probe
+	}
+	info, err := os.Stat(canonicalSrc)
+	if err != nil || !info.IsDir() {
+		return probe
+	}
+	probe.GoRootSrc = canonicalSrc
+	return freezeGoRootDiagnosticApprovals(probe)
+}
+
+func foreignDiagnosticErrorForProbe(scope string, probe makeProbe) error {
+	foreign := foreignDiagnosticLocationsForProbe(probe)
+	if len(foreign) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s diagnostics reference paths outside the repository: %s", scope, strings.Join(foreign, " "))
+}
+
+// foreignDiagnosticLocationsForProbe allows an external path only when a
+// controller-prepared probe captured a GOROOT/src allowance for the same
+// worktree. It does not make GOROOT configurable and retains fail-closed
+// behavior for every unresolved or escaping path.
+func foreignDiagnosticLocationsForProbe(probe makeProbe) []string {
 	var out []string
-	for _, line := range strings.Split(output, "\n") {
+	for _, line := range strings.Split(probe.Output, "\n") {
 		match := findLocationMatch(line)
 		if match == "" {
 			continue
 		}
 		path, _, ok := splitLoc(match)
-		if !ok {
+		if !ok || !isLexicallyForeignDiagnosticPath(path) {
 			continue
 		}
-		cleaned := filepath.Clean(path)
-		if filepath.IsAbs(path) || filepath.IsAbs(cleaned) || strings.HasPrefix(filepath.ToSlash(cleaned), "../") {
-			out = append(out, match)
+		if probe.approvedForeignLocation(match) {
+			continue
 		}
+		out = append(out, match)
 	}
 	return uniqueSorted(out)
 }
 
-func foreignDiagnosticError(scope, output string) error {
-	foreign := foreignDiagnosticLocations(output)
-	if len(foreign) == 0 {
-		return nil
+// isLexicallyForeignDiagnosticPath is the legacy, filesystem-independent
+// boundary. Keep it separate from controller approval: a relative path can
+// legitimately traverse a symlink into GOROOT/src without being a legacy
+// foreign path.
+func isLexicallyForeignDiagnosticPath(diagnosticPath string) bool {
+	path := filepath.ToSlash(diagnosticPath)
+	if filepath.IsAbs(strings.ReplaceAll(path, "/", string(filepath.Separator))) {
+		return true
 	}
-	return fmt.Errorf("%s diagnostics reference paths outside the repository: %s", scope, strings.Join(foreign, " "))
+	cleaned := pathpkg.Clean(path)
+	return cleaned == ".." || strings.HasPrefix(cleaned, "../")
+}
+
+func (probe makeProbe) approvedForeignLocation(location string) bool {
+	if !probe.ControllerPrepared {
+		return false
+	}
+	for _, approved := range probe.ApprovedForeignLocations {
+		if location == approved {
+			return true
+		}
+	}
+	return false
+}
+
+// freezeGoRootDiagnosticApprovals resolves foreign diagnostic paths while the
+// prepared worktree still exists. The resulting exact location tokens can be
+// safely consumed after the target worktree has been removed.
+func freezeGoRootDiagnosticApprovals(probe makeProbe) makeProbe {
+	if !probe.ControllerPrepared || probe.WorkDir == "" || probe.GoRootSrc == "" {
+		return probe
+	}
+	var approved []string
+	for _, line := range strings.Split(probe.Output, "\n") {
+		location := findLocationMatch(line)
+		if location == "" {
+			continue
+		}
+		path, _, ok := splitLoc(location)
+		if !ok {
+			continue
+		}
+		canonicalPath, err := evalDiagnosticPathInOrder(probe.WorkDir, path)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(probe.GoRootSrc, canonicalPath)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == "." {
+			continue
+		}
+		approved = append(approved, location)
+	}
+	probe.ApprovedForeignLocations = uniqueSorted(approved)
+	return probe
+}
+
+// evalDiagnosticPathInOrder processes path components in order, resolving
+// each symlink before applying a following ".." component. filepath.Join or
+// Clean would erase that ordering and can change the meaning of a diagnostic
+// path that traverses a symlinked worktree.
+func evalDiagnosticPathInOrder(workDir, diagnosticPath string) (string, error) {
+	separatorPath := strings.ReplaceAll(filepath.ToSlash(diagnosticPath), "/", string(filepath.Separator))
+	raw := separatorPath
+	if !filepath.IsAbs(raw) {
+		raw = workDir + string(filepath.Separator) + raw
+	}
+	if !filepath.IsAbs(raw) {
+		return "", fmt.Errorf("diagnostic path is not absolute")
+	}
+	volume := filepath.VolumeName(raw)
+	current := volume + string(filepath.Separator)
+	remainder := strings.TrimPrefix(raw, volume)
+	remainder = strings.TrimLeft(remainder, `/\`)
+	for _, component := range strings.Split(filepath.ToSlash(remainder), "/") {
+		switch component {
+		case "", ".":
+			continue
+		case "..":
+			current = filepath.Dir(current)
+		default:
+			resolved, err := filepath.EvalSymlinks(filepath.Join(current, component))
+			if err != nil {
+				return "", err
+			}
+			current = resolved
+		}
+	}
+	return current, nil
 }
 
 func normalizeTrackedPath(path string, tracked map[string]struct{}) string {

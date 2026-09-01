@@ -16,9 +16,17 @@ import (
 )
 
 type preparedLegacy struct {
-	source, root string
-	baseline     map[string]makeProbe
-	g            gitRepo
+	source, root       string
+	baseline           map[string]makeProbe
+	controllerPrepared bool
+	g                  gitRepo
+}
+
+func (p preparedLegacy) annotateProbe(ctx context.Context, probe makeProbe) makeProbe {
+	if !p.controllerPrepared {
+		return probe
+	}
+	return annotateControllerPreparedProbe(ctx, probe)
 }
 
 const prepareProfileTimeout = 5 * time.Minute
@@ -49,7 +57,11 @@ func prepareLegacyTrees(ctx context.Context, g gitRepo, plan TargetPlan, c *cont
 		cleanupErr := removePreparedWorktree(ctx, g, target, root)
 		return preparedLegacy{}, errors.Join(fmt.Errorf("prepare target: %w", err), cleanupErr)
 	}
-	baseline := map[string]makeProbe{"check": runMakeTarget(ctx, target, "check"), "lint": runMakeTarget(ctx, target, "lint")}
+	prepared := preparedLegacy{controllerPrepared: true}
+	baseline := map[string]makeProbe{
+		"check": prepared.annotateProbe(ctx, runMakeTarget(ctx, target, "check")),
+		"lint":  prepared.annotateProbe(ctx, runMakeTarget(ctx, target, "lint")),
+	}
 	if err := removePreparedWorktree(ctx, g, target, ""); err != nil {
 		return preparedLegacy{}, fmt.Errorf("cleanup prepared target: %w", err)
 	}
@@ -62,7 +74,7 @@ func prepareLegacyTrees(ctx context.Context, g gitRepo, plan TargetPlan, c *cont
 		cleanupErr := removePreparedWorktree(ctx, g, source, root)
 		return preparedLegacy{}, errors.Join(fmt.Errorf("prepare source: %w", err), cleanupErr)
 	}
-	return preparedLegacy{source: source, root: root, baseline: baseline, g: g}, nil
+	return preparedLegacy{source: source, root: root, baseline: baseline, controllerPrepared: true, g: g}, nil
 }
 
 func removePreparedWorktree(parent context.Context, g gitRepo, wt, root string) error {

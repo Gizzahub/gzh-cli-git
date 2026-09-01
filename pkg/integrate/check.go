@@ -134,7 +134,7 @@ func Check(ctx context.Context, exec *gitcmd.Executor, opts CheckOptions) (*Chec
 				break
 			}
 			for _, target := range []string{"check", "lint"} {
-				probe := runMakeTarget(ctx, prepared.source, target)
+				probe := prepared.annotateProbe(ctx, runMakeTarget(ctx, prepared.source, target))
 				item := judgeMakeAgainstProbe(ctx, g, plan, probe, opts.AllowSkippedChecks, prepared.baseline[target])
 				if item.Status != checkSkip {
 					declared++

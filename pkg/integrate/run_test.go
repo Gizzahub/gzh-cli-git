@@ -67,6 +67,32 @@ func TestRun_ReclaimIncompleteWhenMultipleWorktrees(t *testing.T) {
 	if cliutil.ExitReclaimIncomplete != 3 {
 		t.Fatalf("ExitReclaimIncomplete = %d, want 3", cliutil.ExitReclaimIncomplete)
 	}
+	if source, target := gitOutput(t, fx.Worktree, "rev-parse", "HEAD"), gitOutput(t, fx.Clone, "rev-parse", "refs/remotes/origin/develop"); source != target {
+		t.Fatalf("retry precondition: source %s != landed target %s", source, target)
+	}
+
+	// The task and target now point at the same SHA. Removing only the
+	// obstruction and retrying from the task worktree must resume reclaim;
+	// the implicit source=target guard compares branch identity, not SHA.
+	runGit(t, fx.Clone, "worktree", "remove", "--force", extra)
+	retry, err := Run(context.Background(), gitcmd.NewExecutor(), RunOptions{
+		CheckOptions: CheckOptions{RepoPath: fx.Worktree},
+	})
+	if err != nil {
+		t.Fatalf("same-SHA reclaim retry: %v", err)
+	}
+	if !retry.Integrated || retry.Reclaim.Incomplete() {
+		t.Fatalf("same-SHA retry did not finish reclaim: %s", FormatRun(retry))
+	}
+	if _, err := os.Stat(fx.Worktree); !os.IsNotExist(err) {
+		t.Fatalf("task worktree after retry = %v, want removed", err)
+	}
+	if refExists(t, fx.Clone, "refs/heads/dev/actor/feat/task") {
+		t.Fatal("local task branch should be deleted by retry")
+	}
+	if refExists(t, fx.Origin, "refs/heads/dev/actor/feat/task") {
+		t.Fatal("remote task branch should be deleted by retry")
+	}
 }
 
 func TestRun_ReclaimsMatchingPattern(t *testing.T) {

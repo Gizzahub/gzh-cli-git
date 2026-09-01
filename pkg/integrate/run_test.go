@@ -100,6 +100,31 @@ func TestRun_ReclaimsMatchingPattern(t *testing.T) {
 	}
 }
 
+func TestRun_ProtectedTaskPatternIntegratesWithoutReclaim(t *testing.T) {
+	for _, branch := range []string{"hotfix/urgent", "release/1.0"} {
+		t.Run(branch, func(t *testing.T) {
+			fx := runFixtureForBranch(t, branch, strings.Split(branch, "/")[0]+"/*")
+			report, err := Run(context.Background(), gitcmd.NewExecutor(), RunOptions{
+				CheckOptions: CheckOptions{RepoPath: fx.Worktree, Branch: branch},
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if !report.Integrated || report.Reclaim.Incomplete() {
+				t.Fatalf("want integrated with intentional reclaim skip: %s", FormatRun(report))
+			}
+			if !strings.Contains(report.Reclaim.Skipped, "protected from reclaim") {
+				t.Fatalf("reclaim skip = %q, want protected diagnosis", report.Reclaim.Skipped)
+			}
+			if _, err := os.Stat(fx.Worktree); err != nil {
+				t.Fatalf("protected worktree should remain: %v", err)
+			}
+			assertRef(t, fx.Clone, "refs/heads/"+branch)
+			assertRef(t, fx.Origin, "refs/heads/"+branch)
+		})
+	}
+}
+
 func TestRun_ReclaimPreservesSiblingTaskWorktreeAndParent(t *testing.T) {
 	fx := testutil.TempWorktreeWithBareOrigin(t)
 	runGit(t, fx.Clone, "branch", "develop")
@@ -248,10 +273,15 @@ func TestReclaimRemoteBranch_EmptyTaskSHARefusesDelete(t *testing.T) {
 
 func runFixture(t *testing.T, pattern string) *testutil.WorktreeOrigin {
 	t.Helper()
+	return runFixtureForBranch(t, "dev/actor/feat/task", pattern)
+}
+
+func runFixtureForBranch(t *testing.T, branch, pattern string) *testutil.WorktreeOrigin {
+	t.Helper()
 	fx := testutil.TempWorktreeWithBareOrigin(t)
 	runGit(t, fx.Clone, "branch", "develop")
 	runGit(t, fx.Clone, "push", "-u", fx.Remote, "develop")
-	runGit(t, fx.Worktree, "checkout", "-B", "dev/actor/feat/task", "develop")
+	runGit(t, fx.Worktree, "checkout", "-B", branch, "develop")
 	writeFile(t, fx.Worktree, "task.txt", "task\n")
 	body := "branch:\n  integrationBranch: develop\n"
 	if pattern != "" {

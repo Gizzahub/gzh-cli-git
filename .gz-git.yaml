@@ -16,4 +16,3 @@ branch:
     - test/*
     - chore/*
     - agent/*
-    - hotfix/*

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 // ReclaimResult records what reclaim did after a successful integrate.
@@ -40,6 +41,10 @@ type reclaimOpts struct {
 
 func reclaimAfter(ctx context.Context, exec *gitcmd.Executor, g gitRepo, opts reclaimOpts) ReclaimResult {
 	var out ReclaimResult
+	if repository.IsProtected(opts.Branch) {
+		out.Skipped = fmt.Sprintf("%s is protected from reclaim", opts.Branch)
+		return out
+	}
 	if opts.Branch == opts.TargetBranch ||
 		(opts.DefaultName != "" && opts.Branch == opts.DefaultName) ||
 		(opts.Integration != "" && opts.Branch == opts.Integration) {

@@ -106,10 +106,10 @@ func TestRecordWorkspaceIntegrationBranchesRejectsRepoRootManagedMarker(t *testi
 	if err := recordWorkspaceIntegrationBranches(context.Background(), successfulWorkspaceSync(fx.Clone, "engine"), cfg); err == nil {
 		t.Fatal("repo-root managed marker was silently taken over by controller")
 	}
-	if got := localGitConfig(t, fx.Clone, "workflow.integrationBranch"); got != "master" {
+	if got := localIntegrationBranch(t, fx.Clone); got != "master" {
 		t.Fatalf("workflow integration branch = %q, want preserved master", got)
 	}
-	if got := localGitConfig(t, fx.Clone, "gz-git.managedWorkflowIntegrationBranch"); got != "master" {
+	if got := strings.Join(localGitConfigValues(t, fx.Clone, "gz-git.managedWorkflowIntegrationBranch"), ","); got != "master" {
 		t.Fatalf("managed marker = %q, want preserved master", got)
 	}
 }

@@ -4,6 +4,7 @@
 package integrate
 
 import (
+	"os"
 	"testing"
 )
 
@@ -139,6 +140,44 @@ func TestExtractLocations_RuffFullOutput(t *testing.T) {
 	want := []string{"scripts/source_to_instruction.py:2"}
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestExtractLocations_AriadneOxcFixtures(t *testing.T) {
+	// Real, captured rolldown/oxc (vite 8 / rolldown 1.2.5) build failure:
+	// three [UNLOADABLE_DEPENDENCY] errors, each with an ariadne-style
+	// "╭─[ path:line:col ]" frame opener instead of a leading "path:line".
+	// Before this fix ExtractLocations returned 0 for this output — three
+	// genuine build failures were invisible to EvaluateBaseline.
+	want := []string{
+		"src/routes/BuildHistory.svelte:20",
+		"src/routes/ProjectDashboard.svelte:12",
+		"src/routes/ProjectDashboard.svelte:13",
+	}
+	tracked := []string{
+		"src/routes/BuildHistory.svelte",
+		"src/routes/ProjectDashboard.svelte",
+	}
+	cases := []string{
+		"rolldown-oxc-unloadable-dependency-noansi.txt",
+		"rolldown-oxc-unloadable-dependency.txt", // raw, with ANSI SGR + docker "#19 12.34 " prefixes
+	}
+	for _, name := range cases {
+		t.Run(name, func(t *testing.T) {
+			raw, err := os.ReadFile("testdata/" + name)
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			got := ExtractLocations(string(raw), tracked)
+			if len(got) != len(want) {
+				t.Fatalf("got %v, want %v", got, want)
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("got %v, want %v", got, want)
+				}
+			}
+		})
 	}
 }
 

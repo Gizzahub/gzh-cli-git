@@ -1,0 +1,197 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 4.45kB done
+#1 DONE 0.0s
+
+#2 [context portalsrc] load .dockerignore
+#2 transferring portalsrc: 2B done
+#2 DONE 0.0s
+
+#3 [context uicomponents] load .dockerignore
+#3 transferring uicomponents: 2B done
+#3 DONE 0.1s
+
+#4 [internal] load metadata for docker.io/library/node:24-alpine
+#4 DONE 0.1s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 2B done
+#5 DONE 0.0s
+
+#6 [build  1/10] FROM docker.io/library/node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+#6 resolve docker.io/library/node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 0.0s done
+#6 CACHED
+
+#7 [build  2/10] RUN corepack enable
+#7 ...
+
+#8 [context portalsrc] load from client
+#8 transferring portalsrc: 2B done
+#8 DONE 0.0s
+
+#9 [context uicomponents] load from client
+#9 transferring uicomponents: 7.72kB 0.0s done
+#9 DONE 0.1s
+
+#10 [context uicomponents] load from client
+#10 transferring uicomponents: 34B done
+#10 DONE 0.1s
+
+#11 [internal] load build context
+#11 ...
+
+#7 [build  2/10] RUN corepack enable
+#7 DONE 0.4s
+
+#12 [build  3/10] WORKDIR /app/flow-pipechain-devbox/flow-pipechain-admin-ui
+#12 DONE 0.1s
+
+#11 [internal] load build context
+#11 ...
+
+#13 [build  4/10] COPY --from=uicomponents package.json /app/scripton-dashboard-devbox/scripton-ui-components/
+#13 DONE 0.1s
+
+#11 [internal] load build context
+#11 ...
+
+#14 [build  5/10] COPY --from=uicomponents dist /app/scripton-dashboard-devbox/scripton-ui-components/dist
+#14 DONE 0.0s
+
+#11 [internal] load build context
+#11 ...
+
+#15 [build  6/10] COPY --from=portalsrc . /app/flow-pipechain-devbox/flow-pipechain-portal/src/lib
+#15 DONE 0.1s
+
+#11 [internal] load build context
+#11 transferring context: 4.12MB 2.0s done
+#11 DONE 2.0s
+
+#16 [build  7/10] COPY package.json pnpm-lock.yaml ./
+#16 DONE 0.1s
+
+#17 [build  8/10] RUN pnpm install --frozen-lockfile
+#17 0.506 ! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-11.23.0.tgz
+#17 4.423 ? Verifying lockfile against supply-chain policies (181 entries)...
+#17 4.431 Lockfile is up to date, resolution step is skipped
+#17 4.538 Progress: resolved 1, reused 0, downloaded 0, added 0
+#17 4.553 Packages: +157
+#17 4.553 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#17 4.918 Packages are hard linked from the content-addressable store to the virtual store.
+#17 4.918   Content-addressable store is at: /root/.local/share/pnpm/store/v11
+#17 4.918   Virtual store is at:             node_modules/.pnpm
+#17 5.012 
+#17 5.012    ╭───────────────────────────────────────────────╮
+#17 5.012    │                                               │
+#17 5.012    │     Update available! 11.23.0 → 11.25.0.      │
+#17 5.012    │     Changelog: https://pnpm.io/v/11.25.0      │
+#17 5.012    │   To update, run: corepack use pnpm@11.25.0   │
+#17 5.012    │                                               │
+#17 5.012    ╰───────────────────────────────────────────────╯
+#17 5.012 
+#17 5.540 Progress: resolved 157, reused 1, downloaded 21, added 21
+#17 6.198 [WARN] Tarball download average speed 34 KiB/s (size 45 KiB) is below 50 KiB/s: https://registry.npmjs.org/autoprefixer/-/autoprefixer-10.5.4.tgz (GET)
+#17 6.356 [WARN] Tarball download average speed 32 KiB/s (size 41 KiB) is below 50 KiB/s: https://registry.npmjs.org/@sveltejs/vite-plugin-svelte/-/vite-plugin-svelte-7.3.0.tgz (GET)
+#17 6.386 [WARN] Tarball download average speed 33 KiB/s (size 50 KiB) is below 50 KiB/s: https://registry.npmjs.org/postcss/-/postcss-8.5.26.tgz (GET)
+#17 6.539 Progress: resolved 157, reused 1, downloaded 143, added 144
+#17 7.538 Progress: resolved 157, reused 1, downloaded 153, added 154
+#17 8.538 Progress: resolved 157, reused 1, downloaded 154, added 155
+#17 9.398 Progress: resolved 157, reused 1, downloaded 156, added 157, done
+#17 9.573 ✓ Lockfile passes supply-chain policies (181 entries in 5.1s)
+#17 9.631 
+#17 9.631 dependencies:
+#17 9.631 + @scripton/ui-components @scripton/ui-components@file:../../scripton-dashboard-devbox/scripton-ui-components(@internationalized/date@3.12.3)(svelte@5.56.10)(tailwindcss@3.4.19)
+#17 9.631 + bits-ui 2.19.0
+#17 9.631 + clsx 2.1.1
+#17 9.631 + tailwind-merge 2.6.1
+#17 9.631 + tailwind-variants 0.1.20
+#17 9.631 + zod 4.4.3
+#17 9.631 
+#17 9.631 devDependencies:
+#17 9.631 + @originjs/vite-plugin-federation 1.4.1
+#17 9.631 + @sveltejs/vite-plugin-svelte 7.3.0
+#17 9.631 + autoprefixer 10.5.4
+#17 9.631 + postcss 8.5.26
+#17 9.631 + svelte 5.56.10
+#17 9.631 + tailwindcss 3.4.19
+#17 9.631 + typescript 5.9.3
+#17 9.631 + vite 8.2.2
+#17 9.631 + vitest 4.1.11
+#17 9.631 
+#17 9.655 Done in 5.8s using pnpm v11.23.0
+#17 DONE 10.1s
+
+#18 [build  9/10] COPY . .
+#18 DONE 14.1s
+
+#19 [build 10/10] RUN pnpm run build
+#19 1.474 $ vite build
+#19 2.047 (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+#19 2.047   - `__dirname` (vite.config.ts:10:26). Use `import.meta.dirname` instead
+#19 2.047 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+#19 2.086 vite v8.2.2 building client environment for production...
+#19 2.102 transforming...
+#19 12.70 ✓ 4470 modules transformed.
+#19 12.71 ✗ Build failed in 10.62s
+#19 12.71 error during build:
+#19 12.71 Build failed with 3 errors:
+#19 12.71 
+#19 12.71 [31m[UNLOADABLE_DEPENDENCY] [0mCould not load ../flow-pipechain-portal/src/lib/components/atoms/LoadingSpinnerWidget.svelte
+#19 12.71     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/routes/BuildHistory.svelte:20:34 [38;5;246m][0m
+#19 12.71     [38;5;246m│[0m
+#19 12.71  [38;5;246m20 │[0m [38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mL[0m[38;5;249mo[0m[38;5;249ma[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mS[0m[38;5;249mp[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mW[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m'$portal/components/atoms/LoadingSpinnerWidget.svelte'[38;5;249m;[0m
+#19 12.71  [38;5;240m   │[0m                                  ───────────────────────────┬──────────────────────────  
+#19 12.71  [38;5;240m   │[0m                                                             ╰──────────────────────────── No such file or directory (os error 2)
+#19 12.71 [38;5;246m────╯[0m
+#19 12.71 
+#19 12.71 [31m[UNLOADABLE_DEPENDENCY] [0mCould not load ../flow-pipechain-portal/src/lib/components/atoms/EmptyStateWidget.svelte
+#19 12.71     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/routes/ProjectDashboard.svelte:12:30 [38;5;246m][0m
+#19 12.71     [38;5;246m│[0m
+#19 12.71  [38;5;246m12 │[0m [38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mE[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249mS[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mW[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m'$portal/components/atoms/EmptyStateWidget.svelte'[38;5;249m;[0m
+#19 12.71  [38;5;240m   │[0m                              ─────────────────────────┬────────────────────────  
+#19 12.71  [38;5;240m   │[0m                                                       ╰────────────────────────── No such file or directory (os error 2)
+#19 12.71 [38;5;246m────╯[0m
+#19 12.71 
+#19 12.71 [31m[UNLOADABLE_DEPENDENCY] [0mCould not load ../flow-pipechain-portal/src/lib/components/atoms/StatusBadgeWidget.svelte
+#19 12.71     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/routes/ProjectDashboard.svelte:13:31 [38;5;246m][0m
+#19 12.71     [38;5;246m│[0m
+#19 12.71  [38;5;246m13 │[0m [38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mS[0m[38;5;249mt[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249ms[0m[38;5;249mB[0m[38;5;249ma[0m[38;5;249md[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mW[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m'$portal/components/atoms/StatusBadgeWidget.svelte'[38;5;249m;[0m
+#19 12.71  [38;5;240m   │[0m                               ─────────────────────────┬─────────────────────────  
+#19 12.71  [38;5;240m   │[0m                                                        ╰─────────────────────────── No such file or directory (os error 2)
+#19 12.71 [38;5;246m────╯[0m
+#19 12.71 
+#19 12.71     at aggregateBindingErrorsIntoJsError (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/rolldown@1.2.5/node_modules/rolldown/dist/shared/error-NcRuXAVN.mjs:48:18)
+#19 12.71     at unwrapBindingResult (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/rolldown@1.2.5/node_modules/rolldown/dist/shared/error-NcRuXAVN.mjs:18:128)
+#19 12.71     at #build (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/rolldown@1.2.5/node_modules/rolldown/dist/shared/rolldown-vcii7mEa.mjs:132:34)
+#19 12.71     at async buildEnvironment (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/chunks/node.js:33821:66)
+#19 12.71     at async Object.build (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/chunks/node.js:34242:19)
+#19 12.71     at async Object.buildApp (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/chunks/node.js:34239:153)
+#19 12.71     at async CAC.<anonymous> (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/cli.js:776:3) {
+#19 12.71   errors: [Getter/Setter]
+#19 12.71 }
+#19 12.84 [ELIFECYCLE] Command failed with exit code 1.
+#19 ERROR: process "/bin/sh -c pnpm run build" did not complete successfully: exit code: 1
+------
+ > [build 10/10] RUN pnpm run build:
+12.71     at aggregateBindingErrorsIntoJsError (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/rolldown@1.2.5/node_modules/rolldown/dist/shared/error-NcRuXAVN.mjs:48:18)
+12.71     at unwrapBindingResult (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/rolldown@1.2.5/node_modules/rolldown/dist/shared/error-NcRuXAVN.mjs:18:128)
+12.71     at #build (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/rolldown@1.2.5/node_modules/rolldown/dist/shared/rolldown-vcii7mEa.mjs:132:34)
+12.71     at async buildEnvironment (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/chunks/node.js:33821:66)
+12.71     at async Object.build (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/chunks/node.js:34242:19)
+12.71     at async Object.buildApp (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/chunks/node.js:34239:153)
+12.71     at async CAC.<anonymous> (file:///app/flow-pipechain-devbox/flow-pipechain-admin-ui/node_modules/.pnpm/vite@8.2.2_jiti@1.21.7/node_modules/vite/dist/node/cli.js:776:3) {
+12.71   errors: [Getter/Setter]
+12.71 }
+12.84 [ELIFECYCLE] Command failed with exit code 1.
+------
+Dockerfile:52
+--------------------
+  50 |     ENV PUBLIC_API_URL=${PUBLIC_API_URL}
+  51 |     
+  52 | >>> RUN pnpm run build
+  53 |     
+  54 |     FROM node:24-alpine
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c pnpm run build" did not complete successfully: exit code: 1

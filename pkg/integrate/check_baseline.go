@@ -53,6 +53,23 @@ var labelPrefix = regexp.MustCompile(`^[A-Z][A-Z0-9_]*[ \t]+`)
 // "--> path.py:line:column" instead of starting that line with the path.
 var ruffArrowPrefix = regexp.MustCompile(`^-->[ \t]+`)
 
+// ariadneLocation matches the location line rolldown/oxc's ariadne-style
+// diagnostic renderer prints as a frame opener. Measured against a real
+// captured failure (pkg/integrate/testdata/rolldown-oxc-unloadable-dependency*.txt,
+// vite 8 / rolldown 1.2.5): after ANSI is stripped, the raw docker-buildkit
+// capture reads "#19 12.71     ╭─[ src/routes/BuildHistory.svelte:20:34 ]"
+// while a plain capture reads "    ╭─[ src/routes/ProjectDashboard.svelte:12:30 ]".
+// Unlike every other locationLine form this one does not start the line —
+// there is a "╭─[" opener, and in the docker capture a buildkit
+// step/timestamp prefix before that — so it is found by searching for the
+// opener anywhere in the line instead of anchoring at ^. The space after
+// '[' and before ']' is optional in both observed forms. It must NOT match
+// the fixture's body line ("12 │ import ... .svelte';", no "╭─[" marker) or
+// the node stack-trace lines further down ("at ... (file:///...:48:18)",
+// same reason). The column (":34") is dropped so the result matches every
+// other locationLine consumer's "file:line" shape.
+var ariadneLocation = regexp.MustCompile(`╭─\[\s*([^\s\]]+\.[A-Za-z0-9_]+:\d+)(?::\d+)?\s*\]`)
+
 // diagnosticCandidates returns the strings to try locationLine against for
 // one output line: as-is, with a leading label tag stripped, with Ruff's
 // location arrow stripped, and each recognized form with a leading "./"
@@ -73,7 +90,16 @@ func diagnosticCandidates(line string) []string {
 }
 
 func findLocationMatch(line string) string {
-	for _, candidate := range diagnosticCandidates(line) {
+	// stripANSI (check_make.go) is applied first: the ariadne opener and the
+	// rest of the diagnostic frame are individually SGR-colored in the raw
+	// docker capture ("\x1b[38;5;246m╭\x1b[0m\x1b[38;5;246m─\x1b[0m..."), which
+	// would otherwise split "╭─[" across escape sequences and defeat every
+	// match below, not just ariadneLocation.
+	clean := stripANSI(line)
+	if m := ariadneLocation.FindStringSubmatch(clean); m != nil {
+		return m[1]
+	}
+	for _, candidate := range diagnosticCandidates(clean) {
 		if match := locationLine.FindString(candidate); match != "" {
 			return match
 		}

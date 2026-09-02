@@ -170,6 +170,7 @@ func ExtractLocations(output string, tracked []string) []string {
 // external locations are toolchain diagnostics, not repository baseline
 // locations, and therefore must not affect count comparisons.
 func extractLocationsForProbe(probe makeProbe, tracked []string) []string {
+	probe.Output = suppressGoTestVerboseNoise(probe.Output)
 	known := make(map[string]struct{}, len(tracked))
 	for _, p := range tracked {
 		known[p] = struct{}{}
@@ -252,6 +253,7 @@ func foreignDiagnosticErrorForProbe(scope string, probe makeProbe) error {
 // worktree. It does not make GOROOT configurable and retains fail-closed
 // behavior for every unresolved or escaping path.
 func foreignDiagnosticLocationsForProbe(probe makeProbe) []string {
+	probe.Output = suppressGoTestVerboseNoise(probe.Output)
 	var out []string
 	for _, line := range strings.Split(probe.Output, "\n") {
 		match := findLocationMatch(line)
@@ -358,6 +360,78 @@ func evalDiagnosticPathInOrder(workDir, diagnosticPath string) (string, error) {
 		}
 	}
 	return current, nil
+}
+
+// goTestRunMarker matches a go test -v test-entry marker ("=== RUN",
+// "=== PAUSE", "=== CONT", "=== NAME"). It always starts at column 0 with no
+// leading indentation, unlike its subtest's "--- STATUS:" trailer.
+var goTestRunMarker = regexp.MustCompile(`^=== (RUN|PAUSE|CONT|NAME)\s`)
+
+// goTestStatusTrailer matches a go test -v per-test trailer line, e.g.
+// "--- FAIL: TestFoo (0.00s)" or, for a nested subtest, the indented
+// "    --- SKIP: TestFoo/sub (0.00s)". Capture group 1 is FAIL/SKIP/PASS.
+var goTestStatusTrailer = regexp.MustCompile(`^\s*--- (FAIL|SKIP|PASS): `)
+
+// suppressGoTestVerboseNoise blanks the indented "file.go:NN:" lines that
+// `go test -v` prints for a subtest's t.Skip/t.Log/t.Errorf output before
+// that subtest's own trailer line — but only when the trailer is
+// "--- SKIP:" or "--- PASS:". Without this, strings.TrimSpace (in
+// diagnosticCandidates) erases the only signal — indentation depth — that
+// distinguishes a nested t.Skip/t.Log line from a t.Errorf line, and a run
+// full of skips gets counted as a run full of failures (and vice versa).
+//
+// gz-git invokes a repository's own `make check` / `make lint`; it does not
+// invoke `go test` itself, so it cannot add `-json` to a command it doesn't
+// own. This is therefore a detection pass over captured `go test -v` human
+// output, keyed on the "=== RUN"/"--- FAIL|SKIP|PASS:" markers, which are
+// stable across Go versions and don't require gz-git to control the command.
+//
+// go test prints a subtest's buffered log output immediately BEFORE that
+// subtest's own trailer, not after it:
+//
+//	=== RUN   TestFoo/sub
+//	    foo_test.go:20: assertion failed
+//	--- FAIL: TestFoo/sub (0.00s)
+//
+// so candidate lines are held in a pending buffer since the last boundary
+// (an "=== RUN"-family marker or the previous trailer) and resolved against
+// the next trailer's status when it arrives — blanked for SKIP/PASS, kept
+// for FAIL. A trailer with an empty pending buffer (e.g. a parent test's
+// trailer, printed after its subtests already consumed their own lines)
+// is a no-op.
+//
+// This does not attempt to de-interleave t.Parallel() output: several
+// tests' lines can interleave under one shared marker/trailer sequence,
+// and in that case the pending buffer may span more than one test. It also
+// does not track lines outside any "=== RUN"-opened span (e.g. earlier
+// tool output in the same `make check` stream) — those are left untouched
+// and counted normally, which is the conservative default.
+func suppressGoTestVerboseNoise(output string) string {
+	lines := strings.Split(output, "\n")
+	var pending []int
+	inRun := false
+	for i, line := range lines {
+		clean := stripANSI(line)
+		if goTestRunMarker.MatchString(clean) {
+			inRun = true
+			pending = nil
+			continue
+		}
+		if m := goTestStatusTrailer.FindStringSubmatch(clean); m != nil {
+			if m[1] != "FAIL" {
+				for _, idx := range pending {
+					lines[idx] = ""
+				}
+			}
+			pending = nil
+			inRun = true
+			continue
+		}
+		if inRun && findLocationMatch(line) != "" {
+			pending = append(pending, i)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func normalizeTrackedPath(path string, tracked map[string]struct{}) string {

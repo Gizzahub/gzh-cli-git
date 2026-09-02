@@ -613,3 +613,101 @@ func TestForeignDiagnosticError_InvalidatesBranchAndBaseline(t *testing.T) {
 		}
 	}
 }
+
+// panicLintOutput reproduces the shape that made this class of failure
+// unreadable: make runs the linter, the linter panics, and every stack frame
+// carries a file.go:line token from outside the repository. Before crash
+// detection the gate reported these frames as foreign diagnostics, so the
+// operator was told the tree was dirty and never saw the panic.
+const panicLintOutput = "Running golangci-lint...\n" +
+	"panic: runtime error: invalid memory address or nil pointer dereference\n" +
+	"[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x104a1b2c8]\n" +
+	"\n" +
+	"goroutine 1 [running]:\n" +
+	"github.com/golangci/golangci-lint/pkg/lint.(*Runner).Run(0x14000123400)\n" +
+	"\t/Users/build/go/pkg/mod/github.com/golangci/golangci-lint/pkg/lint/runner.go:112 +0x88\n" +
+	"main.main()\n" +
+	"\t/Users/build/go/pkg/mod/github.com/golangci/golangci-lint/cmd/golangci-lint/main.go:24 +0x1c\n" +
+	"make: *** [lint] Error 2\n"
+
+func TestToolCrashSignature_DistinguishesCrashFromFindings(t *testing.T) {
+	if got := toolCrashSignature(panicLintOutput); !strings.HasPrefix(got, "panic: runtime error:") {
+		t.Fatalf("panic output signature = %q", got)
+	}
+	// A tool that merely names the word in a finding has not crashed. Anchoring
+	// at the start of the line is what keeps this apart.
+	ordinary := "pkg/x/y.go:12:3: do not panic: use an error instead (revive)\nmake: *** [lint] Error 1\n"
+	if got := toolCrashSignature(ordinary); got != "" {
+		t.Fatalf("ordinary finding must not read as a crash, got %q", got)
+	}
+	if got := toolCrashSignature(""); got != "" {
+		t.Fatalf("empty output = %q", got)
+	}
+}
+
+func TestToolCrashSignature_SurvivesANSIColouring(t *testing.T) {
+	colored := "\x1b[36mRunning golangci-lint...\x1b[0m\n\x1b[31mfatal error: concurrent map writes\x1b[0m\n"
+	if got := toolCrashSignature(colored); got != "fatal error: concurrent map writes" {
+		t.Fatalf("ANSI-wrapped crash signature = %q", got)
+	}
+}
+
+// TestJudgeMake_CrashIsReportedAsToolFailureNotForeignDiagnostics is the
+// regression this change exists for. Both judge paths must reach the crash
+// verdict before the foreign-diagnostic classifier consumes the stack frames.
+func TestJudgeMake_CrashIsReportedAsToolFailureNotForeignDiagnostics(t *testing.T) {
+	probe := makeProbe{
+		Target:    "lint",
+		Defined:   true,
+		Output:    panicLintOutput,
+		Err:       errors.New("exit status 2"),
+		Code:      2,
+		ToolCrash: toolCrashSignature(panicLintOutput),
+	}
+
+	legacy := judgeMakeLegacy(context.Background(), gitRepo{}, TargetPlan{}, probe, false)
+	against := judgeMakeAgainstProbe(context.Background(), gitRepo{}, TargetPlan{}, probe, false,
+		makeProbe{Target: "lint", Defined: true})
+
+	for name, item := range map[string]CheckItem{"legacy": legacy, "against-probe": against} {
+		if item.Status != checkFail {
+			t.Fatalf("%s: crash must fail the check, got %+v", name, item)
+		}
+		if strings.Contains(item.Detail, "diagnostics reference paths outside the repository") {
+			t.Fatalf("%s: crash was still reported as foreign diagnostics: %s", name, item.Detail)
+		}
+		if !strings.Contains(item.Detail, "terminated abnormally") {
+			t.Fatalf("%s: detail does not name the tool failure: %s", name, item.Detail)
+		}
+		// The point of the fix is that the real stderr becomes reachable.
+		if !strings.Contains(item.Detail, "invalid memory address") {
+			t.Fatalf("%s: detail does not carry the actual output: %s", name, item.Detail)
+		}
+	}
+}
+
+func TestRunMakeTarget_CrashIsNotRetriedAsALock(t *testing.T) {
+	// golangciLintLocked already returns false once any location token appears,
+	// so a panic could never be classified as a lock; pin that the crash flag
+	// short-circuits the retry loop independently of that coincidence.
+	if golangciLintLocked(panicLintOutput) {
+		t.Fatal("panic output must never be classified as a held lock")
+	}
+	if toolCrashSignature(panicLintOutput) == "" {
+		t.Fatal("crash flag must be set for the retry loop to short-circuit")
+	}
+}
+
+func TestCrashOutputTail_KeepsLastNonEmptyLines(t *testing.T) {
+	tail := crashOutputTail(panicLintOutput, 3)
+	lines := strings.Split(tail, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("tail line count = %d (%q)", len(lines), tail)
+	}
+	if !strings.Contains(tail, "make: *** [lint] Error 2") {
+		t.Fatalf("tail must end at the last written line: %q", tail)
+	}
+	if strings.Contains(tail, "\n\n") {
+		t.Fatalf("blank lines must be dropped: %q", tail)
+	}
+}

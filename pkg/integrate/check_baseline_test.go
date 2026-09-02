@@ -196,3 +196,66 @@ func TestForeignDiagnosticLocations_RuffFullOutput(t *testing.T) {
 		}
 	}
 }
+
+// strings.TrimSpace erases the only signal (indentation depth) that
+// separates a go test -v subtest's t.Skip/t.Log line from a t.Errorf
+// line — both print as "    file.go:42: message". Without
+// suppressGoTestVerboseNoise, a run full of skips is counted as a run full
+// of failures.
+
+func TestExtractLocations_GoTestVerboseSkipBlockNotCounted(t *testing.T) {
+	out := "=== RUN   TestFoo\n" +
+		"    foo_test.go:10: skipping: not applicable in this environment\n" +
+		"--- SKIP: TestFoo (0.00s)\n" +
+		"PASS\n" +
+		"ok  \texample.com/pkg\t0.002s\n"
+	got := ExtractLocations(out, []string{"foo_test.go"})
+	if len(got) != 0 {
+		t.Fatalf("a --- SKIP: block's indented line must not count as a diagnostic, got %v", got)
+	}
+}
+
+func TestExtractLocations_GoTestVerboseFailBlockCounted(t *testing.T) {
+	out := "=== RUN   TestBar\n" +
+		"    bar_test.go:20: got 1, want 2\n" +
+		"    bar_test.go:21: additional context\n" +
+		"--- FAIL: TestBar (0.00s)\n" +
+		"FAIL\n" +
+		"FAIL\texample.com/pkg\t0.003s\n"
+	want := []string{"bar_test.go:20", "bar_test.go:21"}
+	got := ExtractLocations(out, []string{"bar_test.go"})
+	if len(got) != len(want) {
+		t.Fatalf("a --- FAIL: block's indented lines must both count, got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestExtractLocations_GoTestVerboseMixedRunOnlyCountsFail(t *testing.T) {
+	out := "=== RUN   TestFoo\n" +
+		"=== RUN   TestFoo/skip_case\n" +
+		"    foo_test.go:10: skipping: not applicable\n" +
+		"--- SKIP: TestFoo/skip_case (0.00s)\n" +
+		"=== RUN   TestFoo/fail_case\n" +
+		"    foo_test.go:20: assertion failed\n" +
+		"    foo_test.go:21: more context\n" +
+		"--- FAIL: TestFoo/fail_case (0.00s)\n" +
+		"--- FAIL: TestFoo (0.00s)\n" +
+		"=== RUN   TestBaz\n" +
+		"--- PASS: TestBaz (0.00s)\n" +
+		"FAIL\n" +
+		"FAIL\texample.com/pkg\t0.004s\n"
+	want := []string{"foo_test.go:20", "foo_test.go:21"}
+	got := ExtractLocations(out, []string{"foo_test.go"})
+	if len(got) != len(want) {
+		t.Fatalf("mixed run must count only the --- FAIL: block's lines, got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}

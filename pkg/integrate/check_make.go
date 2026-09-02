@@ -33,6 +33,10 @@ type makeProbe struct {
 	Err                      error
 	Code                     int
 	Unavailable              string
+	// ToolCrash holds the line proving the tool died instead of reporting
+	// findings. It is separate from Err because a crash and a rule violation
+	// are the same non-zero exit; only the output distinguishes them.
+	ToolCrash string
 }
 
 const (
@@ -58,7 +62,9 @@ func runMakeTarget(ctx context.Context, dir, target string) makeProbe {
 			probe.Err = err
 			return probe
 		}
-		if target != "lint" || probe.Err == nil || !golangciLintLocked(probe.Output) {
+		// A crashed tool is not a held lock. Retrying it three times only
+		// delays the report and hides the stack that identifies the cause.
+		if target != "lint" || probe.Err == nil || probe.ToolCrash != "" || !golangciLintLocked(probe.Output) {
 			return probe
 		}
 		if attempt == golangciLockAttempts {
@@ -113,7 +119,71 @@ func runMakeTargetOnce(ctx context.Context, dir, target string) makeProbe {
 	if missing := missingCD(out); missing != "" {
 		probe.MissingCD = missing
 	}
+	probe.ToolCrash = toolCrashSignature(out)
 	return probe
+}
+
+// toolCrashSignature returns the line proving the tool terminated abnormally
+// rather than reporting findings, or "" when the output shows an ordinary
+// failure.
+//
+// This distinction is the whole point. A crashing linter writes its panic and
+// stack to the same stream as its diagnostics, and every stack frame carries a
+// `file.go:line` token. The foreign-diagnostic parser looks for exactly those
+// tokens and nothing else, so it reads a crash as a wall of findings from paths
+// outside the repository and reports that instead. The operator is then told the
+// build tree is dirty when the truth is that the tool died, and the actual stderr
+// — the only thing that identifies the cause — never reaches them.
+//
+// Matching is anchored at the start of the trimmed line so that a diagnostic
+// merely quoting the word "panic" in its message is not mistaken for one.
+func toolCrashSignature(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(stripANSI(line))
+		switch {
+		case strings.HasPrefix(trimmed, "panic: "),
+			strings.HasPrefix(trimmed, "fatal error: "),
+			strings.HasPrefix(trimmed, "runtime error: "),
+			strings.HasPrefix(trimmed, "SIGSEGV:"),
+			strings.HasPrefix(trimmed, "SIGABRT:"):
+			return trimmed
+		case strings.HasPrefix(trimmed, "goroutine ") && strings.HasSuffix(trimmed, "[running]:"):
+			return trimmed
+		}
+	}
+	return ""
+}
+
+// toolCrashDetail renders a crash so the cause is reachable from the check
+// table itself. A bare "the tool crashed" would be honest but still leave the
+// operator without the stderr, which is the failure this replaces.
+func toolCrashDetail(probe makeProbe) string {
+	detail := fmt.Sprintf("tool failure — make %s terminated abnormally instead of reporting findings: %s", probe.Target, probe.ToolCrash)
+	if probe.Code != 0 {
+		detail += fmt.Sprintf(" (exit %d)", probe.Code)
+	}
+	if tail := crashOutputTail(probe.Output, 12); tail != "" {
+		detail += "; output tail:\n" + tail
+	}
+	return detail
+}
+
+// crashOutputTail keeps the last non-empty lines of the run. The cause of a
+// panic is usually at the top of the stack, but the lines that identify which
+// input triggered it are typically the last ones the tool managed to write.
+func crashOutputTail(out string, limit int) string {
+	var kept []string
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimRight(stripANSI(line), " \t\r")
+		if strings.TrimSpace(trimmed) == "" {
+			continue
+		}
+		kept = append(kept, trimmed)
+	}
+	if len(kept) > limit {
+		kept = kept[len(kept)-limit:]
+	}
+	return strings.Join(kept, "\n")
 }
 
 func golangciLintLocked(out string) bool {
@@ -263,6 +333,12 @@ func judgeMakeLegacy(ctx context.Context, g gitRepo, plan TargetPlan, probe make
 	if probe.Unavailable != "" {
 		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: " + probe.Unavailable}
 	}
+	// The crash verdict must precede the foreign-diagnostic classifier: a panic
+	// stack is made entirely of path:line tokens, so whichever runs first owns
+	// the report.
+	if probe.ToolCrash != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: toolCrashDetail(probe)}
+	}
 	if probe.Target == "lint" {
 		if err := foreignDiagnosticErrorForProbe("branch", probe); err != nil {
 			return CheckItem{
@@ -311,6 +387,9 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	}
 	if probe.Unavailable != "" {
 		return CheckItem{Name: name, Status: checkFail, Detail: "measurement unavailable: " + probe.Unavailable}
+	}
+	if probe.ToolCrash != "" {
+		return CheckItem{Name: name, Status: checkFail, Detail: toolCrashDetail(probe)}
 	}
 	if probe.Target == "lint" {
 		if err := foreignDiagnosticErrorForProbe("branch", probe); err != nil {

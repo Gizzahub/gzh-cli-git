@@ -93,7 +93,13 @@ func runMakeTargetOnce(ctx context.Context, dir, target string) makeProbe {
 		}
 		defer func() { _ = os.RemoveAll(lintCache) }()
 	}
-	cmd := exec.CommandContext(ctx, "make", target) // #nosec G204 -- validated against allowedMakeTargets above
+	// -w makes each sub-make announce the directory it is entering and
+	// leaving. Without it the output says where nothing came from, and
+	// extractLocationsForProbe has to guess a diagnostic's working directory
+	// from how its path happens to end -- a guess that hard-blocks a branch
+	// when it is wrong. The markers cost two lines per sub-make and are
+	// consumed before location scanning, so they never reach a comparison.
+	cmd := exec.CommandContext(ctx, "make", "-w", target) // #nosec G204 -- validated against allowedMakeTargets above
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "MAKELEVEL=0", "MAKEFLAGS=", "LC_ALL=C")
 	if lintCache != "" {
@@ -200,6 +206,13 @@ func golangciLintLocked(out string) bool {
 		}
 		if findLocationMatch(line) != "" {
 			return false
+		}
+		// make's own -w bookkeeping is not a result. This function is an
+		// allowlist -- an unrecognized line means "something else failed too,
+		// so this is not a pure lock failure" -- so adding the markers to the
+		// probe would otherwise have silently disabled the lock retry.
+		if isMakeDirectoryMarkerLine(line) {
+			continue
 		}
 		switch {
 		case line == "Error: parallel golangci-lint is running":

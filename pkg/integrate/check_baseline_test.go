@@ -224,7 +224,13 @@ func TestExtractLocations_GoTestVerboseFailBlockCounted(t *testing.T) {
 		"--- FAIL: TestBar (0.00s)\n" +
 		"FAIL\n" +
 		"FAIL\texample.com/pkg\t0.003s\n"
-	want := []string{"bar_test.go:20", "bar_test.go:21"}
+	// Both lines still count -- that is what this test is about. They are no
+	// longer attributed to the tracked root-level bar_test.go, because
+	// go test prints every diagnostic through filepath.Base and a bare name
+	// therefore names no directory. Counting is preserved; attribution is
+	// deliberately withheld, so these reach the count rules rather than the
+	// changed-file rule.
+	want := []string{unattributedPrefix + "bar_test.go:20", unattributedPrefix + "bar_test.go:21"}
 	got := ExtractLocations(out, []string{"bar_test.go"})
 	if len(got) != len(want) {
 		t.Fatalf("a --- FAIL: block's indented lines must both count, got %v, want %v", got, want)
@@ -250,7 +256,10 @@ func TestExtractLocations_GoTestVerboseMixedRunOnlyCountsFail(t *testing.T) {
 		"--- PASS: TestBaz (0.00s)\n" +
 		"FAIL\n" +
 		"FAIL\texample.com/pkg\t0.004s\n"
-	want := []string{"foo_test.go:20", "foo_test.go:21"}
+	// Only the --- FAIL: block's two lines survive noise suppression, which is
+	// the subject here. They carry the unattributed prefix for the reason given
+	// in the FailBlockCounted test above.
+	want := []string{unattributedPrefix + "foo_test.go:20", unattributedPrefix + "foo_test.go:21"}
 	got := ExtractLocations(out, []string{"foo_test.go"})
 	if len(got) != len(want) {
 		t.Fatalf("mixed run must count only the --- FAIL: block's lines, got %v, want %v", got, want)
@@ -457,7 +466,12 @@ func TestExtractLocationsGoTestSkipDoesNotBlockChangedTestFile(t *testing.T) {
 	// BaselineUnmeasurable, which is not BaselineFail — both assertions would
 	// hold while measuring nothing. Pinning the exact slice keeps this a test
 	// of non-attribution rather than a test of silence.
-	want := []string{"a_test.go:10", "b_test.go:20"}
+	// The prefix makes the non-attribution explicit rather than incidental.
+	// Before, these stayed bare only because liftToTracked refuses a path with
+	// no "/" -- a bare name was left alone by accident of that guard, and a
+	// tracked root-level file of the same name would still have matched
+	// exactly. Now it is a stated verdict, and the loop below tests it.
+	want := []string{unattributedPrefix + "a_test.go:10", unattributedPrefix + "b_test.go:20"}
 	if len(got) != len(want) {
 		t.Fatalf("extraction changed: got %v, want %v", got, want)
 	}
@@ -467,8 +481,11 @@ func TestExtractLocationsGoTestSkipDoesNotBlockChangedTestFile(t *testing.T) {
 		}
 	}
 
+	// "has no directory" was a proxy for "not attributed", and the sentinel
+	// carries one. Assert the verdict itself: no location may resolve onto a
+	// tracked path, which is the property that keeps rule (a) off this branch.
 	for _, loc := range got {
-		if strings.Contains(loc, "/") {
+		if !strings.HasPrefix(loc, unattributedPrefix) {
 			t.Fatalf("go test base names must stay unattributed: got %v", got)
 		}
 	}
@@ -496,8 +513,12 @@ func TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed(t *testing.T) {
 		"apps/web/lib/foo.ex",
 	})
 
-	if got := normalizeTrackedPath("lib/foo.ex", tracked); got != "foo.ex" {
-		t.Fatalf("ambiguous suffix must not be guessed: got %q, want foo.ex", got)
+	// Unresolvable leaves the path as printed. Collapsing it to "foo.ex" was
+	// a guess of a different kind -- it named a file the repository does not
+	// have -- and a bare name is also unattributable, so the collapse turned a
+	// specific diagnostic into a vague one for no gain.
+	if got := normalizeTrackedPath("lib/foo.ex", tracked); got != "lib/foo.ex" {
+		t.Fatalf("ambiguous suffix must not be guessed: got %q, want lib/foo.ex", got)
 	}
 }
 
@@ -523,8 +544,9 @@ func TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed(t *testing.T) {
 func TestNormalizeTrackedPathLiftsBeforeStripping(t *testing.T) {
 	tracked := newTrackedIndex([]string{"apps/api/lib/foo.ex"})
 
-	if got := normalizeTrackedPath("_build/dev/lib/foo.ex", tracked); got != "foo.ex" {
-		t.Fatalf("build artifact must not be lifted onto its source: got %q, want foo.ex", got)
+	// The artifact keeps its own name instead of borrowing the source's.
+	if got := normalizeTrackedPath("_build/dev/lib/foo.ex", tracked); got != "_build/dev/lib/foo.ex" {
+		t.Fatalf("build artifact must not be lifted onto its source: got %q, want _build/dev/lib/foo.ex", got)
 	}
 
 	shallow := newTrackedIndex([]string{"src/dist/bundle.js"})

@@ -225,8 +225,19 @@ func ExtractLocations(output string, tracked []string) []string {
 func extractLocationsForProbe(probe makeProbe, tracked []string) []string {
 	probe.Output = suppressGoTestVerboseNoise(probe.Output)
 	known := newTrackedIndex(tracked)
-	var out []string
+	dirs := newMakeDirectoryTracker(probe.WorkDir)
+
+	type sighting struct {
+		path     string
+		lineNo   string
+		prefix   string
+		anchored bool
+	}
+	seen := make([]sighting, 0, 8)
 	for _, line := range strings.Split(probe.Output, "\n") {
+		if dirs.observe(line) {
+			continue
+		}
 		match := findLocationMatch(line)
 		if match == "" {
 			continue
@@ -238,10 +249,320 @@ func extractLocationsForProbe(probe makeProbe, tracked []string) []string {
 		if probe.approvedForeignLocation(match) {
 			continue
 		}
-		path = normalizeTrackedPath(path, known)
-		out = append(out, path+":"+lineNo)
+		prefix, anchored := dirs.prefix()
+		seen = append(seen, sighting{
+			path:     pathpkg.Clean(filepath.ToSlash(path)),
+			lineNo:   lineNo,
+			prefix:   prefix,
+			anchored: anchored,
+		})
+	}
+
+	// The suffix lift is decided once for the whole probe, not per diagnostic.
+	// A probe ran in one working directory at a time, so lifts implying
+	// directories that exclude one another cannot all be right, and each of
+	// them looks perfectly unique on its own.
+	unanchored := make([]string, 0, len(seen))
+	for _, s := range seen {
+		if !s.anchored {
+			unanchored = append(unanchored, s.path)
+		}
+	}
+	allowLift := known.liftsAgreeOnOneDirectory(unanchored)
+
+	out := make([]string, 0, len(seen))
+	for _, s := range seen {
+		out = append(out, known.resolveDiagnosticPath(s.path, s.prefix, s.anchored, allowLift)+":"+s.lineNo)
 	}
 	return uniqueSorted(out)
+}
+
+// unattributedPrefix marks a diagnostic whose file could not be tied to a
+// tracked path on evidence.
+//
+// Such a location stays in the list, because the count rules still need it: a
+// new test failure reported only as "foo_test.go:12" is a real regression, and
+// dropping it would hide one. What it must not do is reach rule (a) -- the rule
+// that hard-fails a branch -- on a path chosen by coincidence. Prefixing it
+// with a string no repository-relative path can equal keeps it counted and
+// keeps it out of the changed-paths comparison.
+//
+// pathpkg.Clean never produces a leading "<", so a collision would take a
+// tracked file deliberately named "<unattributed>".
+const unattributedPrefix = "<unattributed>/"
+
+// makeDirectoryTracker follows make's -w markers so a diagnostic can be read
+// against the directory make was actually in.
+//
+// This is the evidence the suffix lift never had. make announces each sub-make
+// with "Entering directory '/abs/path'" and closes it with a matching "Leaving
+// directory", so the markers nest and a stack follows them exactly.
+//
+// A recipe doing its own "cd apps/api && mix compile" produces no marker: the
+// shell changed directory, not make, and make has nothing to announce. Those
+// diagnostics stay on the suffix lift, which is why the lift is kept rather
+// than deleted -- but they now have to agree with one another before it is
+// applied.
+type makeDirectoryTracker struct {
+	root  string
+	stack []string
+}
+
+func newMakeDirectoryTracker(root string) *makeDirectoryTracker {
+	if root != "" {
+		if abs, err := filepath.Abs(root); err == nil {
+			root = abs
+		}
+	}
+	return &makeDirectoryTracker{root: root}
+}
+
+// observe consumes a directory marker and reports whether the line was one.
+//
+// Marker lines must not also be scanned for locations. They carry an absolute
+// path, and an absolute path in tool output is what foreignDiagnosticLocations
+// exists to reject -- make's own bookkeeping would be read as a diagnostic
+// pointing outside the repository.
+func (m *makeDirectoryTracker) observe(line string) bool {
+	if dir, ok := makeDirectoryMarker(line, "Entering directory "); ok {
+		m.stack = append(m.stack, dir)
+		return true
+	}
+	if _, ok := makeDirectoryMarker(line, "Leaving directory "); ok {
+		if len(m.stack) > 0 {
+			m.stack = m.stack[:len(m.stack)-1]
+		}
+		return true
+	}
+	return false
+}
+
+// prefix returns the current directory relative to where the probe was
+// launched, and whether make said where it was at all.
+//
+// An empty prefix with anchored true means the repository root. anchored false
+// means there is no evidence to use, and the caller falls back to the suffix
+// lift.
+func (m *makeDirectoryTracker) prefix() (string, bool) {
+	// An empty root is the only real absence of evidence: ExtractLocations has
+	// no probe behind it and cannot say where anything ran.
+	if m.root == "" {
+		return "", false
+	}
+	// An empty stack is not absence. make was invoked in the repository root
+	// -- runMakeTargetOnce sets cmd.Dir to it, and the tracked list is
+	// relative to that same root -- so a diagnostic seen before any sub-make
+	// is root-relative as printed. Reading this as "unknown" is what let a
+	// root-run build's own dist/bundle.js get lifted onto an unrelated
+	// src/dist/bundle.js: the suffix was unique, and nothing asked where make
+	// actually was.
+	if len(m.stack) == 0 {
+		return "", true
+	}
+	rel, err := filepath.Rel(m.root, m.stack[len(m.stack)-1])
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		return "", true
+	}
+	// A sub-make outside the repository says nothing about a repository path,
+	// so it is absence of evidence rather than evidence of the root.
+	if rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", false
+	}
+	return rel, true
+}
+
+// isMakeDirectoryMarkerLine reports whether a line is one of make's -w
+// directory announcements rather than tool output.
+func isMakeDirectoryMarkerLine(line string) bool {
+	if _, ok := makeDirectoryMarker(line, "Entering directory "); ok {
+		return true
+	}
+	_, ok := makeDirectoryMarker(line, "Leaving directory ")
+	return ok
+}
+
+func makeDirectoryMarker(line, kind string) (string, bool) {
+	i := strings.Index(line, kind)
+	if i < 0 {
+		return "", false
+	}
+	// Require make's own prefix -- "make: " or "make[1]: " -- so a tool that
+	// merely prints the phrase cannot move the tracker onto a directory make
+	// never entered.
+	if !strings.HasPrefix(strings.TrimSpace(line[:i]), "make") {
+		return "", false
+	}
+	rest := strings.TrimSpace(line[i+len(kind):])
+	// GNU make quotes the path as '...' under LC_ALL=C and as `...' in some
+	// older builds.
+	rest = strings.TrimSuffix(rest, "'")
+	rest = strings.TrimPrefix(rest, "`")
+	rest = strings.TrimPrefix(rest, "'")
+	if rest == "" {
+		return "", false
+	}
+	return rest, true
+}
+
+// trackedIndex answers the two questions normalizeTrackedPath needs about a
+// revision's tracked paths: is this exact path tracked, and — for a tool that
+// ran from a subdirectory — is there exactly one tracked path that ends with
+// it. The suffix side is indexed by base name so a repository with tens of
+// thousands of files costs a map lookup per diagnostic, not a full scan.
+type trackedIndex struct {
+	exact  map[string]struct{}
+	byBase map[string][]string
+}
+
+func newTrackedIndex(tracked []string) trackedIndex {
+	idx := trackedIndex{
+		exact:  make(map[string]struct{}, len(tracked)),
+		byBase: make(map[string][]string, len(tracked)),
+	}
+	for _, p := range tracked {
+		p = filepath.ToSlash(p)
+		idx.exact[p] = struct{}{}
+		base := p
+		if i := strings.LastIndexByte(p, '/'); i >= 0 {
+			base = p[i+1:]
+		}
+		idx.byBase[base] = append(idx.byBase[base], p)
+	}
+	return idx
+}
+
+// resolveDiagnosticPath maps one diagnostic path onto a tracked path, using the
+// directory make reported being in whenever there is one.
+func (t trackedIndex) resolveDiagnosticPath(path, prefix string, anchored, allowLift bool) string {
+	resolved := t.resolveOnEvidence(path, prefix, anchored, allowLift)
+	if strings.ContainsRune(resolved, '/') {
+		return resolved
+	}
+	// A name with no directory left is not evidence of a file. Go's testing
+	// package decorates every t.Log line with filepath.Base, so
+	// "version_test.go:10" is the ordinary output of a test that skipped
+	// cleanly -- and this repository has a version_test.go at its root that
+	// such a line matches exactly. Attributing it there hands a skip message to
+	// rule (a), which hard-fails the branch for having touched the file.
+	//
+	// Knowing make was at the root does not rescue it. The decoration strips
+	// the directory whatever the working directory was, so the name says
+	// nothing about which package emitted it.
+	//
+	// The cost is real and is accepted on purpose: a diagnostic about a genuine
+	// root-level source file now falls to the count rules instead of being
+	// attributed. In this repository that is 2 files out of 498 tracked .go
+	// files. The alternative is blocking innocent branches, which is the
+	// failure this gate exists to prevent rather than to cause.
+	return unattributedPrefix + resolved
+}
+
+func (t trackedIndex) resolveOnEvidence(path, prefix string, anchored, allowLift bool) string {
+	if anchored {
+		// Evidence beats coincidence. When make said where it was, the only
+		// lift worth considering is the one that directory implies; a suffix
+		// that matches somewhere else is exactly the accident being removed.
+		if prefix != "" {
+			if candidate := prefix + "/" + path; t.has(candidate) {
+				return candidate
+			}
+		}
+		if t.has(path) {
+			return path
+		}
+		// Over-qualification is a separate phenomenon from the working
+		// directory -- a wrapper prepending components prints a longer path
+		// than the repository knows -- so stripping still applies.
+		return t.stripToTracked(path)
+	}
+	// No evidence to prefer, so this is the historical rule unchanged:
+	// exact, then lift, then strip. Routing through normalizeTrackedPath keeps
+	// that rule in one place and keeps its tests describing live behavior --
+	// a second copy here would let them pass while the gate did something
+	// else, which is the failure mode this package keeps rediscovering.
+	if allowLift {
+		return normalizeTrackedPath(path, t)
+	}
+	if t.has(path) {
+		return path
+	}
+	return t.stripToTracked(path)
+}
+
+// liftsAgreeOnOneDirectory reports whether the suffix lifts available for these
+// paths could all have come from a single working directory.
+//
+// liftToTracked answers one path at a time, and the set can contradict itself
+// while every answer in it looks unique. With apps/api/lib/foo.ex and
+// apps/web/lib/bar.ex tracked, "lib/foo.ex" lifts to apps/api and "lib/bar.ex"
+// to apps/web. One probe had one working directory, so at least one of those is
+// wrong -- and a wrong lift is a hard block on a file the branch may never have
+// touched. When the implied directories exclude one another, no lift in the
+// probe is trusted.
+//
+// Nesting is not a contradiction. A path can be reported over-qualified, which
+// implies a shallower directory for the same file: "api/lib/foo.ex" and
+// "lib/foo.ex" lift to the same tracked path while implying "apps" and
+// "apps/api". Agreement therefore means every implied directory lies on one
+// root-to-leaf chain, not that they are all equal.
+func (t trackedIndex) liftsAgreeOnOneDirectory(paths []string) bool {
+	implied := make([]string, 0, len(paths))
+	for _, p := range paths {
+		lifted, ok := t.liftToTracked(p)
+		if !ok {
+			continue
+		}
+		dir := strings.TrimSuffix(lifted, "/"+p)
+		if dir == lifted || dir == "" {
+			continue
+		}
+		implied = append(implied, dir)
+	}
+	for i := range implied {
+		for j := i + 1; j < len(implied); j++ {
+			if !directoriesNest(implied[i], implied[j]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func directoriesNest(a, b string) bool {
+	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+}
+
+func (t trackedIndex) has(path string) bool {
+	_, ok := t.exact[path]
+	return ok
+}
+
+// stripToTracked drops leading components until what remains is tracked,
+// answering the over-qualified direction. It returns the fully stripped base
+// name when nothing matches, which resolveDiagnosticPath then refuses to
+// attribute.
+func (t trackedIndex) stripToTracked(path string) string {
+	original := path
+	for {
+		slash := strings.IndexByte(path, '/')
+		if slash < 0 {
+			// Nothing along the way was tracked, so no suffix of this path is
+			// a better name for it than the path itself. Returning the last
+			// component would invent a name the tool never printed and the
+			// repository does not have -- and, because a bare name cannot be
+			// attributed, would quietly downgrade a perfectly specific
+			// diagnostic into an unattributed one.
+			return original
+		}
+		path = path[slash+1:]
+		if t.has(path) {
+			return path
+		}
+	}
 }
 
 // foreignDiagnosticLocations finds absolute and parent-traversing diagnostic
@@ -484,33 +805,6 @@ func suppressGoTestVerboseNoise(output string) string {
 	return strings.Join(lines, "\n")
 }
 
-// trackedIndex answers the two questions normalizeTrackedPath needs about a
-// revision's tracked paths: is this exact path tracked, and — for a tool that
-// ran from a subdirectory — is there exactly one tracked path that ends with
-// it. The suffix side is indexed by base name so a repository with tens of
-// thousands of files costs a map lookup per diagnostic, not a full scan.
-type trackedIndex struct {
-	exact  map[string]struct{}
-	byBase map[string][]string
-}
-
-func newTrackedIndex(tracked []string) trackedIndex {
-	idx := trackedIndex{
-		exact:  make(map[string]struct{}, len(tracked)),
-		byBase: make(map[string][]string, len(tracked)),
-	}
-	for _, p := range tracked {
-		p = filepath.ToSlash(p)
-		idx.exact[p] = struct{}{}
-		base := p
-		if i := strings.LastIndexByte(p, '/'); i >= 0 {
-			base = p[i+1:]
-		}
-		idx.byBase[base] = append(idx.byBase[base], p)
-	}
-	return idx
-}
-
 // liftToTracked resolves a diagnostic path emitted relative to a subdirectory
 // back to its repository-root form. It answers only when exactly one tracked
 // path ends with the given path: several candidates means the evidence does
@@ -618,16 +912,7 @@ func normalizeTrackedPath(path string, tracked trackedIndex) string {
 	if lifted, ok := tracked.liftToTracked(path); ok {
 		return lifted
 	}
-	for {
-		slash := strings.IndexByte(path, '/')
-		if slash < 0 {
-			return path
-		}
-		path = path[slash+1:]
-		if _, ok := tracked.exact[path]; ok {
-			return path
-		}
-	}
+	return tracked.stripToTracked(path)
 }
 
 func splitLoc(loc string) (path, line string, ok bool) {

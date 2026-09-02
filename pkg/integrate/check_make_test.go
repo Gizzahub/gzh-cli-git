@@ -449,7 +449,11 @@ func TestExtractLocationsForProbe_ExcludesAllowedGoRootLocationsFromCounts(t *te
 		Output:             stdlib + ":1: toolchain\nrepo.go:2: repository",
 	}
 	probe = freezeGoRootDiagnosticApprovals(probe)
-	if got, want := extractLocationsForProbe(probe, []string{"repo.go"}), []string{"repo.go:2"}; !bytes.Equal([]byte(strings.Join(got, "\n")), []byte(strings.Join(want, "\n"))) {
+	// The GOROOT line is dropped and the repository line is kept -- the subject
+	// of this test. The kept line is unattributed because "repo.go" carries no
+	// directory; knowing make ran in probe.WorkDir does not restore one, since
+	// the printing tool stripped it whatever the working directory was.
+	if got, want := extractLocationsForProbe(probe, []string{"repo.go"}), []string{unattributedPrefix + "repo.go:2"}; !bytes.Equal([]byte(strings.Join(got, "\n")), []byte(strings.Join(want, "\n"))) {
 		t.Fatalf("controller baseline locations = %v, want %v", got, want)
 	}
 	probe.ControllerPrepared = false

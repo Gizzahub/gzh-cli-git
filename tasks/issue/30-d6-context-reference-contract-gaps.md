@@ -1,6 +1,6 @@
 # ISSUE: D6 컨텍스트 참조 계약의 미정의 구간 — W6/W7 착수 전 처리 필요
 
-- status: open
+- status: resolved (2026-09-02) — 통합 대기
 - priority: P1
 - category: architecture/context-reference
 - created_at: 2026-09-02T16:10:00+09:00
@@ -139,15 +139,57 @@ D6의 완화책은 구현 카드가 CE 매핑을 "verbatim" 기록한다는 것�
 
 ## Acceptance criteria
 
-- [ ] P1-1: 매니페스트 상태 매트릭스(untracked / index-only-absent 포함)를 D6에 명시
-- [ ] P1-2: `unknown`의 산출 조건을 정의하거나 enum에서 제거하고, 두 fault 클래스의
+- [x] P1-1: 매니페스트 상태 매트릭스(untracked / index-only-absent 포함)를 D6에 명시
+  — index×worktree 4상태를 표로 정의했다. 핵심은 `componentOutcome`이 aggregation/transport
+  만 기술한다는 D6 자신의 규정을 적용해, 네 상태 모두 `observed`이고 상태는 reason code가
+  나른다는 점이다. 따라서 저장소 상태 문제가 `fault`로, transport fault가 저장소 상태로
+  나타나는 경로가 문법적으로 닫힌다. `untracked | present`는 파싱·다이제스트 모두 금지로
+  명시해 리뷰가 지목한 "파일이 있으니 읽자" 오답을 막았다.
+  신규 reason code: `context.manifest-untracked`, `context.manifest-not-materialized`
+- [x] P1-2: `unknown`의 산출 조건을 정의하거나 enum에서 제거하고, 두 fault 클래스의
   판별 필드를 정의
-- [ ] P1-3: envelope/exit 불일치 규칙과 해당 픽스처를 D6에 편입
-- [ ] P1-4: CE exit code → gz-git exit code 매핑을 D6에 명시하고, CE fault가
+  — `unknown`을 enum에서 **제거**했다. 산출 조건이 없는 멤버는 저장소별 catch-all이 되며,
+  이 어휘가 막으려는 divergence 그 자체다. 향후 멤버 추가는 조건 동시 정의를 요구한다.
+  fault 판별은 `faultDomain: gz-git-transport | ce-invocation` 필드를 신설했고,
+  `ce-invocation`은 CE exit `2`에서만 설정된다.
+- [x] P1-3: envelope/exit 불일치 규칙과 해당 픽스처를 D6에 편입
+  — exit `0`+finding envelope와 exit `1`+pass envelope를 transport fault로 명시했다.
+  둘 다 계약상 유효한 코드라 "unexpected exit" 절에 걸리지 않는다는 점을 근거로 별도
+  명시했고, 한쪽을 신뢰해 해소하지 않고 JSON을 폐기한다는 규칙을 붙였다. 픽스처 목록에
+  양방향 불일치를 추가했다.
+- [x] P1-4: CE exit code → gz-git exit code 매핑을 D6에 명시하고, CE fault가
   `ExitPartialFailed`로 새지 않음을 보장
-- [ ] P2 4건 처리 또는 명시적 기각 사유 기록
+  — passthrough를 범주 오류로 규정하고 매핑표를 고정했다. CE `0`/`1` → `0 ExitOK`
+  (finding은 payload이지 gz-git 실패가 아니다), CE `2`·기타·envelope 불일치 →
+  `1 ExitToolError`. **이 표면은 `2 ExitPartialFailed`와 `3 ExitReclaimIncomplete`를
+  결코 산출하지 않는다**고 명시했다. 호출자는 exit이 아니라 JSON으로 pass/finding을
+  구분한다.
+- [x] P2 4건 처리 또는 명시적 기각 사유 기록
+  — P2-1: 기존 `.gz-git.*` 로더(`pkg/config/paths.go`의 `os.Stat`, `pkg/config/symlink.go`의
+  의도적 심링크 생성)를 **재사용 후보 아님**으로 명시. P2-2: `unsupported-platform` →
+  `context.unsupported-platform`으로 네임스페이스화하고, `pkg/integrate/readiness.go:133`의
+  `checkFail` 규약과 갈리는 이유(readiness는 "준비됐나"에 답하므로 미답이 실패, observation은
+  미답이 부재)를 기록하며 양쪽 모두 서로 맞추지 않는다고 확정. P2-3: root-local이 병합이
+  아니라 **탐색**을 제약함을 명시하고, 부모/하위 디렉터리 파일은 읽지도 보고하지도 않으며
+  `DetectConfigFile`의 upward walk는 선례가 아님을 기록. P2-4: Rationale과
+  Alternatives Considered(네이티브 탐색 추론·guarded apply·기존 로더 재사용·exit
+  passthrough 4건 기각)를 추가하고 **Status "Conditionally accepted"의 의미를 정의**.
+- [x] P3 처리 범위 결정
+  — P3-3(후행 공백 표현)과 P3-4(§13.1 "Git hooks automation"에 D6 item 9 게이트 상호참조)는
+  단문 수정이라 함께 처리했다. **P3-1**(항목 번호 상호참조)과 **P3-2**(32×1 MiB와 4 MiB
+  집계 상한의 비직교성)는 이 카드에서 처리하지 않는다. P3-2는 한계값의 권위와 초과 시
+  부분 결과 처리라는 **새 설계 결정**이라 W6 구현 카드에서 실측 corpus와 함께 정하는 것이
+  맞고, 지금 문서에서 임의로 고정하면 pilot이 측정하기로 한 값을 선점한다.
 - [ ] devbox `tasks/todo/124-…md`와 `tasks/plan/GZ_GIT_CONTEXT_ORCHESTRATION.md:425`의
   "독립 리뷰 P0/P1/P2 없음" 기록 정정 (devbox 소유 — 이 저장소 밖)
   verify: human — devbox 측 커밋을 참조로 남긴다
+  현황(2026-09-02 확인): 정정문 자체는 작성돼 있고 내용도 맞다 — devbox 브랜치
+  `dev/claude/mbp/docs/verify-binding-repair` `50e0b93`이 todo/124에 "4 P1 / 0 P0
+  (gzh-cli-gitforge `85bbded`, issue 30)"와 CE 쪽 "3 P1 / 0 P0 (ce-agent-kit
+  `bb51745d`, TASK-087)"를 담고 있다. 그러나 **미통합**이라 devbox master `8f40ee6`에는
+  반영되지 않았고, plan `422`·`425`행과 todo/124 `95`행은 여전히 거짓 기록을 들고 있다.
+  통합을 막는 것은 이 카드와 무관한 devbox 구조 문제(TASK-132)다 — devbox `.make/quality.mk`가
+  `cd gzh-cli`를 하는데 하위 저장소가 gitignore 대상이라 워크트리에 존재하지 않아 게이트가
+  워크트리에서 성립하지 않는다. 따라서 이 항목은 gitforge 쪽에서 닫을 수 없다
 - [ ] `GOWORK=off make quality-check` exit 0
   verify: `GOWORK=off make quality-check`

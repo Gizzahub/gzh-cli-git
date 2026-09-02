@@ -485,8 +485,15 @@ func TestBootstrapNewContractShapeIsConstrained(t *testing.T) {
 		t.Fatalf("expected a branch-only contract with readiness to be accepted: %v", err)
 	}
 	for name, doc := range map[string]string{
-		"extra top-level key": "branch:\n  readiness:\n    version: 1\nhooks:\n  preCommit: ./x\n",
-		"no readiness":        "branch:\n  integrationBranch: master\n",
+		// The readiness block here is deliberately complete. It used to be
+		// missing runner, so this fixture was rejected by the readiness reader
+		// and never exercised the top-level restriction it names -- deleting
+		// that restriction left the whole test passing.
+		"extra top-level key": "branch:\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\nhooks:\n  preCommit: ./x\n",
+		// A bare branch mapping, not one carrying integrationBranch: with a
+		// second key present the branch-key restriction rejects it first, and
+		// this fixture stops saying anything about missing readiness.
+		"no readiness": "branch:\n",
 		// Bootstrap installs the gate; it does not get to configure the
 		// repository on a protected branch without review.
 		"sets integrationBranch": "branch:\n  integrationBranch: master\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n",

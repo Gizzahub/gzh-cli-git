@@ -338,11 +338,19 @@ func TestEvaluateBaseline_BaselineZeroIsNotClean(t *testing.T) {
 	}
 }
 
-// TestEvaluateBaseline_PrepareProfileAbsentDoesNotForceFail is the same defect
-// seen from prepare.go's side: runPrepareProfile knows one profile, so any other
-// stack reaches baselineAgainstTarget with an unprepared detached worktree. The
-// gate must not convert that into a verdict about the branch.
-func TestEvaluateBaseline_PrepareProfileAbsentDoesNotForceFail(t *testing.T) {
+// TestEvaluateBaseline_UnrelatedChangedPathsDoNotDecideAnUnmeasuredBaseline
+// pins rule (a)'s path filter against an unmeasured baseline: knowing WHICH
+// files the branch touched is not knowing whether the branch made anything
+// worse, so a changed path that carries no diagnostic must leave the verdict
+// unmeasurable rather than resolve it either way.
+//
+// The input shape is common because runPrepareProfile knows one profile, so
+// any other stack reaches baselineAgainstTarget with an unprepared detached
+// worktree -- but that is why these inputs occur, not what is asserted here.
+// The test constructs BaselineInput directly and touches no prepare profile;
+// its former name said otherwise, which is how it read as a duplicate of the
+// two empty-base tests above rather than as the changed-path guard it is.
+func TestEvaluateBaseline_UnrelatedChangedPathsDoNotDecideAnUnmeasuredBaseline(t *testing.T) {
 	for _, changed := range [][]string{nil, {"Makefile"}, {"mix.exs"}} {
 		got := EvaluateBaseline(BaselineInput{
 			BranchLocations: []string{"lib/a.ex:1", "lib/b.ex:2"},

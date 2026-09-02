@@ -4,7 +4,9 @@
 package integrate
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -256,6 +258,90 @@ func TestExtractLocations_GoTestVerboseMixedRunOnlyCountsFail(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+// TestEvaluateBaseline_UnmeasurableBaselineIsNotFail covers the state that made
+// notifire-backend-phoenix unlandable: its target tip's `make check` dies before
+// mix can emit anything (no deps/ in the detached baseline worktree), so the
+// baseline measures zero. Both ways out were closed — a branch that also failed
+// to run hit the "no file:line diagnostics" rule, and a branch that did run was
+// read as "count increased (0 -> N)". Neither says anything about the branch.
+func TestEvaluateBaseline_UnmeasurableBaselineIsNotFail(t *testing.T) {
+	t.Run("branch also produced nothing", func(t *testing.T) {
+		got := EvaluateBaseline(BaselineInput{BranchLocations: nil, BaseLocations: nil})
+		if got.Status != BaselineUnmeasurable {
+			t.Fatalf("both sides unmeasured must be BaselineUnmeasurable, got %+v", got)
+		}
+	})
+	t.Run("branch ran and the baseline did not", func(t *testing.T) {
+		branch := make([]string, 0, 190)
+		for i := 1; i <= 190; i++ {
+			branch = append(branch, fmt.Sprintf("lib/app_%d.ex:%d", i, i))
+		}
+		got := EvaluateBaseline(BaselineInput{
+			BranchLocations: branch,
+			BaseLocations:   nil,
+			ChangedPaths:    []string{"Makefile"},
+		})
+		if got.Status == BaselineFail {
+			t.Fatalf("an unmeasured baseline must not be reported as a count increase, got %+v", got)
+		}
+		if got.Status != BaselineUnmeasurable {
+			t.Fatalf("want BaselineUnmeasurable, got %+v", got)
+		}
+	})
+	t.Run("a diagnostic on a changed path still fails", func(t *testing.T) {
+		got := EvaluateBaseline(BaselineInput{
+			BranchLocations: []string{"lib/new.ex:4"},
+			BaseLocations:   nil,
+			ChangedPaths:    []string{"lib/new.ex"},
+		})
+		if got.Status != BaselineFail {
+			t.Fatalf("evidence of harm outranks an unmeasurable baseline, got %+v", got)
+		}
+	})
+}
+
+// TestEvaluateBaseline_BaselineZeroIsNotClean pins the distinction the gate was
+// missing. Zero baseline diagnostics from a run that FAILED is a failed
+// measurement, and must not be read as the clean baseline that a real zero-vs-N
+// comparison would imply. The contrast case keeps a measured baseline behaving
+// exactly as before.
+func TestEvaluateBaseline_BaselineZeroIsNotClean(t *testing.T) {
+	unmeasured := EvaluateBaseline(BaselineInput{
+		BranchLocations: []string{"lib/a.ex:1"},
+		BaseLocations:   nil,
+	})
+	if unmeasured.Status != BaselineUnmeasurable {
+		t.Fatalf("zero base must read as unmeasured, got %+v", unmeasured)
+	}
+	if strings.Contains(unmeasured.Reason, "count increased") {
+		t.Fatalf("unmeasured baseline must not be described as a count increase: %q", unmeasured.Reason)
+	}
+	measured := EvaluateBaseline(BaselineInput{
+		BranchLocations: []string{"lib/a.ex:1", "lib/b.ex:2"},
+		BaseLocations:   []string{"lib/a.ex:1"},
+	})
+	if measured.Status != BaselineFail {
+		t.Fatalf("a measured baseline must still catch a real increase, got %+v", measured)
+	}
+}
+
+// TestEvaluateBaseline_PrepareProfileAbsentDoesNotForceFail is the same defect
+// seen from prepare.go's side: runPrepareProfile knows one profile, so any other
+// stack reaches baselineAgainstTarget with an unprepared detached worktree. The
+// gate must not convert that into a verdict about the branch.
+func TestEvaluateBaseline_PrepareProfileAbsentDoesNotForceFail(t *testing.T) {
+	for _, changed := range [][]string{nil, {"Makefile"}, {"mix.exs"}} {
+		got := EvaluateBaseline(BaselineInput{
+			BranchLocations: []string{"lib/a.ex:1", "lib/b.ex:2"},
+			BaseLocations:   nil,
+			ChangedPaths:    changed,
+		})
+		if got.Status != BaselineUnmeasurable {
+			t.Fatalf("changed=%v: want BaselineUnmeasurable, got %+v", changed, got)
 		}
 	}
 }

@@ -369,10 +369,7 @@ func judgeMakeLegacy(ctx context.Context, g gitRepo, plan TargetPlan, probe make
 	if err != nil {
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
-	if verdict.Status == BaselineFail {
-		return CheckItem{Name: name, Status: checkFail, Detail: verdict.Reason}
-	}
-	return CheckItem{Name: name, Status: checkWarn, Detail: "baseline failure, non-worsening: " + verdict.Reason}
+	return baselineCheckItem(name, verdict)
 }
 
 // judgeMakeAgainstProbe consumes a target measurement captured before source
@@ -435,10 +432,25 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
 	verdict := EvaluateBaseline(BaselineInput{BranchLocations: extractLocationsForProbe(probe, branchTracked), BaseLocations: extractLocationsForProbe(base, baseTracked), ChangedPaths: changed})
-	if verdict.Status == BaselineFail {
+	return baselineCheckItem(name, verdict)
+}
+
+// baselineCheckItem renders a baseline verdict. BaselineUnmeasurable is not a
+// non-worsening pass and must not be reported as one: nothing was compared,
+// so the item says exactly that. It warns rather than fails because a target
+// tip that cannot measure itself is a property of the repository, not of the
+// branch being judged.
+func baselineCheckItem(name string, verdict BaselineResult) CheckItem {
+	switch verdict.Status {
+	case BaselineFail:
 		return CheckItem{Name: name, Status: checkFail, Detail: verdict.Reason}
+	case BaselineUnmeasurable:
+		return CheckItem{Name: name, Status: checkWarn, Detail: "baseline unmeasurable: " + verdict.Reason}
+	case BaselinePass:
+		return CheckItem{Name: name, Status: checkWarn, Detail: "baseline failure, non-worsening: " + verdict.Reason}
+	default:
+		return CheckItem{Name: name, Status: checkFail, Detail: "unknown baseline verdict: " + verdict.Reason}
 	}
-	return CheckItem{Name: name, Status: checkWarn, Detail: "baseline failure, non-worsening: " + verdict.Reason}
 }
 
 func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, probe makeProbe) (BaselineResult, error) {

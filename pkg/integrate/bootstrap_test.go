@@ -412,3 +412,93 @@ func bootstrapFixture(t *testing.T) string {
 	run(work, "commit", "-m", "bootstrap")
 	return work
 }
+
+// TestBootstrapAllowsNewContractAddition covers the cycle a repository with no
+// .gz-git.yaml was stuck in: checkReadinessContract failed it with "bootstrap
+// required", and validateBootstrapDiff refused the addition with "bootstrap
+// requires existing .gz-git.yaml". There was no way in. The first contract may
+// now be added, under newContractIsMinimal's shape rule.
+func TestBootstrapAllowsNewContractAddition(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "empty-global"))
+	bare := filepath.Join(root, "remote.git")
+	work := filepath.Join(root, "work")
+	run := func(dir string, args ...string) string {
+		t.Helper()
+		c := exec.CommandContext(context.Background(), "git", args...)
+		c.Dir = dir
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(root, "init", "--bare", bare)
+	run(root, "clone", bare, work)
+	run(work, "config", "user.email", "test@example.com")
+	run(work, "config", "user.name", "Test")
+	// The target tip deliberately has no .gz-git.yaml at all.
+	if err := os.WriteFile(filepath.Join(work, "README.md"), []byte("phoenix\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(work, "add", ".")
+	run(work, "commit", "-m", "base")
+	run(work, "push", "origin", "HEAD:master")
+	run(work, "checkout", "-b", "dev/bootstrap")
+	if err := os.MkdirAll(filepath.Join(work, ".gz-git", "readiness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, ".gz-git", "readiness", "check"),
+		[]byte("#!/bin/sh\nprintf '{\"version\":1,\"status\":\"ready\",\"summary\":\"ok\"}\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, ".gz-git.yaml"),
+		[]byte("branch:\n  integrationBranch: master\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(work, "add", ".")
+	run(work, "commit", "-m", "bootstrap")
+	p, err := BootstrapPlanFor(context.Background(), gitcmd.NewExecutor(),
+		BootstrapOptions{RepoPath: work, Target: "origin/master", Issuer: "test", Expiry: time.Minute})
+	if err != nil {
+		t.Fatalf("a repository with no contract must be able to add its first one: %v", err)
+	}
+	if err := BootstrapApply(context.Background(), gitcmd.NewExecutor(), p, work, BootstrapPlanDigest(p)); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	run(work, "fetch", "origin")
+	if got := run(work, "rev-parse", "origin/master"); got != p.SourceSHA {
+		t.Fatalf("target=%s source=%s", got, p.SourceSHA)
+	}
+}
+
+// TestBootstrapNewContractShapeIsConstrained keeps the widened path narrow. A
+// first contract cannot carry anything but branch, and must declare readiness —
+// bootstrap lands on a protected branch outside the normal gate, and a wholly
+// new file offers no diff to prove innocuous.
+func TestBootstrapNewContractShapeIsConstrained(t *testing.T) {
+	good := []byte("branch:\n  integrationBranch: master\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n")
+	if err := newContractIsMinimal(good); err != nil {
+		t.Fatalf("expected a branch-only contract with readiness to be accepted: %v", err)
+	}
+	for name, doc := range map[string]string{
+		"extra top-level key": "branch:\n  readiness:\n    version: 1\nhooks:\n  preCommit: ./x\n",
+		"no readiness":        "branch:\n  integrationBranch: master\n",
+		"no branch mapping":   "readiness:\n  version: 1\n",
+		// Each of these once passed this writer and was then rejected by
+		// config.ParseReadinessDocument, the reader the gate actually uses —
+		// bootstrap would have landed a contract nothing could read.
+		"readiness null":          "branch:\n  readiness:\n",
+		"readiness scalar":        "branch:\n  readiness: yes\n",
+		"readiness empty map":     "branch:\n  readiness: {}\n",
+		"readiness unknown field": "branch:\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n    extra: y\n",
+		"runner outside .gz-git":  "branch:\n  readiness:\n    version: 1\n    runner: make\n",
+	} {
+		if err := newContractIsMinimal([]byte(doc)); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+}

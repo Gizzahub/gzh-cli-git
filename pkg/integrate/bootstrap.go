@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -264,6 +265,31 @@ func exactRemoteSHA(ctx context.Context, g gitRepo, endpoint, destination string
 	return fields[0], nil
 }
 
+// validateBootstrapContractEntry checks the .gz-git.yaml tree entries on both
+// sides. For an existing contract the mode must be unchanged; for a first
+// contract there is no old entry, and the target is re-checked so a diff that
+// merely claims an addition cannot overwrite a contract that is really there.
+func validateBootstrapContractEntry(ctx context.Context, g gitRepo, target, source string, contractIsNew bool) error {
+	entry, ok, err := g.treeEntry(ctx, source, ".gz-git.yaml")
+	if err != nil || !ok || entry.Type != "blob" || (entry.Mode != "100644" && entry.Mode != "100755") {
+		return fmt.Errorf("bootstrap requires .gz-git.yaml")
+	}
+	oldEntry, oldOK, err := g.treeEntry(ctx, target, ".gz-git.yaml")
+	if err != nil {
+		return fmt.Errorf("inspect target .gz-git.yaml: %w", err)
+	}
+	if contractIsNew {
+		if oldOK {
+			return fmt.Errorf("bootstrap adds .gz-git.yaml but the target already has one")
+		}
+		return nil
+	}
+	if !oldOK || oldEntry.Type != "blob" || oldEntry.Mode != entry.Mode {
+		return fmt.Errorf(".gz-git.yaml mode must be unchanged")
+	}
+	return nil
+}
+
 //nolint:gocyclo // Each accepted Git status, path, type, and mode is checked explicitly.
 func validateBootstrapDiff(ctx context.Context, g gitRepo, target, source string) error {
 	res, err := g.run(ctx, "diff", "--name-status", "--no-renames", "-z", target, source, "--")
@@ -275,6 +301,7 @@ func validateBootstrapDiff(ctx context.Context, g gitRepo, target, source string
 		return fmt.Errorf("bootstrap commit has no changes")
 	}
 	names := make([]string, 0)
+	contractIsNew := false
 	for i := 0; i+1 < len(parts); i += 2 {
 		status, name := parts[i], parts[i+1]
 		if status != "M" && status != "A" {
@@ -284,17 +311,18 @@ func validateBootstrapDiff(ctx context.Context, g gitRepo, target, source string
 			return fmt.Errorf("bootstrap commit changes forbidden path: %s", name)
 		}
 		if status == "A" && name == ".gz-git.yaml" {
-			return fmt.Errorf("bootstrap requires existing .gz-git.yaml")
+			// A repository with no contract at all could not previously
+			// enter bootstrap: this rejected the addition, while
+			// checkReadinessContract rejected the missing contract with
+			// "bootstrap required". The two together are a cycle with no
+			// entry point. Adding the first contract is allowed, under the
+			// tighter shape rule in newContractIsMinimal.
+			contractIsNew = true
 		}
 		names = append(names, name)
 	}
-	entry, ok, err := g.treeEntry(ctx, source, ".gz-git.yaml")
-	if err != nil || !ok || entry.Type != "blob" || (entry.Mode != "100644" && entry.Mode != "100755") {
-		return fmt.Errorf("bootstrap requires .gz-git.yaml")
-	}
-	oldEntry, oldOK, err := g.treeEntry(ctx, target, ".gz-git.yaml")
-	if err != nil || !oldOK || oldEntry.Type != "blob" || oldEntry.Mode != entry.Mode {
-		return fmt.Errorf(".gz-git.yaml mode must be unchanged")
+	if err := validateBootstrapContractEntry(ctx, g, target, source, contractIsNew); err != nil {
+		return err
 	}
 	for _, name := range names {
 		e, ok, err := g.treeEntry(ctx, source, name)
@@ -305,15 +333,57 @@ func validateBootstrapDiff(ctx context.Context, g gitRepo, target, source string
 			return fmt.Errorf("readiness path must be 100644 or 100755: %s", name)
 		}
 	}
-	old, _, err := g.showFile(ctx, target, ".gz-git.yaml")
-	if err != nil {
-		return fmt.Errorf("target .gz-git.yaml required: %w", err)
-	}
 	neu, _, err := g.showFile(ctx, source, ".gz-git.yaml")
 	if err != nil {
 		return err
 	}
+	if contractIsNew {
+		return newContractIsMinimal(neu)
+	}
+	old, _, err := g.showFile(ctx, target, ".gz-git.yaml")
+	if err != nil {
+		return fmt.Errorf("target .gz-git.yaml required: %w", err)
+	}
 	return onlyReadinessAddition(old, neu)
+}
+
+// newContractIsMinimal is the shape rule for the first .gz-git.yaml a
+// repository ever lands through bootstrap.
+//
+// onlyReadinessAddition proves an existing contract was not altered beyond
+// branch.readiness. A brand-new file has no such proof available — every byte
+// is new — so bootstrap, which lands a commit on a protected branch outside
+// the normal gate, constrains the shape instead: the document declares
+// nothing but "branch", and that mapping declares readiness. Anything else
+// (a top-level key, or a branch mapping without readiness) has to arrive
+// through a normal reviewed change.
+func newContractIsMinimal(neu []byte) error {
+	var b map[string]any
+	if err := yaml.Unmarshal(neu, &b); err != nil {
+		return err
+	}
+	for key := range b {
+		if key != "branch" {
+			return fmt.Errorf("a new .gz-git.yaml may declare only branch, found %q", key)
+		}
+	}
+	// Validate branch.readiness with the very parser the gate will later use
+	// to read it. A shape check written separately here drifted looser than
+	// that reader: `readiness:` left null, given a scalar, given an empty
+	// mapping, or carrying an unknown field all satisfied the writer and were
+	// rejected by the reader. Bootstrap lands a commit on a protected branch
+	// outside the normal gate, so that gap let it install a contract the gate
+	// then could not read — worse than the missing contract it replaced,
+	// because "bootstrap required" became a parse error. A privileged writer
+	// must never accept more than the reader it writes for.
+	_, ok, err := config.ParseReadinessDocument(neu, false)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("source must add branch.readiness")
+	}
+	return nil
 }
 
 func onlyReadinessAddition(old, neu []byte) error {

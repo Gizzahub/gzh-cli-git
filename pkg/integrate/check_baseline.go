@@ -23,6 +23,11 @@ const (
 	BaselinePass BaselineStatus = iota
 	// BaselineFail means the branch introduced or increased failures.
 	BaselineFail
+	// BaselineUnmeasurable means the comparison could not be made at all:
+	// the target tip's own run failed without emitting a single file:line
+	// diagnostic, so there is no baseline to compare against. It is not a
+	// verdict about the branch and must never be reported as one.
+	BaselineUnmeasurable
 )
 
 // BaselineInput is the already-normalized location lists for one make target.
@@ -138,6 +143,29 @@ func EvaluateBaseline(in BaselineInput) BaselineResult {
 		return BaselineResult{
 			Status: BaselineFail,
 			Reason: fmt.Sprintf("diagnostics on changed paths: %s", strings.Join(attributed, " ")),
+		}
+	}
+	// A failed target tip that emitted no file:line diagnostic at all was not
+	// measured; zero here means "the tool never got far enough to report",
+	// not "the baseline is clean". Only both call sites' already-rejected
+	// cases (Unavailable, MissingCD, ToolCrash) name that outcome explicitly;
+	// a checker that dies early on its own — mix without deps/, a test runner
+	// without node_modules, a venv-less pytest — exits non-zero with no
+	// parseable location and is indistinguishable here from a clean run.
+	//
+	// Comparing against it is what made every commit unlandable in such a
+	// repository: a branch measured at 0 failed rule (b), and a branch that
+	// did run failed rule (c) as "count increased (0 -> N)". Neither is a
+	// statement about the branch. Report the missing measurement instead, and
+	// leave rule (a) above it — a diagnostic on a path this branch changed is
+	// evidence of harm whether or not the baseline could be measured.
+	if len(base) == 0 {
+		return BaselineResult{
+			Status: BaselineUnmeasurable,
+			Reason: fmt.Sprintf(
+				"target tip failed without emitting any file:line diagnostic, so there is no baseline to compare (branch had %d)",
+				len(branch),
+			),
 		}
 	}
 	if len(branch) == 0 {

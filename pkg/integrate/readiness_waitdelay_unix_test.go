@@ -34,13 +34,19 @@ func TestExecuteReadinessWaitDelayBoundsEscapedPipe(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	started := time.Now()
 	go func() {
 		_, err := executeReadinessWithTimeout(ctx, runner, dir, dir, "a", "b", 10*time.Second)
 		done <- err
 	}()
 	pid := waitForReadinessPID(t, pidFile)
 	defer func() { _ = syscall.Kill(pid, syscall.SIGKILL) }()
+
+	// The bound under test is how long the wait takes to give up on the escaped
+	// process AFTER cancellation. Starting the clock earlier would fold the
+	// runner spawn and the helper's re-exec into a latency assertion that does
+	// not describe them, which fails on a loaded machine even when the wait
+	// behaves correctly.
+	started := time.Now()
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel result = %v, want context.Canceled", err)
@@ -65,9 +71,13 @@ func TestReadinessEscapedPipeHelper(t *testing.T) {
 	os.Exit(0)
 }
 
+// waitForReadinessPID blocks until the escaped helper publishes its pid. This is
+// setup, not the measured interval, so the deadline only has to be long enough to
+// outlast a slow shell spawn plus a test-binary re-exec on a loaded machine; a
+// helper that never starts still fails the test, just later.
 func waitForReadinessPID(t *testing.T, path string) int {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		data, _ := os.ReadFile(path)
 		if pid, err := strconv.Atoi(string(data)); err == nil && pid > 0 {

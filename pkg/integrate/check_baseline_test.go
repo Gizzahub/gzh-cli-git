@@ -516,7 +516,7 @@ func TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed(t *testing.T) {
 // _build/dev/lib/foo.ex down to foo.ex, so it discriminates nothing and is
 // here to keep the artifact case visible. The second is not — strip-only code
 // answered "bundle.js" for dist/bundle.js, so that assertion fails against it.
-// It characterises the lift's new and unwanted reach, and that reach is live
+// It characterizes the lift's new and unwanted reach, and that reach is live
 // rather than theoretical: dist/bundle.js:4 against a tracked
 // src/dist/bundle.js reaches rule (a) and hard-fails the branch, which is the
 // same false block this change set removed elsewhere.
@@ -531,7 +531,7 @@ func TestNormalizeTrackedPathLiftsBeforeStripping(t *testing.T) {
 	if got := normalizeTrackedPath("dist/bundle.js", shallow); got != "src/dist/bundle.js" {
 		t.Fatalf("known limit no longer present: got %q, want src/dist/bundle.js — "+
 			"fixing this limit is expected, so update this test rather than "+
-			"restoring the old behaviour", got)
+			"restoring the old behavior", got)
 	}
 }
 

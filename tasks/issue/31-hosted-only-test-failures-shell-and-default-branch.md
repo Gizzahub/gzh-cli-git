@@ -117,5 +117,8 @@ Ubuntu 러너의 `/bin/sh`는 dash다. 그래서 러너에서만 리터럴 백�
   같은 조건으로 러너의 4건이 그대로 재현됨)
 - [x] 기본(로컬) 상태에서도 `pkg/integrate` 전체가 통과
   — `ok github.com/gizzahub/gzh-cli-gitforge/pkg/integrate 107.067s`
-- [ ] canonical `make quality-check`가 exit 0
+- [x] canonical `make quality-check`가 exit 0
+  — `✅ Canonical quality gate passed!` / `QUALITY_EXIT=0` (e2e 포함 10단계 전부). 주의: 같은 머신에서
+  다른 golangci-lint가 돌고 있으면 `Error: parallel golangci-lint is running`으로 `lint-check`가
+  죽는다(전역 락, 저장소 무관). 게이트는 직렬로 돌려야 한다.
 - [ ] hosted `Quality gate`가 master에서 실제로 초록

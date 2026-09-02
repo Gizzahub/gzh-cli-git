@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -130,7 +131,48 @@ func parseReadinessJSON(data []byte) (Readiness, bool, error) {
 	return r, true, ValidateReadiness(r)
 }
 
+// RejectMultiDocumentYAML reports an error when data carries more than one YAML
+// document.
+//
+// yaml.Unmarshal decodes the first document and discards the rest without a
+// word. Every shape check written on top of it — the field allowlists below,
+// the "nothing changed beyond branch.readiness" comparison in pkg/integrate —
+// then inspects document 1 while documents 2..n travel with the commit unread.
+// A config whose first document is an unremarkable, passing contract can carry
+// a second document declaring anything at all, and the checks that exist to
+// keep it off a protected branch never see it.
+//
+// A leading "---" is not a second document. A trailing one is, because it opens
+// an empty document after the content; both are rejected the same way. The
+// contract is exactly one document, and no .gz-git.yaml in this family uses a
+// document marker at all.
+func RejectMultiDocumentYAML(data []byte) error {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var first yaml.Node
+	if err := dec.Decode(&first); err != nil {
+		if errors.Is(err, io.EOF) {
+			// Empty input holds no second document. Callers keep their own
+			// handling for it rather than inheriting a wrong error here.
+			return nil
+		}
+		return fmt.Errorf("parse config: %w", err)
+	}
+	var extra yaml.Node
+	err := dec.Decode(&extra)
+	switch {
+	case err == nil:
+		return fmt.Errorf("config must contain exactly one YAML document")
+	case errors.Is(err, io.EOF):
+		return nil
+	default:
+		return fmt.Errorf("parse config: %w", err)
+	}
+}
+
 func parseReadinessYAML(data []byte) (Readiness, bool, error) {
+	if err := RejectMultiDocumentYAML(data); err != nil {
+		return Readiness{}, false, err
+	}
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return Readiness{}, false, fmt.Errorf("parse config: %w", err)

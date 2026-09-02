@@ -402,6 +402,19 @@ func newContractIsMinimal(neu []byte) error {
 }
 
 func onlyReadinessAddition(old, neu []byte) error {
+	// Both sides, before either is unmarshalled. equalJSON below compares
+	// document 1 of old against document 1 of neu, so a second document on
+	// either side is outside the comparison entirely: on neu it is content
+	// this function exists to refuse, and on old it would make "unchanged"
+	// a claim about a file this function never fully read. The new-contract
+	// path needs no guard here — it delegates to config.ParseReadinessDocument,
+	// which now rejects multi-document input itself.
+	if err := config.RejectMultiDocumentYAML(old); err != nil {
+		return fmt.Errorf("target .gz-git.yaml: %w", err)
+	}
+	if err := config.RejectMultiDocumentYAML(neu); err != nil {
+		return fmt.Errorf("source .gz-git.yaml: %w", err)
+	}
 	var a, b map[string]any
 	if err := yaml.Unmarshal(old, &a); err != nil {
 		return err

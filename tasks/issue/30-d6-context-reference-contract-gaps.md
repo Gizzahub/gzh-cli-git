@@ -1,6 +1,6 @@
 # ISSUE: D6 컨텍스트 참조 계약의 미정의 구간 — W6/W7 착수 전 처리 필요
 
-- status: resolved (2026-09-02) — 통합 대기
+- status: done (2026-09-02) — P1 4건·P2 4건 문서로 종결, canonical 게이트 exit 0
 - priority: P1
 - category: architecture/context-reference
 - created_at: 2026-09-02T16:10:00+09:00
@@ -191,5 +191,9 @@ D6의 완화책은 구현 카드가 CE 매핑을 "verbatim" 기록한다는 것�
   통합을 막는 것은 이 카드와 무관한 devbox 구조 문제(TASK-132)다 — devbox `.make/quality.mk`가
   `cd gzh-cli`를 하는데 하위 저장소가 gitignore 대상이라 워크트리에 존재하지 않아 게이트가
   워크트리에서 성립하지 않는다. 따라서 이 항목은 gitforge 쪽에서 닫을 수 없다
-- [ ] `GOWORK=off make quality-check` exit 0
+- [x] `GOWORK=off make quality-check` exit 0 — ✅ Canonical quality gate passed! /
+  QUALITY_EXIT=0 (e2e 포함 10단계 전부). 이 브랜치는 `b25e2b1`(이슈 32) 위로 리베이스한
+  상태에서 측정했다. 그 이전에는 선재 flake
+  `TestExecuteReadinessWaitDelayBoundsEscapedPipe`가 문서 전용 diff에서도 게이트를
+  붉게 만들어 이 항목을 닫을 수 없었다
   verify: `GOWORK=off make quality-check`

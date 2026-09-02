@@ -23,13 +23,13 @@ ______________________________________________________________________
 
 ## Open Issues (후속)
 
-| #   | 이슈                                               | 요약                                                                                                                                                                                                                     |
-| --- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 28  | goreleaser-brews-deprecated-and-ci-pins-latest     | 저장소 코드·CI 수정은 완료. 빈 `gizzahub/homebrew-tap` bootstrap, 최초 Cask 게시·macOS 설치, stable release workflow의 실제 검증이 남았다                                                                                |
-| 29  | nosec-suppression-not-bound-in-if-init             | 완료. master `fc8db6c`에서 hosted `security-code` 통과를 확인했고, master `1b1298e`/run 33606203470에서 hosted `Quality gate` 전체가 초록이다                                                                            |
-| 30  | d6-context-reference-contract-gaps                 | D6 독립 리뷰에서 P1 4건. 매니페스트 상태 매트릭스와 `componentOutcome: unknown`이 미정의이고, envelope/exit 불일치 규칙이 계획서에서 D6로 넘어오며 누락됐다. W6 구현 전에 문서로 닫는다                                  |
-| 31  | hosted-only-test-failures-shell-and-default-branch | 완료. 픽스처의 `printf` 이스케이프와 `git init --bare` 기본 브랜치 의존을 제거했다(`1b1298e`). hosted `Quality gate` 초록 확인                                                                                           |
-| 32  | escaped-pipe-latency-assertion-measures-setup      | 완료. `TestExecuteReadinessWaitDelayBoundsEscapedPipe`의 `started`가 러너 spawn 앞에서 찍혀 setup 지연까지 재고 있었다. 약 20회 중 1회 실패하던 선재 flake이며 `started`를 `cancel()` 직전으로 옮겨 해소했다(60/60 통과) |
+| #   | 이슈                                               | 요약                                                                                                                                                                                                                                  |
+| --- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 28  | goreleaser-brews-deprecated-and-ci-pins-latest     | 저장소 코드·CI 수정은 완료. 빈 `gizzahub/homebrew-tap` bootstrap, 최초 Cask 게시·macOS 설치, stable release workflow의 실제 검증이 남았다                                                                                             |
+| 29  | nosec-suppression-not-bound-in-if-init             | 완료. master `fc8db6c`에서 hosted `security-code` 통과를 확인했고, master `1b1298e`/run 33606203470에서 hosted `Quality gate` 전체가 초록이다                                                                                         |
+| 30  | d6-context-reference-contract-gaps                 | 완료. P1 4건(매니페스트 상태 매트릭스, `componentOutcome: unknown` 제거와 `faultDomain` 도입, envelope/exit 불일치 규칙, CE→gz-git exit 매핑)과 P2 4건을 D6 문서로 종결했다. P3-1·P3-2는 pilot 실측을 선점하지 않도록 의도적으로 이월 |
+| 31  | hosted-only-test-failures-shell-and-default-branch | 완료. 픽스처의 `printf` 이스케이프와 `git init --bare` 기본 브랜치 의존을 제거했다(`1b1298e`). hosted `Quality gate` 초록 확인                                                                                                        |
+| 32  | escaped-pipe-latency-assertion-measures-setup      | 완료. `TestExecuteReadinessWaitDelayBoundsEscapedPipe`의 `started`가 러너 spawn 앞에서 찍혀 setup 지연까지 재고 있었다. 약 20회 중 1회 실패하던 선재 flake이며 `started`를 `cancel()` 직전으로 옮겨 해소했다(60/60 통과)              |
 
 메인테이너는 다음 stable 버전을 v0.8.0으로 결정했고 `VERSION`과 릴리스 노트를 준비했다.
 실제 태그 발행은 아직 하지 않는다. 빈 `homebrew-tap` 기본 브랜치, 최소 권한

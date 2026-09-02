@@ -451,6 +451,22 @@ func TestExtractLocationsGoTestSkipDoesNotBlockChangedTestFile(t *testing.T) {
 	tracked := []string{"pkg/foo/a_test.go", "pkg/foo/b_test.go"}
 
 	got := ExtractLocations(out, tracked)
+
+	// Floor first. Without it this test passes when extraction returns
+	// nothing at all: the loop below never runs, and EvaluateBaseline answers
+	// BaselineUnmeasurable, which is not BaselineFail — both assertions would
+	// hold while measuring nothing. Pinning the exact slice keeps this a test
+	// of non-attribution rather than a test of silence.
+	want := []string{"a_test.go:10", "b_test.go:20"}
+	if len(got) != len(want) {
+		t.Fatalf("extraction changed: got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("extraction changed: got %v, want %v", got, want)
+		}
+	}
+
 	for _, loc := range got {
 		if strings.Contains(loc, "/") {
 			t.Fatalf("go test base names must stay unattributed: got %v", got)
@@ -494,9 +510,16 @@ func TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed(t *testing.T) {
 // it. Lifting first only protects an artifact tree nested deeper than its
 // source; an artifact emitted one level shallower still lands on its tracked
 // lookalike, because a unique suffix match is a coincidence and this function
-// has no way to tell a coincidence from a working directory. Both assertions
-// are guards — neither discriminates against the strip-only code, which
-// returned a bare base name in the first case and never lifted in the second.
+// has no way to tell a coincidence from a working directory.
+//
+// Only the first assertion is a guard: strip-only code also ground
+// _build/dev/lib/foo.ex down to foo.ex, so it discriminates nothing and is
+// here to keep the artifact case visible. The second is not — strip-only code
+// answered "bundle.js" for dist/bundle.js, so that assertion fails against it.
+// It characterises the lift's new and unwanted reach, and that reach is live
+// rather than theoretical: dist/bundle.js:4 against a tracked
+// src/dist/bundle.js reaches rule (a) and hard-fails the branch, which is the
+// same false block this change set removed elsewhere.
 func TestNormalizeTrackedPathLiftsBeforeStripping(t *testing.T) {
 	tracked := newTrackedIndex([]string{"apps/api/lib/foo.ex"})
 
@@ -506,7 +529,9 @@ func TestNormalizeTrackedPathLiftsBeforeStripping(t *testing.T) {
 
 	shallow := newTrackedIndex([]string{"src/dist/bundle.js"})
 	if got := normalizeTrackedPath("dist/bundle.js", shallow); got != "src/dist/bundle.js" {
-		t.Fatalf("known limit changed: got %q, want src/dist/bundle.js", got)
+		t.Fatalf("known limit no longer present: got %q, want src/dist/bundle.js — "+
+			"fixing this limit is expected, so update this test rather than "+
+			"restoring the old behaviour", got)
 	}
 }
 

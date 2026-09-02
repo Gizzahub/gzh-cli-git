@@ -512,6 +512,24 @@ func newTrackedIndex(tracked []string) trackedIndex {
 // carry a directory is weak evidence of the tool's working directory; a bare
 // file name is no evidence at all, so the safe answer is the pre-existing
 // one — do not lift, and let the changed-paths rule stay silent.
+//
+// Two costs come with that refusal, and neither is hypothetical.
+//
+// The refusal covers only this lift. One line up, normalizeTrackedPath still
+// answers an exact tracked match, and at a repository root a bare name can be
+// exactly tracked — this repository has version_test.go there. A cleanly
+// skipping root-level test therefore still reaches rule (a) and hard-fails the
+// branch. The gate below narrows that class; it does not close it, and saying
+// the changed-paths rule stays silent would overstate what this does.
+//
+// The refusal also forfeits real attribution. A recipe doing
+// "cd src && gcc -c foo.c" makes gcc print foo.c:12:5: with no directory of
+// its own, and that diagnostic is now permanently unattributable even though
+// src/foo.c is tracked and unambiguous. The trade is deliberate: a wrong
+// attribution hard-blocks an innocent branch, while a missing one only falls
+// back to the count heuristic. Both costs are paid off by the same fix —
+// reading the tool's real working directory rather than guessing it from a
+// suffix.
 func (t trackedIndex) liftToTracked(path string) (string, bool) {
 	i := strings.LastIndexByte(path, '/')
 	if i < 0 {

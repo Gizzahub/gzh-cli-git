@@ -1,6 +1,6 @@
 # ISSUE: `pkg/integrate` 픽스처가 로컬 셸·기본 브랜치에 의존해 hosted 게이트에서만 실패
 
-- status: open
+- status: done
 - priority: P0
 - category: quality/test-portability
 - created_at: 2026-09-02T17:05:00+09:00
@@ -121,4 +121,9 @@ Ubuntu 러너의 `/bin/sh`는 dash다. 그래서 러너에서만 리터럴 백�
   — `✅ Canonical quality gate passed!` / `QUALITY_EXIT=0` (e2e 포함 10단계 전부). 주의: 같은 머신에서
   다른 golangci-lint가 돌고 있으면 `Error: parallel golangci-lint is running`으로 `lint-check`가
   죽는다(전역 락, 저장소 무관). 게이트는 직렬로 돌려야 한다.
-- [ ] hosted `Quality gate`가 master에서 실제로 초록
+- [x] hosted `Quality gate`가 master에서 실제로 초록
+  — master `1b1298e`, run
+  [33606203470](https://github.com/Gizzahub/gzh-cli-gitforge/actions/runs/33606203470)
+  `conclusion=success`. 잡 전부 success: `Quality gate`, `Test Examples`,
+  `Build (ubuntu-latest)`, `Build (macos-latest)`, `Build (windows-latest)`.
+  이슈 29 이후 `security-code`에 가려져 있던 단계까지 처음으로 전부 통과했다.

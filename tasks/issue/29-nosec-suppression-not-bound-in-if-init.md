@@ -1,6 +1,6 @@
 # ISSUE: `if` init 절의 `#nosec`이 바인딩되지 않아 canonical 게이트가 fail-closed
 
-- status: resolved (2026-09-02) — 통합 대기
+- status: done (2026-09-02) — master `1b1298e`에 통합, hosted 초록 확인
 - priority: P0
 - category: quality/security-gate
 - created_at: 2026-09-02T15:40:00+09:00
@@ -136,7 +136,11 @@ make: *** [security-code] Error 1
   quality-workspace-check / format-check / lint-check / security-code / security-deps /
   quality-build / test-install-audit / test-unit-quality / test-integration-quality /
   test-e2e-only 전 단계 통과
-- [ ] hosted CI `Quality gate`가 master에서 초록
+- [x] hosted CI `Quality gate`가 master에서 초록
+  — master `1b1298e`, run
+  [33606203470](https://github.com/Gizzahub/gzh-cli-gitforge/actions/runs/33606203470)
+  `conclusion=success`. 다만 G204 수정 자체는 `fc8db6c`/run `33604081350`에서 이미
+  `security-code`를 통과했고, 그때 드러난 후속 실패는 별건인 이슈 31에서 처리했다.
   verify: human — 통합 후 hosted run URL을 기록한다
 - [x] 새로운 `#nosec` 주석을 추가하지 않는다 (억제 총량 불변)
   verify: `test "$(git diff origin/master -- '*.go' | grep -c '^+.*#nosec')" = "$(git diff origin/master -- '*.go' | grep -c '^-.*#nosec')"`

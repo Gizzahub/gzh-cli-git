@@ -1,6 +1,7 @@
 # ISSUE: D6 컨텍스트 참조 계약의 미정의 구간 — W6/W7 착수 전 처리 필요
 
-- status: done (2026-09-02) — P1 4건·P2 4건 문서로 종결, canonical 게이트 exit 0
+- status: done (2026-09-02) — P1 4건·P2 4건 문서로 종결, canonical 게이트 exit 0;
+  마지막 미결이던 devbox 교차참조 정정도 devbox master `46b40e7`에서 확인해 닫음
 - priority: P1
 - category: architecture/context-reference
 - created_at: 2026-09-02T16:10:00+09:00
@@ -180,17 +181,18 @@ D6의 완화책은 구현 카드가 CE 매핑을 "verbatim" 기록한다는 것�
   집계 상한의 비직교성)는 이 카드에서 처리하지 않는다. P3-2는 한계값의 권위와 초과 시
   부분 결과 처리라는 **새 설계 결정**이라 W6 구현 카드에서 실측 corpus와 함께 정하는 것이
   맞고, 지금 문서에서 임의로 고정하면 pilot이 측정하기로 한 값을 선점한다.
-- [ ] devbox `tasks/todo/124-…md`와 `tasks/plan/GZ_GIT_CONTEXT_ORCHESTRATION.md:425`의
+- [x] devbox `tasks/todo/124-…md`와 `tasks/plan/GZ_GIT_CONTEXT_ORCHESTRATION.md`의
   "독립 리뷰 P0/P1/P2 없음" 기록 정정 (devbox 소유 — 이 저장소 밖)
   verify: human — devbox 측 커밋을 참조로 남긴다
-  현황(2026-09-02 확인): 정정문 자체는 작성돼 있고 내용도 맞다 — devbox 브랜치
-  `dev/claude/mbp/docs/verify-binding-repair` `50e0b93`이 todo/124에 "4 P1 / 0 P0
-  (gzh-cli-gitforge `85bbded`, issue 30)"와 CE 쪽 "3 P1 / 0 P0 (ce-agent-kit
-  `bb51745d`, TASK-087)"를 담고 있다. 그러나 **미통합**이라 devbox master `8f40ee6`에는
-  반영되지 않았고, plan `422`·`425`행과 todo/124 `95`행은 여전히 거짓 기록을 들고 있다.
-  통합을 막는 것은 이 카드와 무관한 devbox 구조 문제(TASK-132)다 — devbox `.make/quality.mk`가
-  `cd gzh-cli`를 하는데 하위 저장소가 gitignore 대상이라 워크트리에 존재하지 않아 게이트가
-  워크트리에서 성립하지 않는다. 따라서 이 항목은 gitforge 쪽에서 닫을 수 없다
+  종결(2026-09-02): devbox master `46b40e7`에 정정이 반영됐다. 참조 커밋 3건 —
+  `50e0b93`이 todo/124와 plan의 거짓 기록을 "4 P1 / 0 P0(gzh-cli-gitforge `85bbded`,
+  issue 30)"로 고쳤고, `d489f44`가 그 브랜치의 통합을 막던 devbox 구조 문제(TASK-132,
+  하위 저장소가 gitignore라 워크트리에 없어 게이트가 성립하지 않던 건)를 해소했으며,
+  `8fb602c`가 issue 30이 `cdbc1d1`에서 P1 4건·P2 4건 모두 닫히고 canonical 게이트
+  exit 0이 된 증거로 W5 행을 complete로 복원했다. 세 커밋 모두
+  `git merge-base --is-ancestor <sha> origin/master`로 조상임을 확인했다. 지금 devbox
+  master의 todo/124 `86`·`98`·`114`행과 plan `66`·`70`행이 정정된 기록을 들고 있고,
+  철회했다가 증거를 갖춰 복원한 경위도 지우지 않고 남겼다
 - [x] `GOWORK=off make quality-check` exit 0 — ✅ Canonical quality gate passed! /
   QUALITY_EXIT=0 (e2e 포함 10단계 전부). 이 브랜치는 `b25e2b1`(이슈 32) 위로 리베이스한
   상태에서 측정했다. 그 이전에는 선재 flake

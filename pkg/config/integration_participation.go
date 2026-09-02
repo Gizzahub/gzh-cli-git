@@ -222,7 +222,8 @@ func normalizeDeclaredIntegrationBranch(ctx context.Context, repoPath, candidate
 }
 
 func integrationBranchExists(ctx context.Context, repoPath, branch string) bool {
-	if err := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch).Run(); err == nil { // #nosec G204 -- branch was validated with SanitizeBranchName and is passed as argv.
+	localRef := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch) // #nosec G204 -- branch was validated with SanitizeBranchName and is passed as argv.
+	if err := localRef.Run(); err == nil {
 		return true
 	}
 	output, err := exec.CommandContext(ctx, "git", "-C", repoPath, "remote").Output() // #nosec G204 -- fixed Git query in selected repository.
@@ -230,7 +231,8 @@ func integrationBranchExists(ctx context.Context, repoPath, branch string) bool 
 		return false
 	}
 	for _, remote := range strings.Fields(string(output)) {
-		if err := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", "refs/remotes/"+remote+"/"+branch).Run(); err == nil { // #nosec G204 -- remote comes from Git and validated branch is passed as argv.
+		remoteRef := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "--verify", "--quiet", "refs/remotes/"+remote+"/"+branch) // #nosec G204 -- remote comes from Git and validated branch is passed as argv.
+		if err := remoteRef.Run(); err == nil {
 			return true
 		}
 	}

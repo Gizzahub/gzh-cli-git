@@ -188,8 +188,10 @@ func EvaluateBaseline(in BaselineInput) BaselineResult {
 }
 
 // ExtractLocations pulls file:line tokens from tool output and normalizes
-// them against the revision's tracked paths (strip leading components until
-// a tracked path matches). Unmatched paths are kept, fail-closed.
+// them against the revision's tracked paths: an over-qualified path loses
+// leading components, and a path emitted relative to a subdirectory is lifted
+// back to its root-relative form when exactly one tracked path ends with it.
+// Unmatched paths are kept, fail-closed.
 func ExtractLocations(output string, tracked []string) []string {
 	return extractLocationsForProbe(makeProbe{Output: output}, tracked)
 }
@@ -200,10 +202,7 @@ func ExtractLocations(output string, tracked []string) []string {
 // locations, and therefore must not affect count comparisons.
 func extractLocationsForProbe(probe makeProbe, tracked []string) []string {
 	probe.Output = suppressGoTestVerboseNoise(probe.Output)
-	known := make(map[string]struct{}, len(tracked))
-	for _, p := range tracked {
-		known[p] = struct{}{}
-	}
+	known := newTrackedIndex(tracked)
 	var out []string
 	for _, line := range strings.Split(probe.Output, "\n") {
 		match := findLocationMatch(line)
@@ -463,17 +462,91 @@ func suppressGoTestVerboseNoise(output string) string {
 	return strings.Join(lines, "\n")
 }
 
-func normalizeTrackedPath(path string, tracked map[string]struct{}) string {
-	path = filepath.ToSlash(path)
-	for {
-		if _, ok := tracked[path]; ok {
-			return path
+// trackedIndex answers the two questions normalizeTrackedPath needs about a
+// revision's tracked paths: is this exact path tracked, and — for a tool that
+// ran from a subdirectory — is there exactly one tracked path that ends with
+// it. The suffix side is indexed by base name so a repository with tens of
+// thousands of files costs a map lookup per diagnostic, not a full scan.
+type trackedIndex struct {
+	exact  map[string]struct{}
+	byBase map[string][]string
+}
+
+func newTrackedIndex(tracked []string) trackedIndex {
+	idx := trackedIndex{
+		exact:  make(map[string]struct{}, len(tracked)),
+		byBase: make(map[string][]string, len(tracked)),
+	}
+	for _, p := range tracked {
+		p = filepath.ToSlash(p)
+		idx.exact[p] = struct{}{}
+		base := p
+		if i := strings.LastIndexByte(p, '/'); i >= 0 {
+			base = p[i+1:]
 		}
+		idx.byBase[base] = append(idx.byBase[base], p)
+	}
+	return idx
+}
+
+// liftToTracked resolves a diagnostic path emitted relative to a subdirectory
+// back to its repository-root form. It answers only when exactly one tracked
+// path ends with the given path: several candidates means the evidence does
+// not say which file the tool meant, and picking one would attribute a
+// diagnostic to a file the branch may never have touched.
+func (t trackedIndex) liftToTracked(path string) (string, bool) {
+	base := path
+	if i := strings.LastIndexByte(path, '/'); i >= 0 {
+		base = path[i+1:]
+	}
+	var found string
+	for _, candidate := range t.byBase[base] {
+		if !strings.HasSuffix(candidate, "/"+path) {
+			continue
+		}
+		if found != "" {
+			return "", false
+		}
+		found = candidate
+	}
+	return found, found != ""
+}
+
+// normalizeTrackedPath maps a diagnostic path onto the revision's tracked
+// paths. Tools disagree about what a path is relative to, in both directions:
+// a wrapper may print an over-qualified path, and a recipe that does
+// "cd apps/api && mix compile" makes its tool print lib/foo.ex for a file the
+// repository knows as apps/api/lib/foo.ex.
+//
+// Stripping alone only handled the first direction, so on a repository whose
+// Makefile cds into a subdirectory — the shape missingCD already exists to
+// cope with — every diagnostic path was ground down to a bare base name that
+// matches no changed path. The changed-paths rule, the one piece of
+// EvaluateBaseline that is direct evidence of harm rather than a count
+// heuristic, could therefore never fire there at all.
+//
+// The lift is attempted on the path as emitted, before any component is
+// stripped. Stripping first and lifting afterwards would let a build-artifact
+// copy such as _build/dev/lib/foo.ex be rewritten onto the source file it was
+// generated from, which is a different file with a different history.
+func normalizeTrackedPath(path string, tracked trackedIndex) string {
+	path = filepath.ToSlash(path)
+	path = strings.TrimPrefix(path, "./")
+	if _, ok := tracked.exact[path]; ok {
+		return path
+	}
+	if lifted, ok := tracked.liftToTracked(path); ok {
+		return lifted
+	}
+	for {
 		slash := strings.IndexByte(path, '/')
 		if slash < 0 {
 			return path
 		}
 		path = path[slash+1:]
+		if _, ok := tracked.exact[path]; ok {
+			return path
+		}
 	}
 }
 

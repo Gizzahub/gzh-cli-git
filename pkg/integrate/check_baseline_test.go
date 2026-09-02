@@ -376,3 +376,81 @@ func TestBaselineUnmeasurableGatesUnlessAllowed(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizeTrackedPathPrefixLift pins the direction normalizeTrackedPath
+// used to be missing. A recipe of the form "cd apps/api && mix compile" makes
+// its tool print lib/foo.ex for a file the repository tracks as
+// apps/api/lib/foo.ex. The old code could only remove components, so it ground
+// the path down to foo.ex, which matches no entry in the changed-path set —
+// the changed-paths rule could not fire at all on such a repository.
+func TestNormalizeTrackedPathPrefixLift(t *testing.T) {
+	tracked := newTrackedIndex([]string{
+		"apps/api/lib/foo.ex",
+		"apps/api/lib/bar.ex",
+		"Makefile",
+	})
+
+	if got := normalizeTrackedPath("lib/foo.ex", tracked); got != "apps/api/lib/foo.ex" {
+		t.Fatalf("subdirectory-relative path: got %q, want apps/api/lib/foo.ex", got)
+	}
+	if got := normalizeTrackedPath("./lib/foo.ex", tracked); got != "apps/api/lib/foo.ex" {
+		t.Fatalf("dot-prefixed path: got %q, want apps/api/lib/foo.ex", got)
+	}
+	if got := normalizeTrackedPath("apps/api/lib/foo.ex", tracked); got != "apps/api/lib/foo.ex" {
+		t.Fatalf("already root-relative path must be untouched: got %q", got)
+	}
+	if got := normalizeTrackedPath("/build/wrap/Makefile", tracked); got != "Makefile" {
+		t.Fatalf("over-qualified path must still be stripped: got %q, want Makefile", got)
+	}
+}
+
+// TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed keeps the lift honest.
+// Two tracked files ending in the same suffix mean the output does not say
+// which one the tool meant; attributing the diagnostic to either would blame a
+// file the branch may never have touched. The path is left unmatched instead,
+// which is what the old code did for every such input anyway.
+func TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed(t *testing.T) {
+	tracked := newTrackedIndex([]string{
+		"apps/api/lib/foo.ex",
+		"apps/web/lib/foo.ex",
+	})
+
+	if got := normalizeTrackedPath("lib/foo.ex", tracked); got != "foo.ex" {
+		t.Fatalf("ambiguous suffix must not be guessed: got %q, want foo.ex", got)
+	}
+}
+
+// TestNormalizeTrackedPathPrefixDoesNotRewriteBuildArtifacts is why the lift
+// runs on the path as emitted rather than after each strip. A compiled copy
+// under _build is a different file with a different history; rewriting it onto
+// the source it was generated from would invent evidence.
+func TestNormalizeTrackedPathPrefixDoesNotRewriteBuildArtifacts(t *testing.T) {
+	tracked := newTrackedIndex([]string{"apps/api/lib/foo.ex"})
+
+	if got := normalizeTrackedPath("_build/dev/lib/foo.ex", tracked); got != "foo.ex" {
+		t.Fatalf("build artifact must not be lifted onto its source: got %q, want foo.ex", got)
+	}
+}
+
+// TestExtractLocationsPrefixLiftFeedsChangedPathRule is the end-to-end shape
+// the card reports: a cd-ing Makefile's output, the repository's tracked set,
+// and the changed-path set the branch actually produced.
+func TestExtractLocationsPrefixLiftFeedsChangedPathRule(t *testing.T) {
+	out := "lib/foo.ex:12: warning: variable \"x\" is unused\n"
+	tracked := []string{"apps/api/lib/foo.ex", "apps/api/mix.exs"}
+
+	got := ExtractLocations(out, tracked)
+	want := []string{"apps/api/lib/foo.ex:12"}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("ExtractLocations: got %v, want %v", got, want)
+	}
+
+	verdict := EvaluateBaseline(BaselineInput{
+		BranchLocations: got,
+		BaseLocations:   nil,
+		ChangedPaths:    []string{"apps/api/lib/foo.ex"},
+	})
+	if verdict.Status != BaselineFail {
+		t.Fatalf("a diagnostic on a changed path must fail: got status %v (%s)", verdict.Status, verdict.Reason)
+	}
+}

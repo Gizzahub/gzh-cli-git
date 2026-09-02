@@ -16,9 +16,9 @@
 단계가 처음으로 통과했다. 그 결과 게이트가 **처음으로** `test-unit-quality` 단계까지 진행했고,
 거기서 4건이 실패했다.
 
-| 커밋      | hosted run  | 실패 단계                                    |
-| --------- | ----------- | -------------------------------------------- |
-| `f7fb3f3` | 33585705308 | `security-code` — G204 (이슈 29)             |
+| 커밋      | hosted run  | 실패 단계                                       |
+| --------- | ----------- | ----------------------------------------------- |
+| `f7fb3f3` | 33585705308 | `security-code` — G204 (이슈 29)                |
 | `fc8db6c` | 33604081350 | `test-unit-quality` — `.make/test.mk:33` 에러 1 |
 
 **이 4건은 이슈 29가 만든 회귀가 아니다.** `f7fb3f3..fc8db6c` 디프는
@@ -28,12 +28,12 @@
 
 실패 목록 (run 33604081350):
 
-| 테스트                                              | 증상                                                  |
-| --------------------------------------------------- | ----------------------------------------------------- |
-| `TestBootstrapRejectsConcurrentTargetAdvance`        | `fatal: a branch named 'master' already exists` (128)  |
-| `TestReadinessUpdateRejectsSourceAndTargetRaces/target` | 동일                                               |
-| `TestCheck_ContractUsesTargetRunnerNotHeadMakefile`  | `runner result is not valid JSON: invalid character '\'` |
-| `TestRunChecked_TargetMovedStopsBeforeIntegrationAndReclaim` | 동일                                          |
+| 테스트                                                       | 증상                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------------- |
+| `TestBootstrapRejectsConcurrentTargetAdvance`                | `fatal: a branch named 'master' already exists` (128)    |
+| `TestReadinessUpdateRejectsSourceAndTargetRaces/target`      | 동일                                                     |
+| `TestCheck_ContractUsesTargetRunnerNotHeadMakefile`          | `runner result is not valid JSON: invalid character '\'` |
+| `TestRunChecked_TargetMovedStopsBeforeIntegrationAndReclaim` | 동일                                                     |
 
 네 건 모두 macOS 개발 머신에서는 통과한다. 게이트가 아니라 **테스트가 실행 환경에 의존**한다.
 
@@ -56,10 +56,10 @@ POSIX 작은따옴표 안에서 백슬래시는 **리터럴**이다. 따라서 `
 
 측정 (같은 머신, 같은 인자):
 
-| 셸                              | 출력                                            | JSON  |
-| ------------------------------- | ----------------------------------------------- | ----- |
-| `/bin/sh` (macOS = bash 3.2.57) | `{"version":1,"status":"ready","summary":"ok"}`  | 유효  |
-| `dash`                          | `{\"version\":1}`                                | 무효  |
+| 셸                              | 출력                                            | JSON |
+| ------------------------------- | ----------------------------------------------- | ---- |
+| `/bin/sh` (macOS = bash 3.2.57) | `{"version":1,"status":"ready","summary":"ok"}` | 유효 |
+| `dash`                          | `{\"version\":1}`                               | 무효 |
 
 Ubuntu 러너의 `/bin/sh`는 dash다. 그래서 러너에서만 리터럴 백슬래시가 남고
 `invalid character '\'`가 난다. 관측된 오류 문자열과 정확히 일치한다.
@@ -72,10 +72,10 @@ Ubuntu 러너의 `/bin/sh`는 dash다. 그래서 러너에서만 리터럴 백�
 덮어쓴 뒤 `git init --bare`를 부른다. 그러면 `init.defaultBranch`가 **git 구현의 내장 기본값**으로
 떨어지는데, 이 값이 환경마다 다르다.
 
-| git                        | 빈 global 설정에서 `git init --bare`의 HEAD |
-| -------------------------- | ------------------------------------------- |
-| Apple Git 2.50.1 (macOS)   | `refs/heads/main`                           |
-| Ubuntu 러너의 git          | `refs/heads/master` (아래 오류로 역산)      |
+| git                      | 빈 global 설정에서 `git init --bare`의 HEAD |
+| ------------------------ | ------------------------------------------- |
+| Apple Git 2.50.1 (macOS) | `refs/heads/main`                           |
+| Ubuntu 러너의 git        | `refs/heads/master` (아래 오류로 역산)      |
 
 픽스처는 `push origin HEAD:master`로 `master`만 만든다. 그러므로:
 
@@ -106,14 +106,16 @@ Ubuntu 러너의 `/bin/sh`는 dash다. 그래서 러너에서만 리터럴 백�
 ## 잔여 (별건)
 
 `bootstrapFixture`의 bare HEAD는 여전히 `init.defaultBranch`를 따라간다. 지금 두 호출부는
-`-B`로 무해해졌지만, 앞으로 추가되는 픽스처가 같은 함정을 다시 밟을 수 있다. `git init --bare -b
-master`로 픽스처를 결정론적으로 고정하는 편이 낫다 — 다만 그러면 로컬 clone이 안착하는 브랜치가
+`-B`로 무해해졌지만, 앞으로 추가되는 픽스처가 같은 함정을 다시 밟을 수 있다. `git init --bare -b master`로 픽스처를 결정론적으로 고정하는 편이 낫다 — 다만 그러면 로컬 clone이 안착하는 브랜치가
 `main`에서 `master`로 바뀌므로 다른 단정에 영향이 없는지 별도로 확인해야 한다. 이번 변경 범위에
 섞지 않는다.
 
 ## Acceptance
 
-- [ ] `GIT_CONFIG_SYSTEM`에 `init.defaultBranch=master`를 준 상태에서 `pkg/integrate` 전체가 통과
-- [ ] 기본(로컬) 상태에서도 `pkg/integrate` 전체가 통과
+- [x] `GIT_CONFIG_SYSTEM`에 `init.defaultBranch=master`를 준 상태에서 `pkg/integrate` 전체가 통과
+  — `ok github.com/gizzahub/gzh-cli-gitforge/pkg/integrate 115.095s` (수정 전 base `f81a8b0`에서는
+  같은 조건으로 러너의 4건이 그대로 재현됨)
+- [x] 기본(로컬) 상태에서도 `pkg/integrate` 전체가 통과
+  — `ok github.com/gizzahub/gzh-cli-gitforge/pkg/integrate 107.067s`
 - [ ] canonical `make quality-check`가 exit 0
 - [ ] hosted `Quality gate`가 master에서 실제로 초록

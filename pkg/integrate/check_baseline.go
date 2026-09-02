@@ -129,15 +129,37 @@ func EvaluateBaseline(in BaselineInput) BaselineResult {
 		}
 	}
 
+	// Rule (a) asks whether the branch caused a diagnostic, so a diagnostic the
+	// target tip already reported at the same file:line is not evidence against
+	// it. Without this subtraction, touching any file that already carried a
+	// warning hard-failed the branch even when base and branch were identical,
+	// which made pre-existing-warning files unmodifiable.
+	//
+	// Identity is exact file:line. A diagnostic that merely shifted down
+	// because lines were inserted above it still reads as new; normalizing that
+	// is a separate problem and is deliberately not attempted here.
+	//
+	// When the base could not be measured at all, base is empty and this
+	// subtracts nothing, so rule (a) keeps firing on any diagnostic on a changed
+	// path — the stance the comment below relies on.
+	preexisting := make(map[string]struct{}, len(base))
+	for _, loc := range base {
+		preexisting[loc] = struct{}{}
+	}
+
 	var attributed []string
 	for _, loc := range branch {
 		path, _, ok := splitLoc(loc)
 		if !ok {
 			continue
 		}
-		if _, hit := changed[path]; hit {
-			attributed = append(attributed, loc)
+		if _, hit := changed[path]; !hit {
+			continue
 		}
+		if _, old := preexisting[loc]; old {
+			continue
+		}
+		attributed = append(attributed, loc)
 	}
 	if len(attributed) > 0 {
 		return BaselineResult{

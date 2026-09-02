@@ -594,3 +594,66 @@ func TestNormalizeTrackedPathCleansBeforeMatching(t *testing.T) {
 		t.Fatalf("cleaning must not make a bare base name liftable: got %q", got)
 	}
 }
+
+// TestEvaluateBaselinePreexistingDiagnosticOnChangedPathIsNotHarm pins the case
+// the card measured on 59c1f60: base and branch reporting the identical
+// diagnostic, on a path the branch touched. Rule (a) used to hard-fail this,
+// which made any file already carrying a warning unmodifiable — the input says
+// outright that nothing worsened.
+func TestEvaluateBaselinePreexistingDiagnosticOnChangedPathIsNotHarm(t *testing.T) {
+	got := EvaluateBaseline(BaselineInput{
+		BranchLocations: []string{"a.go:1"},
+		BaseLocations:   []string{"a.go:1"},
+		ChangedPaths:    []string{"a.go"},
+	})
+	if got.Status == BaselineFail {
+		t.Fatalf("identical base and branch diagnostic is not harm, got %+v", got)
+	}
+	if got.Status != BaselinePass {
+		t.Fatalf("want PASS, got %+v", got)
+	}
+
+	// Also when the branch removed one: strictly better must not fail either.
+	better := EvaluateBaseline(BaselineInput{
+		BranchLocations: []string{"a.go:1"},
+		BaseLocations:   []string{"a.go:1", "a.go:7"},
+		ChangedPaths:    []string{"a.go"},
+	})
+	if better.Status != BaselinePass {
+		t.Fatalf("removing a diagnostic must not fail, got %+v", better)
+	}
+}
+
+// TestEvaluateBaselineNewDiagnosticOnChangedPathStillFails guards the other
+// direction: the subtraction must not blunt rule (a) into uselessness. A
+// diagnostic the branch genuinely added on a path it changed is still harm,
+// and the reason must name that one rather than the pre-existing neighbor.
+func TestEvaluateBaselineNewDiagnosticOnChangedPathStillFails(t *testing.T) {
+	got := EvaluateBaseline(BaselineInput{
+		BranchLocations: []string{"a.go:1", "a.go:9"},
+		BaseLocations:   []string{"a.go:1"},
+		ChangedPaths:    []string{"a.go"},
+	})
+	if got.Status != BaselineFail {
+		t.Fatalf("newly added diagnostic on a changed path must FAIL, got %+v", got)
+	}
+	if !strings.Contains(got.Reason, "a.go:9") {
+		t.Fatalf("reason must name the new diagnostic, got %q", got.Reason)
+	}
+	if strings.Contains(got.Reason, "a.go:1 ") || strings.HasSuffix(got.Reason, "a.go:1") {
+		t.Fatalf("reason must not blame the pre-existing diagnostic, got %q", got.Reason)
+	}
+
+	// Same file:line but a path the branch did not touch stays out of rule (a).
+	untouched := EvaluateBaseline(BaselineInput{
+		BranchLocations: []string{"a.go:1", "b.go:9"},
+		BaseLocations:   []string{"a.go:1"},
+		ChangedPaths:    []string{"a.go"},
+	})
+	if untouched.Status != BaselineFail {
+		t.Fatalf("count increase still fails via rule (c), got %+v", untouched)
+	}
+	if strings.Contains(untouched.Reason, "diagnostics on changed paths") {
+		t.Fatalf("rule (a) must not claim an unchanged path, got %q", untouched.Reason)
+	}
+}

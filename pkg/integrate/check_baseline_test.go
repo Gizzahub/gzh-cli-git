@@ -345,3 +345,34 @@ func TestEvaluateBaseline_PrepareProfileAbsentDoesNotForceFail(t *testing.T) {
 		}
 	}
 }
+
+// TestBaselineUnmeasurableGatesUnlessAllowed pins the property the first cut of
+// this change got wrong. An unmeasurable baseline was reported as checkWarn,
+// and a warn does not gate: report.Ready is report.Failures == 0 and warns
+// only touch report.Warnings. The gate therefore stopped gating in exactly the
+// repositories the new status exists for. It must fail unless the operator
+// explicitly downgrades it, the same contract every other skipped check has.
+func TestBaselineUnmeasurableGatesUnlessAllowed(t *testing.T) {
+	verdict := BaselineResult{Status: BaselineUnmeasurable, Reason: "target tip emitted nothing"}
+
+	blocking := baselineCheckItem("make check", verdict, false)
+	if blocking.Status != checkFail {
+		t.Fatalf("an unmeasured gate must block by default, got status %v (%s)", blocking.Status, blocking.Detail)
+	}
+	if !strings.Contains(blocking.Detail, "--allow-skipped-checks") {
+		t.Fatalf("the operator must be told how to proceed, got %q", blocking.Detail)
+	}
+
+	downgraded := baselineCheckItem("make check", verdict, true)
+	if downgraded.Status != checkWarn {
+		t.Fatalf("--allow-skipped-checks must downgrade, got status %v (%s)", downgraded.Status, downgraded.Detail)
+	}
+
+	// A real worsening is never downgradable, flag or no flag.
+	worsened := BaselineResult{Status: BaselineFail, Reason: "diagnostics on changed paths: lib/new.ex:4"}
+	for _, allowed := range []bool{false, true} {
+		if got := baselineCheckItem("make check", worsened, allowed); got.Status != checkFail {
+			t.Fatalf("allowSkipped=%v downgraded a real failure: %v (%s)", allowed, got.Status, got.Detail)
+		}
+	}
+}

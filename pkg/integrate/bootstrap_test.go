@@ -456,7 +456,7 @@ func TestBootstrapAllowsNewContractAddition(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(work, ".gz-git.yaml"),
-		[]byte("branch:\n  integrationBranch: master\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n"), 0o644); err != nil {
+		[]byte("branch:\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run(work, "add", ".")
@@ -480,14 +480,19 @@ func TestBootstrapAllowsNewContractAddition(t *testing.T) {
 // bootstrap lands on a protected branch outside the normal gate, and a wholly
 // new file offers no diff to prove innocuous.
 func TestBootstrapNewContractShapeIsConstrained(t *testing.T) {
-	good := []byte("branch:\n  integrationBranch: master\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n")
+	good := []byte("branch:\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n")
 	if err := newContractIsMinimal(good); err != nil {
 		t.Fatalf("expected a branch-only contract with readiness to be accepted: %v", err)
 	}
 	for name, doc := range map[string]string{
 		"extra top-level key": "branch:\n  readiness:\n    version: 1\nhooks:\n  preCommit: ./x\n",
 		"no readiness":        "branch:\n  integrationBranch: master\n",
-		"no branch mapping":   "readiness:\n  version: 1\n",
+		// Bootstrap installs the gate; it does not get to configure the
+		// repository on a protected branch without review.
+		"sets integrationBranch": "branch:\n  integrationBranch: master\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n",
+		"sets protectedBranches": "branch:\n  protectedBranches: [master]\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n",
+		"sets taskPattern":       "branch:\n  taskPattern: dev/*\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n",
+		"no branch mapping":      "readiness:\n  version: 1\n",
 		// Each of these once passed this writer and was then rejected by
 		// config.ParseReadinessDocument, the reader the gate actually uses —
 		// bootstrap would have landed a contract nothing could read.

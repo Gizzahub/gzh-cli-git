@@ -369,7 +369,7 @@ func judgeMakeLegacy(ctx context.Context, g gitRepo, plan TargetPlan, probe make
 	if err != nil {
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
-	return baselineCheckItem(name, verdict)
+	return baselineCheckItem(name, verdict, allowSkipped)
 }
 
 // judgeMakeAgainstProbe consumes a target measurement captured before source
@@ -432,20 +432,40 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
 	verdict := EvaluateBaseline(BaselineInput{BranchLocations: extractLocationsForProbe(probe, branchTracked), BaseLocations: extractLocationsForProbe(base, baseTracked), ChangedPaths: changed})
-	return baselineCheckItem(name, verdict)
+	return baselineCheckItem(name, verdict, allowSkipped)
 }
 
 // baselineCheckItem renders a baseline verdict. BaselineUnmeasurable is not a
 // non-worsening pass and must not be reported as one: nothing was compared,
-// so the item says exactly that. It warns rather than fails because a target
-// tip that cannot measure itself is a property of the repository, not of the
-// branch being judged.
-func baselineCheckItem(name string, verdict BaselineResult) CheckItem {
+// so the item says exactly that.
+//
+// It fails by default. Warning here would have been quieter but wrong: a warn
+// increments only report.Warnings, and report.Ready is report.Failures == 0,
+// so warning would have made make check and make lint stop gating altogether
+// in precisely the repositories this status exists for — leaving only the
+// changed-paths rule, which cannot fire at all when the Makefile cds into a
+// subdirectory. That is a strictly larger hole than the bug being fixed.
+// An unmeasured gate is a skipped gate, so it is reported the way every other
+// skipped check already is: fail, downgradable by --allow-skipped-checks. The
+// operator still gets the escape hatch the old code denied them, and gets a
+// truthful reason instead of a fabricated "count increased" verdict.
+func baselineCheckItem(name string, verdict BaselineResult, allowSkipped bool) CheckItem {
 	switch verdict.Status {
 	case BaselineFail:
 		return CheckItem{Name: name, Status: checkFail, Detail: verdict.Reason}
 	case BaselineUnmeasurable:
-		return CheckItem{Name: name, Status: checkWarn, Detail: "baseline unmeasurable: " + verdict.Reason}
+		if !allowSkipped {
+			return CheckItem{
+				Name:   name,
+				Status: checkFail,
+				Detail: "baseline unmeasurable (not a pass): " + verdict.Reason + "; pass --allow-skipped-checks to downgrade",
+			}
+		}
+		return CheckItem{
+			Name:   name,
+			Status: checkWarn,
+			Detail: "baseline unmeasurable, downgraded by --allow-skipped-checks: " + verdict.Reason,
+		}
 	case BaselinePass:
 		return CheckItem{Name: name, Status: checkWarn, Detail: "baseline failure, non-worsening: " + verdict.Reason}
 	default:

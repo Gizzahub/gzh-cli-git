@@ -147,8 +147,9 @@ func EvaluateBaseline(in BaselineInput) BaselineResult {
 	}
 	// A failed target tip that emitted no file:line diagnostic at all was not
 	// measured; zero here means "the tool never got far enough to report",
-	// not "the baseline is clean". Only both call sites' already-rejected
-	// cases (Unavailable, MissingCD, ToolCrash) name that outcome explicitly;
+	// not "the baseline is clean". Of the base-side outcomes, only Unavailable
+	// and MissingCD are rejected before reaching here by either call site
+	// (ToolCrash is screened on the branch probe only, never on the base);
 	// a checker that dies early on its own — mix without deps/, a test runner
 	// without node_modules, a venv-less pytest — exits non-zero with no
 	// parseable location and is indistinguishable here from a clean run.

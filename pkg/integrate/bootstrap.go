@@ -367,6 +367,21 @@ func newContractIsMinimal(neu []byte) error {
 			return fmt.Errorf("a new .gz-git.yaml may declare only branch, found %q", key)
 		}
 	}
+	// branch itself is constrained to readiness alone. Restricting only the
+	// top level left the whole BranchConfig surface open, and this commit
+	// lands on a protected branch outside the gate under nothing but a digest
+	// confirmation: integrationBranch, protectedBranches and taskPattern (the
+	// branch-reclaim allow-list) would all have been settable here without
+	// review. A repository can still declare them — through a normal change
+	// the gate actually looks at. Bootstrap exists to install the gate, not
+	// to configure the repository.
+	if branch, ok := b["branch"].(map[string]any); ok {
+		for key := range branch {
+			if key != "readiness" {
+				return fmt.Errorf("a new .gz-git.yaml may declare only branch.readiness, found branch.%s", key)
+			}
+		}
+	}
 	// Validate branch.readiness with the very parser the gate will later use
 	// to read it. A shape check written separately here drifted looser than
 	// that reader: `readiness:` left null, given a scalar, given an empty

@@ -41,7 +41,7 @@ func TestCheck_ContractChangeFailsClosed(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(fx.Worktree, ".gz-git", "readiness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeRepoFile(t, fx.Worktree, ".gz-git/readiness/check", "#!/bin/sh\nprintf '{\\\"version\\\":1,\\\"status\\\":\\\"ready\\\",\\\"summary\\\":\\\"weakened\\\"}'\n")
+	writeRepoFile(t, fx.Worktree, ".gz-git/readiness/check", "#!/bin/sh\nprintf '{\"version\":1,\"status\":\"ready\",\"summary\":\"weakened\"}'\n")
 	if err := os.Chmod(filepath.Join(fx.Worktree, ".gz-git", "readiness", "check"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestCheck_BootstrapFailureDoesNotRunHeadMake(t *testing.T) {
 	}
 	sentinel := filepath.Join(t.TempDir(), "make-ran")
 	writeRepoFile(t, fx.Worktree, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n")
-	writeRepoFile(t, fx.Worktree, ".gz-git/readiness/check", "#!/bin/sh\nprintf '{\\\"version\\\":1,\\\"status\\\":\\\"ready\\\",\\\"summary\\\":\\\"ok\\\"}'\n")
+	writeRepoFile(t, fx.Worktree, ".gz-git/readiness/check", "#!/bin/sh\nprintf '{\"version\":1,\"status\":\"ready\",\"summary\":\"ok\"}'\n")
 	if err := os.Chmod(filepath.Join(fx.Worktree, ".gz-git", "readiness", "check"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestCheck_MalformedTargetDoesNotRunHeadMake(t *testing.T) {
 
 func TestCheck_AllowSkippedCannotDowngradeUnavailableContract(t *testing.T) {
 	fx := readinessFixture(t)
-	runner := "#!/bin/sh\nprintf '{\\\"version\\\":1,\\\"status\\\":\\\"unavailable\\\",\\\"summary\\\":\\\"dependency offline\\\"}'\n"
+	runner := "#!/bin/sh\nprintf '{\"version\":1,\"status\":\"unavailable\",\"summary\":\"dependency offline\"}'\n"
 	advanceReadinessTarget(t, fx, "", runner, "make readiness unavailable")
 	report, err := Check(context.Background(), gitcmd.NewExecutor(), CheckOptions{
 		RepoPath: fx.Worktree, Branch: "dev/actor/feat/task", IntegrationConfig: []string{"develop"}, AllowSkippedChecks: true,
@@ -466,7 +466,7 @@ func readinessFixture(t *testing.T) *testutil.WorktreeOrigin {
 		t.Fatal(err)
 	}
 	writeRepoFile(t, fx.Clone, ".gz-git.yaml", "branch:\n  integrationBranch: develop\n  readiness:\n    version: 1\n    runner: .gz-git/readiness/check\n")
-	writeRepoFile(t, fx.Clone, ".gz-git/readiness/check", "#!/bin/sh\nprintf '{\\\"version\\\":1,\\\"status\\\":\\\"ready\\\",\\\"summary\\\":\\\"target gate passed\\\"}'\n")
+	writeRepoFile(t, fx.Clone, ".gz-git/readiness/check", "#!/bin/sh\nprintf '{\"version\":1,\"status\":\"ready\",\"summary\":\"target gate passed\"}'\n")
 	if err := os.Chmod(filepath.Join(fx.Clone, ".gz-git", "readiness", "check"), 0o755); err != nil {
 		t.Fatal(err)
 	}

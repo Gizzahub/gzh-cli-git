@@ -216,7 +216,7 @@ func TestReadinessUpdateRejectsSourceAndTargetRaces(t *testing.T) {
 			runGitInTest(t, filepath.Dir(other), "clone", p.PushEndpoint, other)
 			runGitInTest(t, other, "config", "user.email", "test@example.com")
 			runGitInTest(t, other, "config", "user.name", "Test")
-			runGitInTest(t, other, "checkout", "-b", "master", "origin/master")
+			runGitInTest(t, other, "checkout", "-B", "master", "origin/master")
 			if err := os.WriteFile(filepath.Join(other, "race"), []byte("x"), 0o644); err != nil {
 				t.Fatal(err)
 			}

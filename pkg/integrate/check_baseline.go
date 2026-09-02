@@ -494,11 +494,25 @@ func newTrackedIndex(tracked []string) trackedIndex {
 // path ends with the given path: several candidates means the evidence does
 // not say which file the tool meant, and picking one would attribute a
 // diagnostic to a file the branch may never have touched.
+//
+// A path with no directory component of its own is refused outright, however
+// unique its match. Go's testing package decorates every t.Log and t.Errorf
+// line with filepath.Base, so "a_test.go:10" is the ordinary output of a test
+// that skipped cleanly — and suppressGoTestVerboseNoise cannot always blank
+// it, because an interleaved "=== CONT" clears the pending buffer before the
+// trailer that would identify the line as noise arrives. Lifting a bare base
+// name would resolve that line to a real tracked path and hand it to rule (a),
+// which is a hard failure: a branch that merely touched a test file would be
+// blocked by a skip message present on both sides. A suffix long enough to
+// carry a directory is weak evidence of the tool's working directory; a bare
+// file name is no evidence at all, so the safe answer is the pre-existing
+// one — do not lift, and let the changed-paths rule stay silent.
 func (t trackedIndex) liftToTracked(path string) (string, bool) {
-	base := path
-	if i := strings.LastIndexByte(path, '/'); i >= 0 {
-		base = path[i+1:]
+	i := strings.LastIndexByte(path, '/')
+	if i < 0 {
+		return "", false
 	}
+	base := path[i+1:]
 	var found string
 	for _, candidate := range t.byBase[base] {
 		if !strings.HasSuffix(candidate, "/"+path) {
@@ -526,9 +540,19 @@ func (t trackedIndex) liftToTracked(path string) (string, bool) {
 // heuristic, could therefore never fire there at all.
 //
 // The lift is attempted on the path as emitted, before any component is
-// stripped. Stripping first and lifting afterwards would let a build-artifact
-// copy such as _build/dev/lib/foo.ex be rewritten onto the source file it was
-// generated from, which is a different file with a different history.
+// stripped. Stripping first would grind a build-artifact copy such as
+// _build/dev/lib/foo.ex down to lib/foo.ex and then lift that onto the source
+// file it was generated from, which is a different file with a different
+// history. Lifting first leaves it alone, because no tracked path ends with
+// the artifact's full prefix.
+//
+// That ordering is not a guarantee, only the cheap half of one. It protects an
+// artifact tree nested deeper than its source; an artifact emitted as
+// dist/bundle.js still lifts onto a tracked src/dist/bundle.js, because a
+// unique suffix match is a coincidence and this function cannot tell a
+// coincidence from a working directory. The sound fix is to read the tool's
+// real cwd — make's "Entering directory" markers, or the recipe cd that
+// missingCD already parses — and treat a known prefix as exact.
 func normalizeTrackedPath(path string, tracked trackedIndex) string {
 	path = filepath.ToSlash(path)
 	path = strings.TrimPrefix(path, "./")

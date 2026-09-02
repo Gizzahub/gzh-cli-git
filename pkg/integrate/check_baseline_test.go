@@ -396,6 +396,10 @@ func TestNormalizeTrackedPathPrefixLift(t *testing.T) {
 	if got := normalizeTrackedPath("./lib/foo.ex", tracked); got != "apps/api/lib/foo.ex" {
 		t.Fatalf("dot-prefixed path: got %q, want apps/api/lib/foo.ex", got)
 	}
+	// Guards, not evidence of the lift: both of these also pass on the
+	// strip-only code this test was written for. They are here so a future
+	// change to the lift cannot quietly break the two directions that already
+	// worked.
 	if got := normalizeTrackedPath("apps/api/lib/foo.ex", tracked); got != "apps/api/lib/foo.ex" {
 		t.Fatalf("already root-relative path must be untouched: got %q", got)
 	}
@@ -404,7 +408,68 @@ func TestNormalizeTrackedPathPrefixLift(t *testing.T) {
 	}
 }
 
+// TestNormalizeTrackedPathBareBaseNameIsNotLifted pins the boundary the lift
+// must not cross. Go's testing package decorates every t.Log and t.Errorf line
+// with filepath.Base, so a bare file name is the ordinary output of a passing
+// or skipping test, not a subdirectory-relative path. An earlier revision of
+// the lift accepted it whenever the match happened to be unique, which turned
+// a clean t.Skip message into a hard rule (a) failure for any branch that
+// touched that test file. This test fails on that revision.
+func TestNormalizeTrackedPathBareBaseNameIsNotLifted(t *testing.T) {
+	tracked := newTrackedIndex([]string{
+		"pkg/integrate/check_baseline_test.go",
+		"cmd/gz-git/main.go",
+	})
+
+	for _, name := range []string{"check_baseline_test.go", "main.go"} {
+		if got := normalizeTrackedPath(name, tracked); got != name {
+			t.Fatalf("bare base name must not be lifted: %q became %q", name, got)
+		}
+	}
+}
+
+// TestExtractLocationsGoTestSkipDoesNotBlockChangedTestFile is the end-to-end
+// consequence of the rule above, on real go test -v output.
+// suppressGoTestVerboseNoise cannot blank the skip line here: an interleaved
+// "=== CONT" clears the pending buffer before the "--- SKIP" trailer that
+// would identify it as noise arrives, so the line survives into the location
+// set. It must still not be attributable to a tracked path, or a branch that
+// merely edited a_test.go would be blocked by a test that skipped cleanly on
+// both sides of the comparison.
+func TestExtractLocationsGoTestSkipDoesNotBlockChangedTestFile(t *testing.T) {
+	out := `=== RUN   TestA
+=== PAUSE TestA
+=== RUN   TestB
+=== PAUSE TestB
+=== CONT  TestA
+    a_test.go:10: skipping: no docker
+=== CONT  TestB
+    b_test.go:20: assertion failed
+--- FAIL: TestB (0.00s)
+--- SKIP: TestA (0.00s)
+`
+	tracked := []string{"pkg/foo/a_test.go", "pkg/foo/b_test.go"}
+
+	got := ExtractLocations(out, tracked)
+	for _, loc := range got {
+		if strings.Contains(loc, "/") {
+			t.Fatalf("go test base names must stay unattributed: got %v", got)
+		}
+	}
+
+	verdict := EvaluateBaseline(BaselineInput{
+		BranchLocations: got,
+		BaseLocations:   got,
+		ChangedPaths:    []string{"pkg/foo/a_test.go"},
+	})
+	if verdict.Status == BaselineFail {
+		t.Fatalf("a skip message present on both sides must not fail the branch: %s", verdict.Reason)
+	}
+}
+
 // TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed keeps the lift honest.
+// It is a guard, not evidence of the change: the strip-only code returned
+// foo.ex here too, for want of any lift at all.
 // Two tracked files ending in the same suffix mean the output does not say
 // which one the tool meant; attributing the diagnostic to either would blame a
 // file the branch may never have touched. The path is left unmatched instead,
@@ -420,15 +485,28 @@ func TestNormalizeTrackedPathPrefixAmbiguityIsNotGuessed(t *testing.T) {
 	}
 }
 
-// TestNormalizeTrackedPathPrefixDoesNotRewriteBuildArtifacts is why the lift
-// runs on the path as emitted rather than after each strip. A compiled copy
-// under _build is a different file with a different history; rewriting it onto
-// the source it was generated from would invent evidence.
-func TestNormalizeTrackedPathPrefixDoesNotRewriteBuildArtifacts(t *testing.T) {
+// TestNormalizeTrackedPathLiftsBeforeStripping is why the lift runs on the
+// path as emitted rather than after each strip. A compiled copy under _build
+// is a different file with a different history; rewriting it onto the source
+// it was generated from would invent evidence.
+//
+// The second case records the limit of that ordering rather than a property of
+// it. Lifting first only protects an artifact tree nested deeper than its
+// source; an artifact emitted one level shallower still lands on its tracked
+// lookalike, because a unique suffix match is a coincidence and this function
+// has no way to tell a coincidence from a working directory. Both assertions
+// are guards — neither discriminates against the strip-only code, which
+// returned a bare base name in the first case and never lifted in the second.
+func TestNormalizeTrackedPathLiftsBeforeStripping(t *testing.T) {
 	tracked := newTrackedIndex([]string{"apps/api/lib/foo.ex"})
 
 	if got := normalizeTrackedPath("_build/dev/lib/foo.ex", tracked); got != "foo.ex" {
 		t.Fatalf("build artifact must not be lifted onto its source: got %q, want foo.ex", got)
+	}
+
+	shallow := newTrackedIndex([]string{"src/dist/bundle.js"})
+	if got := normalizeTrackedPath("dist/bundle.js", shallow); got != "src/dist/bundle.js" {
+		t.Fatalf("known limit changed: got %q, want src/dist/bundle.js", got)
 	}
 }
 

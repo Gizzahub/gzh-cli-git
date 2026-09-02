@@ -711,3 +711,40 @@ func TestCrashOutputTail_KeepsLastNonEmptyLines(t *testing.T) {
 		t.Fatalf("blank lines must be dropped: %q", tail)
 	}
 }
+
+// TestMakeTargetMatchedByPatternRuleIsUndeclared pins the gitforge/gzh-cli
+// Makefile shape: a catch-all pattern rule guarding "make run <arg>", with no
+// check target declared. Before the fix, make exited 0 having done nothing and
+// the probe was marked Defined, so the integration gate reported
+// "PASS make check" for a gate that did not exist.
+func TestMakeTargetMatchedByPatternRuleIsUndeclared(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "catchall-ran")
+	writeRepoFile(t, dir, "Makefile",
+		"lint:\n\t@:\n\n"+
+			"# Prevent make from interpreting arguments as targets\n"+
+			"%:\n\t@touch "+marker+"\n")
+
+	check := runMakeTarget(context.Background(), dir, "check")
+	if check.Defined {
+		t.Fatalf("check is satisfied only by the catch-all pattern rule; Defined must be false (err=%v)\n%s", check.Err, check.Output)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("undeclared target must not be run at all; catch-all recipe executed, stat err = %v", err)
+	}
+
+	// A declared target in the same Makefile stays declared: the detector must
+	// key on the pattern-rule stem, not on the presence of a catch-all.
+	lint := runMakeTarget(context.Background(), dir, "lint")
+	if !lint.Defined {
+		t.Fatalf("declared lint target must stay Defined (err=%v)\n%s", lint.Err, lint.Output)
+	}
+
+	// Without the catch-all, the pre-existing output-string detection must keep
+	// working — the new probe must not mask the "No rule to make target" path.
+	plain := t.TempDir()
+	writeRepoFile(t, plain, "Makefile", "lint:\n\t@:\n")
+	if bare := runMakeTarget(context.Background(), plain, "check"); bare.Defined {
+		t.Fatalf("missing check target must not be Defined\n%s", bare.Output)
+	}
+}

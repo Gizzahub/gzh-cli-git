@@ -1,6 +1,6 @@
 # Tasks — gzh-cli-gitforge
 
-> Last Updated: 2026-08-25
+> Last Updated: 2026-09-02
 
 ## 구조
 
@@ -26,6 +26,7 @@ ______________________________________________________________________
 | #   | 이슈                                           | 요약                                                                                                                                      |
 | --- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | 28  | goreleaser-brews-deprecated-and-ci-pins-latest | 저장소 코드·CI 수정은 완료. 빈 `gizzahub/homebrew-tap` bootstrap, 최초 Cask 게시·macOS 설치, stable release workflow의 실제 검증이 남았다 |
+| 29  | nosec-suppression-not-bound-in-if-init         | 코드 수정과 로컬 canonical 게이트 통과는 완료. master 통합 후 hosted `Quality gate`가 실제로 초록인지 확인이 남았다                       |
 
 메인테이너는 다음 stable 버전을 v0.8.0으로 결정했고 `VERSION`과 릴리스 노트를 준비했다.
 실제 태그 발행은 아직 하지 않는다. 빈 `homebrew-tap` 기본 브랜치, 최소 권한

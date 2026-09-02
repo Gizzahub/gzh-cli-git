@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/integrate"
@@ -50,10 +52,32 @@ func TestIntegrateQueueMissingBaseExitsOne(t *testing.T) {
 	quiet = false
 
 	var stderr bytes.Buffer
-	integrateQueueCmd.SetErr(&stderr)
-	err := runIntegrateQueue(integrateQueueCmd, nil)
+	cmd := &cobra.Command{}
+	cmd.SetErr(&stderr)
+	err := runIntegrateQueue(cmd, nil)
 	if got := cliutil.ExitCodeForError(err); got != 1 {
 		t.Fatalf("missing base exit = %d, want 1; err=%v", got, err)
+	}
+}
+
+func TestIntegrateQueueQuietMissingBaseIsVisibleAndExitsOne(t *testing.T) {
+	restore := setIntegrateQueueGlobals(t)
+	defer restore()
+
+	dir := testutil.TempGitRepoWithCommit(t)
+	t.Chdir(dir)
+	integrateQueueNoFetch = true
+	quiet = true
+
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetErr(&stderr)
+	err := runIntegrateQueue(cmd, nil)
+	if got := cliutil.ExitCodeForError(err); got != 1 {
+		t.Fatalf("quiet missing base exit = %d, want 1; err=%v", got, err)
+	}
+	if got := stderr.String(); !strings.Contains(got, "no base ref") {
+		t.Fatalf("quiet missing base stderr = %q, want visible base diagnostic", got)
 	}
 }
 

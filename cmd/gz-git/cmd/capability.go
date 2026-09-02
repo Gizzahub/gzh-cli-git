@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	integrateReadinessV1Capability       = "integrate-readiness-v1"
-	integrateQueueControllerV1Capability = "integrate-queue-controller-v1"
+	integrateReadinessV1Capability        = "integrate-readiness-v1"
+	integrateQueueControllerV1Capability  = "integrate-queue-controller-v1"
+	integrateQueueBaseMissingV1Capability = "integrate-queue-base-missing-v1"
 )
 
 func newCapabilityCommand() *cobra.Command {
@@ -30,7 +31,7 @@ func newCapabilityCommand() *cobra.Command {
 
 func supportsCapability(name string) bool {
 	switch name {
-	case integrateReadinessV1Capability, integrateQueueControllerV1Capability:
+	case integrateReadinessV1Capability, integrateQueueControllerV1Capability, integrateQueueBaseMissingV1Capability:
 		return true
 	default:
 		return false

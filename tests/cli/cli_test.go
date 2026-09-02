@@ -97,6 +97,7 @@ func TestCLICapabilityProbeContract(t *testing.T) {
 	}{
 		{name: "supported", args: []string{"capability", "integrate-readiness-v1"}, wantCode: 0, wantStdout: "integrate-readiness-v1\n"},
 		{name: "supported quiet", args: []string{"--quiet", "capability", "integrate-readiness-v1"}, wantCode: 0, wantStdout: "integrate-readiness-v1\n"},
+		{name: "queue base missing", args: []string{"capability", "integrate-queue-base-missing-v1"}, wantCode: 0, wantStdout: "integrate-queue-base-missing-v1\n"},
 		{name: "unknown", args: []string{"capability", "future-capability"}, wantCode: 1},
 		{name: "missing", args: []string{"capability"}, wantCode: 1},
 		{name: "extra", args: []string{"capability", "integrate-readiness-v1", "extra"}, wantCode: 1},
@@ -123,6 +124,48 @@ func TestCLICapabilityProbeContract(t *testing.T) {
 				t.Fatalf("stdout = %q, want %q", got, tt.wantStdout)
 			}
 		})
+	}
+}
+
+func TestCLIIntegrateQueueQuietMissingBaseContract(t *testing.T) {
+	repo := t.TempDir()
+	gitCommands := [][]string{
+		{"init", "--initial-branch=main"},
+		{"config", "user.name", "Queue Test"},
+		{"config", "user.email", "queue@example.invalid"},
+	}
+	for _, args := range gitCommands {
+		cmd := exec.Command("git", args...) //nolint:noctx // short-lived fixture setup
+		cmd.Dir = repo
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, output)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("tracked\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	for _, args := range [][]string{{"add", "tracked.txt"}, {"commit", "-m", "fixture"}} {
+		cmd := exec.Command("git", args...) //nolint:noctx // short-lived fixture setup
+		cmd.Dir = repo
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, output)
+		}
+	}
+
+	cmd := exec.Command(getBinaryPath(), "integrate", "queue", "--quiet", "--no-fetch", "--base", "missing") //nolint:noctx // short-lived CLI contract probe
+	cmd.Dir = repo
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("exit error = %v, want code 1; stderr=%q", err, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "base ref not found: missing") {
+		t.Fatalf("stderr = %q, want visible missing-base diagnostic", got)
 	}
 }
 

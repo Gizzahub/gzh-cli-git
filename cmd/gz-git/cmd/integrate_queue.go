@@ -91,9 +91,6 @@ func runIntegrateQueue(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	if report.BaseMissing {
-		if quiet {
-			return nil
-		}
 		fmt.Fprint(cmd.ErrOrStderr(), integrate.FormatQueue(report))
 		return cliutil.NewExitError(1, fmt.Errorf("base ref not found"))
 	}

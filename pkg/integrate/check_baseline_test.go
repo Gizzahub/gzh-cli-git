@@ -532,3 +532,40 @@ func TestExtractLocationsPrefixLiftFeedsChangedPathRule(t *testing.T) {
 		t.Fatalf("a diagnostic on a changed path must fail: got status %v (%s)", verdict.Status, verdict.Reason)
 	}
 }
+
+// TestNormalizeTrackedPathDuplicateTrackedEntryStillLifts pins that ambiguity
+// means two different files, not the same file listed twice. git normally emits
+// each path once, but nothing in this package's signature promises that, and a
+// duplicate silently costing a lift would be indistinguishable from a genuine
+// ambiguity refusal.
+func TestNormalizeTrackedPathDuplicateTrackedEntryStillLifts(t *testing.T) {
+	tracked := newTrackedIndex([]string{
+		"apps/api/lib/foo.ex",
+		"apps/api/lib/foo.ex",
+	})
+	if got := normalizeTrackedPath("lib/foo.ex", tracked); got != "apps/api/lib/foo.ex" {
+		t.Fatalf("duplicate tracked entry defeated the lift: got %q", got)
+	}
+}
+
+// TestNormalizeTrackedPathCleansBeforeMatching covers the spellings a tool may
+// emit for a path it means literally. The bare base name is here as the limit:
+// cleaning must not manufacture a directory component that would make it
+// liftable.
+func TestNormalizeTrackedPathCleansBeforeMatching(t *testing.T) {
+	tracked := newTrackedIndex([]string{"apps/api/lib/foo.ex"})
+	for _, spelling := range []string{
+		"lib/foo.ex",
+		"./lib/foo.ex",
+		"lib//foo.ex",
+		"lib/./foo.ex",
+		"sub/../lib/foo.ex",
+	} {
+		if got := normalizeTrackedPath(spelling, tracked); got != "apps/api/lib/foo.ex" {
+			t.Errorf("%q: got %q, want apps/api/lib/foo.ex", spelling, got)
+		}
+	}
+	if got := normalizeTrackedPath("./foo.ex", tracked); got != "foo.ex" {
+		t.Fatalf("cleaning must not make a bare base name liftable: got %q", got)
+	}
+}

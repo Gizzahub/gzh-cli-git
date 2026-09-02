@@ -495,6 +495,11 @@ func newTrackedIndex(tracked []string) trackedIndex {
 // not say which file the tool meant, and picking one would attribute a
 // diagnostic to a file the branch may never have touched.
 //
+// Several candidates means several distinct ones. The tracked list is not
+// guaranteed to be a set, and a name repeated in it is still one file: refusing
+// on the second sighting of the same path would turn a duplicate entry into a
+// lost lift, which is ambiguity reported where none exists.
+//
 // A path with no directory component of its own is refused outright, however
 // unique its match. Go's testing package decorates every t.Log and t.Errorf
 // line with filepath.Base, so "a_test.go:10" is the ordinary output of a test
@@ -518,7 +523,7 @@ func (t trackedIndex) liftToTracked(path string) (string, bool) {
 		if !strings.HasSuffix(candidate, "/"+path) {
 			continue
 		}
-		if found != "" {
+		if found != "" && candidate != found {
 			return "", false
 		}
 		found = candidate
@@ -553,9 +558,20 @@ func (t trackedIndex) liftToTracked(path string) (string, bool) {
 // coincidence from a working directory. The sound fix is to read the tool's
 // real cwd — make's "Entering directory" markers, or the recipe cd that
 // missingCD already parses — and treat a known prefix as exact.
+//
+// The lift is deliberately incomplete in the other direction too. A recipe
+// doing "cd apps/api && mix compile" that reports mix.exs:3 — a name with no
+// directory of its own — stays unlifted, because liftToTracked refuses a bare
+// base name outright and cannot make an exception for one file. That is a
+// false negative the changed-paths rule absorbs quietly; the alternative is
+// the false positive that gate exists to prevent.
+//
+// The incoming path is cleaned rather than merely stripped of a leading "./",
+// so lib//foo.ex and sub/../lib/foo.ex reach the same tracked file that
+// lib/foo.ex does. Cleaning cannot invent a directory, so it never turns a
+// bare base name into a liftable one.
 func normalizeTrackedPath(path string, tracked trackedIndex) string {
-	path = filepath.ToSlash(path)
-	path = strings.TrimPrefix(path, "./")
+	path = pathpkg.Clean(filepath.ToSlash(path))
 	if _, ok := tracked.exact[path]; ok {
 		return path
 	}

@@ -46,6 +46,13 @@ type CloneOrUpdateOptions struct {
 	// If empty, the remote's default branch is used
 	Branch string
 
+	// ExactBranchPrepared records that the caller has successfully fetched the
+	// exact Branch ref from origin immediately before this reset. It is only
+	// meaningful with StrategyReset and a non-empty Branch; when true, reset
+	// uses that prepared remote-tracking ref without another network fetch.
+	// Direct callers should leave it false, which preserves the normal fetch.
+	ExactBranchPrepared bool
+
 	// Depth limits the clone depth (number of commits)
 	// 0 means full clone, 1 means shallow clone with only the latest commit
 	Depth int
@@ -354,13 +361,15 @@ func (c *client) applyResetStrategy(ctx context.Context, opts CloneOrUpdateOptio
 		return nil, fmt.Errorf("remove stale index lock: %w", err)
 	}
 
-	// First fetch to get latest remote state (requires auth for remote access)
-	fetchResult, err := c.executor.RunWithEnv(ctx, opts.Destination, opts.Env, "fetch", "origin")
-	if err != nil {
-		return nil, fmt.Errorf("fetch before reset failed: %w", err)
-	}
-	if fetchResult.ExitCode != 0 {
-		return nil, fmt.Errorf("fetch before reset failed (exit %d): %s", fetchResult.ExitCode, strings.TrimSpace(fetchResult.Stderr))
+	if !opts.ExactBranchPrepared || opts.Branch == "" {
+		// Fetch to get latest remote state (requires auth for remote access).
+		fetchResult, err := c.executor.RunWithEnv(ctx, opts.Destination, opts.Env, "fetch", "origin")
+		if err != nil {
+			return nil, fmt.Errorf("fetch before reset failed: %w", err)
+		}
+		if fetchResult.ExitCode != 0 {
+			return nil, fmt.Errorf("fetch before reset failed (exit %d): %s", fetchResult.ExitCode, strings.TrimSpace(fetchResult.Stderr))
+		}
 	}
 
 	// Determine reset target

@@ -254,43 +254,36 @@ func (e GitExecutor) runCloneOrUpdate(ctx context.Context, client repo.Client, l
 		logger.Warn(warning)
 	}
 
-	// Use modified URL (with token for HTTPS) and env vars (for SSH)
-	cloneOpts := repo.CloneOrUpdateOptions{
-		URL:         authResult.CloneURL,
-		Destination: action.Repo.TargetPath,
-		Strategy:    updateStrategy,
-		Logger:      logger,
-		Progress:    progress,
-		Env:         authResult.Env,
+	cleanupAuth := func(operationErr error) error {
+		if authResult.TempKeyPath == "" {
+			return operationErr
+		}
+		if cleanupErr := removeTempSSHKey(authResult.TempKeyPath); cleanupErr != nil {
+			return errors.Join(operationErr, cleanupErr)
+		}
+		return operationErr
 	}
-
-	var result *repo.CloneOrUpdateResult
 
 	attempts := max(runOpts.MaxRetries+1, 1)
-
-	for i := range attempts {
-		if ctx.Err() != nil {
-			err = ctx.Err()
-			break
-		}
-
-		result, err = client.CloneOrUpdate(ctx, cloneOpts)
-		if err == nil {
-			break
-		}
-
-		if i < attempts-1 {
-			delay := time.Duration(i+1) * 300 * time.Millisecond
-			sink.OnProgress(action, fmt.Sprintf("retrying (%d/%d): %v", i+1, attempts-1, err), 0)
-			time.Sleep(delay)
-		}
-	}
-	if authResult.TempKeyPath != "" {
-		if cleanupErr := removeTempSSHKey(authResult.TempKeyPath); cleanupErr != nil {
-			err = errors.Join(err, cleanupErr)
-		}
+	preparation, earlyResult := prepareCloneOrUpdate(ctx, client, logger, action, updateStrategy, authResult, attempts, sink, cleanupAuth)
+	if earlyResult != nil {
+		sink.OnComplete(*earlyResult)
+		return *earlyResult, earlyResult.Error
 	}
 
+	cloneOpts := repo.CloneOrUpdateOptions{
+		URL:                 authResult.CloneURL,
+		Destination:         action.Repo.TargetPath,
+		Strategy:            updateStrategy,
+		Branch:              preparation.resolvedBranch,
+		ExactBranchPrepared: preparation.exactBranchPrepared,
+		Logger:              logger,
+		Progress:            progress,
+		Env:                 authResult.Env,
+	}
+
+	result, err := cloneOrUpdateWithRetries(ctx, client, cloneOpts, attempts, sink, action)
+	err = cleanupAuth(err)
 	if err != nil {
 		res := ActionResult{
 			Action:  action,
@@ -307,8 +300,8 @@ func (e GitExecutor) runCloneOrUpdate(ctx context.Context, client repo.Client, l
 	}
 
 	// Checkout branch if specified
-	if action.Repo.Branch != "" {
-		branchMsg, branchErr := checkoutBranch(ctx, action.Repo.TargetPath, action.Repo.Branch, logger)
+	if preparation.resolvedBranch != "" && !preparation.preUpdateCheckout {
+		branchMsg, branchErr := checkoutBranch(ctx, action.Repo.TargetPath, preparation.resolvedBranch, logger)
 		if branchErr != nil {
 			if action.Repo.StrictBranchCheckout {
 				// Strict mode: treat branch checkout failure as action failure
@@ -350,6 +343,83 @@ func (e GitExecutor) runCloneOrUpdate(ctx context.Context, client repo.Client, l
 	}
 	sink.OnComplete(res)
 	return res, nil
+}
+
+type clonePreparation struct {
+	resolvedBranch      string
+	preUpdateCheckout   bool
+	exactBranchPrepared bool
+}
+
+func prepareCloneOrUpdate(ctx context.Context, client repo.Client, logger repo.Logger, action Action, strategy repo.UpdateStrategy, auth *AuthResult, attempts int, sink ProgressSink, cleanup func(error) error) (clonePreparation, *ActionResult) {
+	targetExists, existingTarget, err := inspectTarget(action.Repo.TargetPath)
+	if err != nil {
+		err = cleanup(err)
+		return clonePreparation{}, &ActionResult{Action: action, Message: fmt.Sprintf("target inspection failed: %v", err), Error: err}
+	}
+	if targetExists && !existingTarget && strategy != repo.StrategyClone {
+		err = cleanup(fmt.Errorf("target directory %q exists but is not a git repository", action.Repo.TargetPath))
+		return clonePreparation{}, &ActionResult{Action: action, Message: err.Error(), Error: err}
+	}
+	if result := dirtyUpdateResult(ctx, client, action, strategy, existingTarget, cleanup); result != nil {
+		return clonePreparation{}, result
+	}
+
+	probeOrigin := existingTarget && strategy != repo.StrategyClone
+	branch, err := resolveConfiguredBranchWithRetries(ctx, action.Repo.TargetPath, auth.CloneURL, auth.Env, action.Repo.Branch, probeOrigin, logger, attempts, sink, action)
+	if err != nil {
+		err = cleanup(err)
+		return clonePreparation{}, &ActionResult{Action: action, Message: fmt.Sprintf("configured branch resolution failed: %v", err), Error: err}
+	}
+	if !probeOrigin || branch == "" {
+		return clonePreparation{resolvedBranch: branch}, nil
+	}
+	if err = checkoutResolvedBranchBeforeUpdate(ctx, action.Repo.TargetPath, branch, auth.Env, strategy == repo.StrategyReset); err != nil {
+		err = cleanup(fmt.Errorf("checkout configured branch %q before update: %w", branch, err))
+		return clonePreparation{}, &ActionResult{Action: action, Message: fmt.Sprintf("pre-update branch checkout failed: %v", err), Error: err}
+	}
+	return clonePreparation{
+		resolvedBranch:      branch,
+		preUpdateCheckout:   true,
+		exactBranchPrepared: strategy == repo.StrategyReset,
+	}, nil
+}
+
+func dirtyUpdateResult(ctx context.Context, client repo.Client, action Action, strategy repo.UpdateStrategy, existingTarget bool, cleanup func(error) error) *ActionResult {
+	if !existingTarget || (strategy != repo.StrategyPull && strategy != repo.StrategyRebase) {
+		return nil
+	}
+	existingRepo, err := client.Open(ctx, action.Repo.TargetPath)
+	if err != nil {
+		err = cleanup(fmt.Errorf("open existing repository: %w", err))
+		return &ActionResult{Action: action, Message: err.Error(), Error: err}
+	}
+	status, err := client.GetStatus(ctx, existingRepo)
+	if err != nil || status.IsClean {
+		return nil
+	}
+	result := &ActionResult{Action: action, Message: "working tree is dirty; update skipped"}
+	result.Error = cleanup(nil)
+	return result
+}
+
+func cloneOrUpdateWithRetries(ctx context.Context, client repo.Client, opts repo.CloneOrUpdateOptions, attempts int, sink ProgressSink, action Action) (*repo.CloneOrUpdateResult, error) {
+	var err error
+	for i := range attempts {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		result, runErr := client.CloneOrUpdate(ctx, opts)
+		if runErr == nil {
+			return result, nil
+		}
+		err = runErr
+		if i < attempts-1 {
+			sink.OnProgress(action, fmt.Sprintf("retrying (%d/%d): %v", i+1, attempts-1, err), 0)
+			time.Sleep(time.Duration(i+1) * 300 * time.Millisecond)
+		}
+	}
+	return nil, err
 }
 
 // collectPostSyncStatus runs lightweight git commands to gather branch/ahead/behind/dirty info.
@@ -491,6 +561,227 @@ func (nopGitLogger) Debug(string, ...any) {}
 func (nopGitLogger) Info(string, ...any)  {}
 func (nopGitLogger) Warn(string, ...any)  {}
 func (nopGitLogger) Error(string, ...any) {}
+
+// resolveConfiguredBranch chooses one remote branch from a comma-separated
+// configured fallback list. An empty configuration deliberately returns an
+// empty branch so repository.CloneOrUpdate retains its origin/HEAD behavior.
+//
+// Existing update targets probe origin; clone/reclone targets probe cloneURL
+// because CloneOrUpdate will replace the destination before using that URL.
+func resolveConfiguredBranch(ctx context.Context, targetPath, cloneURL string, env []string, configured string, probeOrigin bool, logger repo.Logger) (string, error) {
+	if configured == "" {
+		return "", nil
+	}
+	if err := gitcmd.SanitizeURL(cloneURL); err != nil {
+		return "", fmt.Errorf("invalid clone URL for configured branch resolution: %w", err)
+	}
+
+	remote := cloneURL
+	argsPrefix := []string(nil)
+	if probeOrigin {
+		remote = "origin"
+		argsPrefix = []string{"-C", targetPath}
+	}
+
+	for _, candidate := range strings.Split(configured, ",") {
+		branch := strings.TrimSpace(candidate)
+		if branch == "" {
+			continue
+		}
+		if err := gitcmd.SanitizeBranchName(branch); err != nil {
+			return "", fmt.Errorf("invalid configured branch name %q: %w", branch, err)
+		}
+		// Preserve checkoutBranch's ordered fallback semantics: HEAD stops
+		// selection and keeps origin/HEAD as the update target.
+		if branch == "HEAD" {
+			return "", nil
+		}
+
+		exists, err := remoteBranchExists(ctx, argsPrefix, remote, branch, env)
+		if err != nil {
+			return "", err
+		}
+		if exists {
+			logger.Debug("resolved configured branch: %s -> %s", targetPath, branch)
+			return branch, nil
+		}
+		logger.Debug("configured branch not found on origin, trying next: %s -> %s", targetPath, branch)
+	}
+
+	return "", fmt.Errorf("none of the configured branches exist on origin: %s", configured)
+}
+
+type branchResolutionError struct {
+	err       error
+	retryable bool
+}
+
+func (e *branchResolutionError) Error() string { return e.err.Error() }
+
+func (e *branchResolutionError) Unwrap() error { return e.err }
+
+func resolveConfiguredBranchWithRetries(ctx context.Context, targetPath, cloneURL string, env []string, configured string, probeOrigin bool, logger repo.Logger, attempts int, sink ProgressSink, action Action) (string, error) {
+	var err error
+	for i := range attempts {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		branch, resolveErr := resolveConfiguredBranch(ctx, targetPath, cloneURL, env, configured, probeOrigin, logger)
+		if resolveErr == nil {
+			return branch, nil
+		}
+		err = resolveErr
+		var resolutionErr *branchResolutionError
+		if !errors.As(resolveErr, &resolutionErr) || !resolutionErr.retryable {
+			return "", resolveErr
+		}
+		if i < attempts-1 {
+			sink.OnProgress(action, fmt.Sprintf("retrying branch resolution (%d/%d): %v", i+1, attempts-1, err), 0)
+			timer := time.NewTimer(time.Duration(i+1) * 300 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return "", ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+	return "", err
+}
+
+func inspectTarget(targetPath string) (exists, isGitRepo bool, err error) {
+	info, err := os.Stat(targetPath)
+	if os.IsNotExist(err) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("inspect target repository %q: %w", targetPath, err)
+	}
+	if !info.IsDir() {
+		return true, false, nil
+	}
+	_, err = os.Stat(filepath.Join(targetPath, ".git"))
+	if err == nil || os.IsNotExist(err) {
+		return true, err == nil, nil
+	}
+	return true, false, fmt.Errorf("inspect target repository %q: %w", targetPath, err)
+}
+
+// checkoutResolvedBranchBeforeUpdate first refreshes the exact remote-tracking
+// ref, then checks it out. Fetch is safe before reset/pull/rebase and lets a
+// single-branch checkout adopt a configured branch that is not yet local.
+func checkoutResolvedBranchBeforeUpdate(ctx context.Context, targetPath, branch string, env []string, discardChanges bool) error {
+	if err := gitcmd.SanitizeBranchName(branch); err != nil {
+		return fmt.Errorf("invalid configured branch name %q: %w", branch, err)
+	}
+	usedElsewhere, err := branchUsedByAnotherWorktree(ctx, targetPath, branch)
+	if err != nil {
+		return err
+	}
+	if usedElsewhere {
+		return fmt.Errorf("branch %q is checked out in another worktree", branch)
+	}
+	refspec := "+refs/heads/" + branch + ":refs/remotes/origin/" + branch
+	cmd := exec.CommandContext(ctx, "git", "-C", targetPath, "fetch", "origin", refspec) // #nosec G204 -- target path and branch are validated or fixed argv values.
+	cmd.Env = append(os.Environ(), env...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("fetch configured branch %q before update: %w (output: %s)", branch, err, strings.TrimSpace(string(output)))
+	}
+	localRef := "refs/heads/" + branch
+	if localBranchExists(ctx, targetPath, localRef) {
+		args := []string{"-C", targetPath, "switch"}
+		if discardChanges {
+			args = append(args, "--discard-changes")
+		}
+		args = append(args, branch)
+		cmd = exec.CommandContext(ctx, "git", args...) // #nosec G204 -- branch is sanitized and known to be a local branch.
+	} else {
+		args := []string{"-C", targetPath, "checkout"}
+		if discardChanges {
+			args = append(args, "-f")
+		}
+		args = append(args, "-B", branch, "refs/remotes/origin/"+branch)
+		cmd = exec.CommandContext(ctx, "git", args...) // #nosec G204 -- branch is sanitized and remote ref is constructed from it.
+	}
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("switch to configured branch %q: %w (output: %s)", branch, err, strings.TrimSpace(string(output)))
+	}
+	current, err := symbolicBranch(ctx, targetPath)
+	if err != nil {
+		return err
+	}
+	if current != branch {
+		return fmt.Errorf("configured branch checkout left HEAD on %q, want %q", current, branch)
+	}
+	return nil
+}
+
+func localBranchExists(ctx context.Context, targetPath, ref string) bool {
+	cmd := exec.CommandContext(ctx, "git", "-C", targetPath, "show-ref", "--verify", "--quiet", ref) // #nosec G204 -- ref is built from a sanitized branch.
+	return cmd.Run() == nil
+}
+
+func symbolicBranch(ctx context.Context, targetPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", targetPath, "symbolic-ref", "--quiet", "HEAD") // #nosec G204 -- targetPath is a repository path passed as one argv value; no shell is used and all other argv values are fixed.
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("read current branch: %w", err)
+	}
+	return strings.TrimPrefix(strings.TrimSpace(string(output)), "refs/heads/"), nil
+}
+
+func branchUsedByAnotherWorktree(ctx context.Context, targetPath, branch string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", targetPath, "worktree", "list", "--porcelain") // #nosec G204 -- targetPath is a repository path passed as one argv value; no shell is used and all other argv values are fixed.
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("list worktrees: %w", err)
+	}
+	targetInfo, err := os.Stat(targetPath)
+	if err != nil {
+		return false, fmt.Errorf("stat target worktree: %w", err)
+	}
+	var worktree string
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			worktree = strings.TrimPrefix(line, "worktree ")
+			continue
+		}
+		if line == "branch refs/heads/"+branch {
+			worktreeInfo, statErr := os.Stat(worktree)
+			if statErr != nil {
+				return false, fmt.Errorf("stat worktree path: %w", statErr)
+			}
+			if !os.SameFile(targetInfo, worktreeInfo) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// remoteBranchExists checks exactly one branch ref. git ls-remote returns exit
+// status 2 when the remote is reachable but the requested ref is absent; any
+// other failure is surfaced rather than treated as a missing candidate.
+func remoteBranchExists(ctx context.Context, argsPrefix []string, remote, branch string, env []string) (bool, error) {
+	args := append([]string{}, argsPrefix...)
+	args = append(args, "ls-remote", "--exit-code", "--heads", remote, "refs/heads/"+branch)
+	cmd := exec.CommandContext(ctx, "git", args...) // #nosec G204 -- remote is fixed to origin or validated clone URL, and branch is sanitized.
+	cmd.Env = append(os.Environ(), env...)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return true, nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 2 {
+		return false, nil
+	}
+	return false, &branchResolutionError{err: fmt.Errorf("query origin branch %q failed: %w (output: %s)", branch, err, strings.TrimSpace(string(output))), retryable: true}
+}
 
 // checkoutBranch attempts to checkout the specified branch in the given repository path.
 // Supports comma-separated branch list for fallback: "develop,master" tries develop first,

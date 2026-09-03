@@ -6,6 +6,8 @@ package integrate
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -85,91 +87,80 @@ const (
 // non-nil on both by the time either call site reaches this — so the evidence
 // has to be new, and the only honest source of it is the output itself.
 func baseMeasurement(base makeProbe, baseTracked []string) BaseMeasurement {
-	// Screened first, and deliberately so. A tool that never launched cannot
-	// have measured anything, however much of the repository the recipe named
-	// on its way to failing, and reading such a run as a measured zero is what
-	// takes the operator's escape hatch away — the TASK-134 failure. This is a
-	// prose signature and shares that family's weakness, but it only ever
-	// withdraws BaseMeasured and never grants it, so a shape it fails to
-	// recognize lands on the downgradable side rather than on the side where
-	// the repository cannot land anything.
-	if toolNeverLaunched(base.Output) != "" {
-		return BaseMeasurementUnknown
-	}
-	if enumeratedTrackedFile(base, baseTracked) != "" {
+	if enumerationAccountsForEveryLine(base, baseTracked) {
 		return BaseMeasured
 	}
 	return BaseMeasurementUnknown
 }
 
-// toolNeverLaunched returns the line proving the checker was absent rather
-// than unhappy, or "" when there is no such line.
+// enumerationAccountsForEveryLine reports whether the output is an enumeration
+// of tracked files rather than a run that merely mentioned one on its way to
+// dying.
 //
-// Both shapes come from the shell, not from the tool: the shell's own
-// "command not found" and the 127 it exits with, which make then reports as
-// `Error 127`. A tool that ran and disliked the code exits with its own
-// status and prints its own diagnostics, so neither line appears.
-func toolNeverLaunched(out string) string {
-	for _, line := range strings.Split(out, "\n") {
-		trimmed := strings.TrimSpace(stripANSI(line))
-		if trimmed == "" {
-			continue
-		}
-		if strings.Contains(trimmed, "command not found") {
-			return trimmed
-		}
-		// make's own report of the shell's 127. Matched with the surrounding
-		// "Error " so a diagnostic that merely contains the number 127 does
-		// not read as a launch failure.
-		if strings.Contains(trimmed, "Error 127") {
-			return trimmed
-		}
-	}
-	return ""
-}
-
-// enumeratedTrackedFile returns the first line of tool output that names a
-// file tracked at the target SHA and nothing else, or "" when no line does.
-//
-// The reasoning is that naming a repository file is usually something only a
-// tool that read the repository can do. `gofmt -l` prints one tracked path per
-// line; `gci -d` and `gofmt -d` print them behind diff markers. A run that died
-// for want of deps/ or node_modules/ prints prose about the missing dependency
-// instead.
-//
-// "Usually" is doing real work in that sentence and an earlier version of this
-// comment left it out, which made the claim false. A Makefile recipe is free to
-// echo the path it is about to check as a progress line and then die because
-// the checker was never installed:
+// Naming a tracked file is necessary evidence and not sufficient evidence. A
+// Makefile recipe is free to echo the path it is about to check and then die
+// because the checker was never installed:
 //
 //	scripts/deploy.sh
 //	/bin/sh: shellcheck: command not found
 //	make: *** [check] Error 127
 //
-// That run named a tracked file and measured nothing. Enumeration is therefore
-// necessary evidence and not sufficient evidence, so baseMeasurement screens
-// for a tool that never launched before it consults this function at all.
+// That run named a tracked file and measured nothing, so the test cannot be
+// "does some line match".
+//
+// An earlier version of this file answered that with a list of launch-failure
+// wordings, screened before the match. That was wrong in a way worth recording,
+// because the reasoning that justified it sounded safe: a screen only ever
+// withdraws BaseMeasured, so a wording it fails to recognize was supposed to
+// land on the downgradable side. It does not. The screen withdraws, but the
+// match that follows it grants, and the two compose the other way round — an
+// unrecognized wording falls through to a line that says `scripts/deploy.sh`
+// and grants BaseMeasured on it. `Permission denied`, `No such file or
+// directory` and a Python traceback all did exactly that, each producing an
+// undowngradable "diagnostic count increased (0 -> N)": the TASK-134 failure,
+// restored narrowly, once per wording nobody had thought of yet.
+//
+// The rule here is positional instead, and needs no wordlist. Every non-empty
+// line must be one of: make's own structural output, a diff structure line, or
+// a path tracked at the target SHA. An unaccounted line is tolerated BEFORE the
+// first tracked path and disqualifying AFTER it. The asymmetry is the whole
+// idea, and it comes from the order the shell necessarily prints in:
+//
+//   - make echoes each recipe before running it, so `gofmt -l ./...` precedes
+//     the tool's own output. Rejecting unaccounted lines outright would make
+//     this function inert in every repository that does not `@`-silence its
+//     recipes, which is most of them — green tests, dead feature.
+//   - a failure that killed the tool necessarily follows any path the recipe
+//     had already echoed.
+//
+// So a leading unknown line is an echo and a trailing one is a symptom.
+//
+// One semantic exception to "make's output is structural": make reports the
+// shell's 127 as `Error 127`, and 127 is POSIX for a command that was never
+// found. That trailer disqualifies however well-formed it looks, which is what
+// catches an echo-then-die whose shell printed nothing of its own.
+//
+// The failure direction is now genuinely one-way. A structural line this
+// function does not recognize reads as unaccounted, which yields
+// BaseMeasurementUnknown, which leaves the operator the escape hatch they had
+// before the discriminator existed. A tool that prints a legitimate summary
+// line after its findings ("3 files need formatting") is read as unmeasured for
+// that reason, and that is the correct side to be wrong on.
 //
 // A path with a :line on it is not this signature. Those are ordinary
 // diagnostics, ExtractLocations already counts them, and their presence means
 // len(base) != 0 so none of this is consulted.
-//
-// It is an allowlist and deliberately narrow. An unrecognized failure shape is
-// read as unmeasured, which leaves the operator the escape hatch they had
-// before; the opposite default takes it away on a guess. The list is expected
-// to grow one measured shape at a time, and the cost of a missing entry is a
-// warning rather than a repository that cannot land anything.
-func enumeratedTrackedFile(probe makeProbe, tracked []string) string {
+func enumerationAccountsForEveryLine(probe makeProbe, tracked []string) bool {
 	if len(tracked) == 0 {
-		return ""
+		return false
 	}
 	known := make(map[string]struct{}, len(tracked))
 	for _, p := range tracked {
 		known[filepath.ToSlash(p)] = struct{}{}
 	}
 	// A path printed inside a sub-make is relative to that sub-directory,
-	// while baseTracked is relative to the repository root. Without the
-	// rebase, `x.go` from a recursive `make check` never matches the tracked
+	// while tracked is relative to the repository root. Without the rebase,
+	// `x.go` from a recursive `make check` never matches the tracked
 	// `sub/x.go` and a genuine measured zero reads as unmeasured. This is the
 	// same correction extractLocationsForProbe already applies, and the two
 	// functions have to agree about what a printed path means.
@@ -177,6 +168,9 @@ func enumeratedTrackedFile(probe makeProbe, tracked []string) string {
 	// Diff markers, longest first: "--- a/x" must not be read as the file
 	// literally named "a/x".
 	markers := []string{"--- a/", "+++ b/", "--- ", "+++ "}
+
+	seenTrackedPath := false
+	inDiff := false
 	for _, line := range strings.Split(probe.Output, "\n") {
 		if dirs.observe(line) {
 			continue
@@ -185,20 +179,87 @@ func enumeratedTrackedFile(probe makeProbe, tracked []string) string {
 		if trimmed == "" {
 			continue
 		}
+
+		if code, ok := makeRecipeError(trimmed); ok {
+			if code == 127 {
+				return false
+			}
+			continue
+		}
+
+		candidate := trimmed
+		isDiffHeader := false
 		for _, m := range markers {
-			if rest, found := strings.CutPrefix(trimmed, m); found {
-				trimmed = strings.TrimSpace(rest)
+			if rest, found := strings.CutPrefix(candidate, m); found {
+				candidate = strings.TrimSpace(rest)
+				isDiffHeader = true
 				break
 			}
 		}
-		if prefix, anchored := dirs.prefix(); anchored && prefix != "" {
-			trimmed = prefix + "/" + trimmed
+		if isDiffHeader {
+			inDiff = true
 		}
-		if _, ok := known[trimmed]; ok {
-			return trimmed
+		if strings.HasPrefix(trimmed, "@@") {
+			inDiff = true
+			continue
+		}
+
+		if prefix, anchored := dirs.prefix(); anchored && prefix != "" {
+			candidate = prefix + "/" + candidate
+		}
+		if _, ok := known[candidate]; ok {
+			seenTrackedPath = true
+			continue
+		}
+		if isDiffHeader {
+			// A diff header naming something untracked is still diff
+			// structure, not a stray line.
+			continue
+		}
+		if inDiff && isDiffBodyLine(line) {
+			continue
+		}
+
+		// Unaccounted. Before the first tracked path this is a recipe echo;
+		// after it, it is the symptom of a run that stopped measuring.
+		if seenTrackedPath {
+			return false
 		}
 	}
-	return ""
+	return seenTrackedPath
+}
+
+// makeRecipeError parses make's own recipe-failure trailer and returns the exit
+// status the recipe reported.
+//
+//	make: *** [check] Error 1
+//	make[1]: *** [Makefile:2: check] Error 127
+func makeRecipeError(trimmed string) (int, bool) {
+	m := makeRecipeErrorPattern.FindStringSubmatch(trimmed)
+	if m == nil {
+		return 0, false
+	}
+	code, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, false
+	}
+	return code, true
+}
+
+var makeRecipeErrorPattern = regexp.MustCompile(`^make(?:\[\d+\])?: \*\*\* \[[^\]]*\] Error (\d+)$`)
+
+// isDiffBodyLine reports whether a line is unified-diff payload rather than a
+// line of its own. Checked against the raw line: leading whitespace is a
+// context line and TrimSpace would erase the distinction.
+func isDiffBodyLine(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	switch raw[0] {
+	case '+', '-', ' ', '\\':
+		return true
+	}
+	return false
 }
 
 // unmeasurableReason states why there is no baseline to compare against.

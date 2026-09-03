@@ -150,6 +150,23 @@ func TestMeasuredZeroIsNotSkippable(t *testing.T) {
 			// the TASK-134 failure by the back door.
 			{"an echoed path with the checker absent", makeProbe{Output: "checked.go\n/bin/sh: shellcheck: command not found\nmake: *** [check] Error 127\n"}, BaseMeasurementUnknown},
 			{"an echoed path with only make's 127", makeProbe{Output: "checked.go\nmake: *** [check] Error 127\n"}, BaseMeasurementUnknown},
+			// The wordings that defeated the wordlist this rule replaced.
+			// None of them says "command not found" and none exits 127, so
+			// each one used to fall through to the path match and grant
+			// BaseMeasured on an echo — an undowngradable "0 -> N", once per
+			// wording nobody had enumerated yet. Positionally they are all
+			// the same shape: an unaccounted line after a tracked path.
+			{"an echoed path then a non-127 shell error", makeProbe{Output: "checked.go\n/bin/sh: shellcheck: Permission denied\nmake: *** [check] Error 126\n"}, BaseMeasurementUnknown},
+			{"an echoed path then a missing script", makeProbe{Output: "checked.go\npython3: can't open file 'lint.py': [Errno 2] No such file or directory\nmake: *** [check] Error 2\n"}, BaseMeasurementUnknown},
+			{"an echoed path then a traceback", makeProbe{Output: "checked.go\nTraceback (most recent call last):\nModuleNotFoundError: No module named 'lint'\nmake: *** [check] Error 1\n"}, BaseMeasurementUnknown},
+			// Real `make check` output, recipe echo included. make echoes
+			// each recipe before running it, so an unaccounted line precedes
+			// the tool's findings in any repository that does not @-silence
+			// its recipes. A rule that rejected unaccounted lines outright
+			// would be inert here while the synthetic rows above stayed
+			// green: a dead feature with a passing suite.
+			{"real make output with a recipe echo", makeProbe{Output: "gofmt -l ./...\nchecked.go\nmake: *** [Makefile:2: check] Error 1\n"}, BaseMeasured},
+			{"recipe echo, findings, and a sub-make trailer", makeProbe{Output: "gofmt -l ./...\nchecked.go\nMakefile\nmake[1]: *** [Makefile:9: check] Error 1\n"}, BaseMeasured},
 			{"gofmt -l names a tracked file", makeProbe{Output: "checked.go\n"}, BaseMeasured},
 			{"gci -d diff header names one", makeProbe{Output: "--- a/checked.go\n+++ b/checked.go\n"}, BaseMeasured},
 			{"named among make's own noise", makeProbe{Output: "make[1]: Entering directory '/x'\nchecked.go\n"}, BaseMeasured},
@@ -172,6 +189,19 @@ func TestMeasuredZeroIsNotSkippable(t *testing.T) {
 		ran := makeProbe{Output: "checked.go\nmake: *** [check] Error 1\n"}
 		if got := baseMeasurement(ran, tracked); got != BaseMeasured {
 			t.Fatalf("a tool that launched and failed on its own still measured, got %v", got)
+		}
+
+		// The position of the unaccounted line is the whole rule, so pin both
+		// halves of it with the same two lines in either order. Without this
+		// pair, a rule that ignored position entirely would still pass every
+		// row above.
+		before := makeProbe{Output: "shellcheck: not installed\nchecked.go\n"}
+		if got := baseMeasurement(before, tracked); got != BaseMeasured {
+			t.Fatalf("an unaccounted line BEFORE the findings is a recipe echo, got %v", got)
+		}
+		after := makeProbe{Output: "checked.go\nshellcheck: not installed\n"}
+		if got := baseMeasurement(after, tracked); got != BaseMeasurementUnknown {
+			t.Fatalf("an unaccounted line AFTER the findings is a symptom, got %v", got)
 		}
 	})
 

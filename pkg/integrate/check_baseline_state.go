@@ -154,6 +154,48 @@ func enumerationAccountsForEveryLine(probe makeProbe, tracked []string) bool {
 	if len(tracked) == 0 {
 		return false
 	}
+	scan := newEnumerationScan(probe, tracked)
+
+	seenTrackedPath := false
+	for _, line := range strings.Split(probe.Output, "\n") {
+		if scan.dirs.observe(line) {
+			continue
+		}
+		trimmed := strings.TrimSpace(stripANSI(line))
+		if trimmed == "" {
+			continue
+		}
+		if code, ok := makeRecipeError(trimmed); ok {
+			// make's own trailer is structure, except for the one status
+			// that means the recipe never ran.
+			if code == 127 {
+				return false
+			}
+			continue
+		}
+		named, accounted := scan.classify(line, trimmed)
+		switch {
+		case named:
+			seenTrackedPath = true
+		case accounted:
+			// Diff structure carries no path of its own.
+		case seenTrackedPath:
+			// Unaccounted after the enumeration began: a symptom.
+			return false
+		}
+		// Unaccounted before the first tracked path is a recipe echo.
+	}
+	return seenTrackedPath
+}
+
+// enumerationScan holds the per-probe state the line classifier needs.
+type enumerationScan struct {
+	known  map[string]struct{}
+	dirs   *makeDirectoryTracker
+	inDiff bool
+}
+
+func newEnumerationScan(probe makeProbe, tracked []string) *enumerationScan {
 	known := make(map[string]struct{}, len(tracked))
 	for _, p := range tracked {
 		known[filepath.ToSlash(p)] = struct{}{}
@@ -164,69 +206,43 @@ func enumerationAccountsForEveryLine(probe makeProbe, tracked []string) bool {
 	// `sub/x.go` and a genuine measured zero reads as unmeasured. This is the
 	// same correction extractLocationsForProbe already applies, and the two
 	// functions have to agree about what a printed path means.
-	dirs := newMakeDirectoryTracker(probe.WorkDir)
-	// Diff markers, longest first: "--- a/x" must not be read as the file
-	// literally named "a/x".
-	markers := []string{"--- a/", "+++ b/", "--- ", "+++ "}
+	return &enumerationScan{known: known, dirs: newMakeDirectoryTracker(probe.WorkDir)}
+}
 
-	seenTrackedPath := false
-	inDiff := false
-	for _, line := range strings.Split(probe.Output, "\n") {
-		if dirs.observe(line) {
-			continue
-		}
-		trimmed := strings.TrimSpace(stripANSI(line))
-		if trimmed == "" {
-			continue
-		}
+// diffPathMarkers are stripped longest-first so that "--- a/x" is not read as
+// the file literally named "a/x".
+var diffPathMarkers = []string{"--- a/", "+++ b/", "--- ", "+++ "}
 
-		if code, ok := makeRecipeError(trimmed); ok {
-			if code == 127 {
-				return false
-			}
-			continue
-		}
-
-		candidate := trimmed
-		isDiffHeader := false
-		for _, m := range markers {
-			if rest, found := strings.CutPrefix(candidate, m); found {
-				candidate = strings.TrimSpace(rest)
-				isDiffHeader = true
-				break
-			}
-		}
-		if isDiffHeader {
-			inDiff = true
-		}
-		if strings.HasPrefix(trimmed, "@@") {
-			inDiff = true
-			continue
-		}
-
-		if prefix, anchored := dirs.prefix(); anchored && prefix != "" {
-			candidate = prefix + "/" + candidate
-		}
-		if _, ok := known[candidate]; ok {
-			seenTrackedPath = true
-			continue
-		}
-		if isDiffHeader {
-			// A diff header naming something untracked is still diff
-			// structure, not a stray line.
-			continue
-		}
-		if inDiff && isDiffBodyLine(line) {
-			continue
-		}
-
-		// Unaccounted. Before the first tracked path this is a recipe echo;
-		// after it, it is the symptom of a run that stopped measuring.
-		if seenTrackedPath {
-			return false
+// classify reports whether a line names a tracked path, and whether it is
+// accounted for at all. A line that is neither is the caller's signal.
+func (s *enumerationScan) classify(raw, trimmed string) (named, accounted bool) {
+	if strings.HasPrefix(trimmed, "@@") {
+		s.inDiff = true
+		return false, true
+	}
+	candidate := trimmed
+	isHeader := false
+	for _, m := range diffPathMarkers {
+		if rest, found := strings.CutPrefix(candidate, m); found {
+			candidate = strings.TrimSpace(rest)
+			isHeader = true
+			break
 		}
 	}
-	return seenTrackedPath
+	if isHeader {
+		s.inDiff = true
+	}
+	if prefix, anchored := s.dirs.prefix(); anchored && prefix != "" {
+		candidate = prefix + "/" + candidate
+	}
+	if _, ok := s.known[candidate]; ok {
+		return true, true
+	}
+	// A diff header naming something untracked is still diff structure.
+	if isHeader {
+		return false, true
+	}
+	return false, s.inDiff && isDiffBodyLine(raw)
 }
 
 // makeRecipeError parses make's own recipe-failure trailer and returns the exit
@@ -246,7 +262,7 @@ func makeRecipeError(trimmed string) (int, bool) {
 	return code, true
 }
 
-var makeRecipeErrorPattern = regexp.MustCompile(`^make(?:\[\d+\])?: \*\*\* \[[^\]]*\] Error (\d+)$`)
+var makeRecipeErrorPattern = regexp.MustCompile(`^make(?:\[\d+\])?: \*{3} \[[^\]]*\] Error (\d+)$`)
 
 // isDiffBodyLine reports whether a line is unified-diff payload rather than a
 // line of its own. Checked against the raw line: leading whitespace is a

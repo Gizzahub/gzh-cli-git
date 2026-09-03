@@ -16,13 +16,18 @@ import (
 )
 
 type preparedLegacy struct {
-	source, root       string
-	baseline           map[string]makeProbe
+	source, root string
+	baseline     map[string]makeProbe
+	// sourcePrepared is the kind of tree source is. It is stamped onto every
+	// probe measured there so the baseline comparison can see whether the two
+	// sides were prepared alike, instead of assuming they were.
+	sourcePrepared     PrepareState
 	controllerPrepared bool
 	g                  gitRepo
 }
 
 func (p preparedLegacy) annotateProbe(ctx context.Context, probe makeProbe) makeProbe {
+	probe.Prepared = p.sourcePrepared
 	if !p.controllerPrepared {
 		return probe
 	}
@@ -41,8 +46,15 @@ func (p preparedLegacy) cleanup(ctx context.Context) error {
 // target is prepared and measured before it is removed; source is never alive
 // at the same time, so repository code cannot use the baseline worktree.
 func prepareLegacyTrees(ctx context.Context, g gitRepo, plan TargetPlan, c *controllerBinding) (preparedLegacy, error) {
+	// No profile means no preparation, and the branch is then measured where
+	// the repository already is: the live working directory, carrying deps/,
+	// node_modules/ and .venv from earlier runs. The baseline it will be
+	// compared against is a pristine worktree carrying none of them. The
+	// asymmetry is not fixed here — it is recorded, so the verdict can name it
+	// instead of reporting an unmeasurable baseline as a fact about the target
+	// commit.
 	if c == nil || c.PrepareProfile == "" {
-		return preparedLegacy{source: g.dir}, nil
+		return preparedLegacy{source: g.dir, sourcePrepared: PrepareStateWorkingDir}, nil
 	}
 	root, err := os.MkdirTemp("", "gz-git-integrate-prepare-")
 	if err != nil {
@@ -57,7 +69,9 @@ func prepareLegacyTrees(ctx context.Context, g gitRepo, plan TargetPlan, c *cont
 		cleanupErr := removePreparedWorktree(ctx, g, target, root)
 		return preparedLegacy{}, errors.Join(fmt.Errorf("prepare target: %w", err), cleanupErr)
 	}
-	prepared := preparedLegacy{controllerPrepared: true}
+	// Both sides get a fresh worktree and the same profile, so these two
+	// probes ARE prepared alike; the stamp records that symmetry as evidence.
+	prepared := preparedLegacy{controllerPrepared: true, sourcePrepared: PrepareStateProfilePrepared}
 	baseline := map[string]makeProbe{
 		"check": prepared.annotateProbe(ctx, runMakeTarget(ctx, target, "check")),
 		"lint":  prepared.annotateProbe(ctx, runMakeTarget(ctx, target, "lint")),
@@ -74,7 +88,7 @@ func prepareLegacyTrees(ctx context.Context, g gitRepo, plan TargetPlan, c *cont
 		cleanupErr := removePreparedWorktree(ctx, g, source, root)
 		return preparedLegacy{}, errors.Join(fmt.Errorf("prepare source: %w", err), cleanupErr)
 	}
-	return preparedLegacy{source: source, root: root, baseline: baseline, controllerPrepared: true, g: g}, nil
+	return preparedLegacy{source: source, root: root, baseline: baseline, sourcePrepared: PrepareStateProfilePrepared, controllerPrepared: true, g: g}, nil
 }
 
 func removePreparedWorktree(parent context.Context, g gitRepo, wt, root string) error {

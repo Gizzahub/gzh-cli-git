@@ -26,13 +26,18 @@ type makeProbe struct {
 	GoRootSrc                string
 	ApprovedForeignLocations []string
 	ControllerPrepared       bool
-	Defined                  bool
-	Skipped                  bool
-	MissingCD                string
-	Output                   string
-	Err                      error
-	Code                     int
-	Unavailable              string
+	// Prepared records which kind of tree WorkDir was. The branch and the
+	// baseline are not always the same kind, and when they differ that
+	// difference is the reason a bootstrap-hungry checker ran on one side
+	// only — a fact the verdict has to be able to report.
+	Prepared    PrepareState
+	Defined     bool
+	Skipped     bool
+	MissingCD   string
+	Output      string
+	Err         error
+	Code        int
+	Unavailable string
 	// ToolCrash holds the line proving the tool died instead of reporting
 	// findings. It is separate from Err because a crash and a rule violation
 	// are the same non-zero exit; only the output distinguishes them.
@@ -517,7 +522,14 @@ func judgeMakeAgainstProbe(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	if err != nil {
 		return CheckItem{Name: name, Status: checkFail, Detail: err.Error()}
 	}
-	verdict := EvaluateBaseline(BaselineInput{BranchLocations: extractLocationsForProbe(probe, branchTracked), BaseLocations: extractLocationsForProbe(base, baseTracked), ChangedPaths: changed})
+	verdict := EvaluateBaseline(BaselineInput{
+		BranchLocations: extractLocationsForProbe(probe, branchTracked),
+		BaseLocations:   extractLocationsForProbe(base, baseTracked),
+		ChangedPaths:    changed,
+		BranchPrepared:  probe.Prepared,
+		BasePrepared:    base.Prepared,
+		BaseMeasurement: baseMeasurement(base, baseTracked),
+	})
 	return baselineCheckItem(name, verdict, allowSkipped)
 }
 
@@ -571,7 +583,13 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 	}
 	defer func() { _ = g.worktreeRemoveForce(ctx, wt) }()
 
+	// The baseline is measured in a worktree checked out fresh at the target
+	// SHA and bootstrapped by nothing. With no controller profile the branch
+	// probe ran in the live working directory instead, so these two are not
+	// the same experiment; recording which tree each was is what lets the
+	// verdict say so rather than blame the target commit.
 	baseProbe := runMakeTarget(ctx, wt, probe.Target)
+	baseProbe.Prepared = PrepareStatePristine
 	if baseProbe.Unavailable != "" {
 		return BaselineResult{}, fmt.Errorf("measurement unavailable: baseline make %s: %s", probe.Target, baseProbe.Unavailable)
 	}
@@ -607,5 +625,8 @@ func baselineAgainstTarget(ctx context.Context, g gitRepo, plan TargetPlan, prob
 		BranchLocations: extractLocationsForProbe(probe, branchTracked),
 		BaseLocations:   extractLocationsForProbe(baseProbe, baseTracked),
 		ChangedPaths:    changed,
+		BranchPrepared:  probe.Prepared,
+		BasePrepared:    baseProbe.Prepared,
+		BaseMeasurement: baseMeasurement(baseProbe, baseTracked),
 	}), nil
 }

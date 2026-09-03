@@ -30,11 +30,19 @@ const (
 	BaselineUnmeasurable
 )
 
-// BaselineInput is the already-normalized location lists for one make target.
+// BaselineInput is the already-normalized location lists for one make target,
+// plus the evidence needed to read an empty BaseLocations correctly. The two
+// evidence fields are documented with their types in check_baseline_state.go.
 type BaselineInput struct {
 	BranchLocations []string
 	BaseLocations   []string
 	ChangedPaths    []string
+	// BranchPrepared and BasePrepared record the tree each side ran in.
+	BranchPrepared PrepareState
+	BasePrepared   PrepareState
+	// BaseMeasurement says whether the target-tip run reached the stage where
+	// it could have reported a diagnostic at all.
+	BaseMeasurement BaseMeasurement
 }
 
 // BaselineResult is the count-only non-worsening verdict.
@@ -167,28 +175,36 @@ func EvaluateBaseline(in BaselineInput) BaselineResult {
 			Reason: fmt.Sprintf("diagnostics on changed paths: %s", strings.Join(attributed, " ")),
 		}
 	}
-	// A failed target tip that emitted no file:line diagnostic at all was not
-	// measured; zero here means "the tool never got far enough to report",
-	// not "the baseline is clean". Of the base-side outcomes, only Unavailable
-	// and MissingCD are rejected before reaching here by either call site
-	// (ToolCrash is screened on the branch probe only, never on the base);
-	// a checker that dies early on its own — mix without deps/, a test runner
-	// without node_modules, a venv-less pytest — exits non-zero with no
-	// parseable location and is indistinguishable here from a clean run.
+	// A failed target tip that emitted no file:line diagnostic MAY not have
+	// been measured: zero can mean "the tool never got far enough to report"
+	// rather than "the baseline is clean". A checker that dies early on its
+	// own — mix without deps/, a test runner without node_modules, a venv-less
+	// pytest — exits non-zero with no parseable location, and comparing
+	// against it is what made every commit unlandable in such a repository: a
+	// branch measured at 0 failed rule (b), and a branch that did run failed
+	// rule (c) as "count increased (0 -> N)". Neither is a statement about the
+	// branch.
 	//
-	// Comparing against it is what made every commit unlandable in such a
-	// repository: a branch measured at 0 failed rule (b), and a branch that
-	// did run failed rule (c) as "count increased (0 -> N)". Neither is a
-	// statement about the branch. Report the missing measurement instead, and
-	// leave rule (a) above it — a diagnostic on a path this branch changed is
-	// evidence of harm whether or not the baseline could be measured.
-	if len(base) == 0 {
+	// But zero is not always that. A run that went to completion and failed in
+	// a shape with no file:line in it — gofmt -l, gci diff, a shell check
+	// script — measured zero, and against that baseline a branch emitting N is
+	// a real worsening. Reading it as unmeasurable hands that worsening to
+	// --allow-skipped-checks, whose contract is that the check was skipped;
+	// this one was not. The two are told apart by BaseMeasurement, which the
+	// call sites fill from probe evidence, not by the location count, which
+	// cannot see the difference. Only positively evidenced measurement falls
+	// through to the count rules below; a caller that says nothing keeps the
+	// reading it had before the field existed, because taking the operator's
+	// escape hatch away on no evidence is how a repository stops being able
+	// to land anything at all.
+	//
+	// Rule (a) stays above this either way — a diagnostic on a path this
+	// branch changed is evidence of harm whether or not the baseline could be
+	// measured.
+	if len(base) == 0 && in.BaseMeasurement != BaseMeasured {
 		return BaselineResult{
 			Status: BaselineUnmeasurable,
-			Reason: fmt.Sprintf(
-				"target tip failed without emitting any file:line diagnostic, so there is no baseline to compare (branch had %d)",
-				len(branch),
-			),
+			Reason: unmeasurableReason(len(branch), in.BranchPrepared, in.BasePrepared),
 		}
 	}
 	if len(branch) == 0 {

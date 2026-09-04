@@ -53,6 +53,18 @@ func (r *Root) Open(name string) (*os.File, error) {
 	return r.root.Open(name)
 }
 
+// OpenFile opens a file below the root with the given flags. Callers that
+// must not follow a final symlink pass unix.O_NOFOLLOW (or the platform
+// equivalent) in flag.
+func (r *Root) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
+	name, err := relative(name)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.root.OpenFile(name, flag, perm)
+}
+
 // OpenRoot opens a child directory below the root and returns a filesystem
 // view anchored to that directory. The child is resolved by the parent
 // os.Root, so later path changes cannot turn it into a string-based escape.

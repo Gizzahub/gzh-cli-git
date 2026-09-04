@@ -10,6 +10,30 @@ import (
 	"testing"
 )
 
+func TestRootOpenFileRejectsEscape(t *testing.T) {
+	base := t.TempDir()
+	rootPath := filepath.Join(base, "root")
+	if err := os.Mkdir(rootPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rootPath, "ok.txt"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := OpenRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	f, err := root.OpenFile("ok.txt", os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if _, err := root.OpenFile("../ok.txt", os.O_RDONLY, 0); err == nil {
+		t.Fatal("OpenFile escape succeeded")
+	}
+}
+
 func TestRootRejectsPathsOutsideRoot(t *testing.T) {
 	base := t.TempDir()
 	rootPath := filepath.Join(base, "root")

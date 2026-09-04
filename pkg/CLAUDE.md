@@ -13,7 +13,7 @@ This directory contains the **public API packages** for gzh-cli-gitforge. Each p
 
 ______________________________________________________________________
 
-## Package Map (20 packages)
+## Package Map (21 packages)
 
 ### Core Operations
 
@@ -56,6 +56,7 @@ ______________________________________________________________________
 ### Utilities
 
 - **cliutil/** - CLI utilities, formatters, helpers
+- **contextref/** - Read-only D6 context-reference observation and CE v2 aggregation
 - **ratelimit/** - Rate limiting for API calls
 
 ______________________________________________________________________

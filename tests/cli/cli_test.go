@@ -98,6 +98,7 @@ func TestCLICapabilityProbeContract(t *testing.T) {
 		{name: "supported", args: []string{"capability", "integrate-readiness-v1"}, wantCode: 0, wantStdout: "integrate-readiness-v1\n"},
 		{name: "supported quiet", args: []string{"--quiet", "capability", "integrate-readiness-v1"}, wantCode: 0, wantStdout: "integrate-readiness-v1\n"},
 		{name: "queue base missing", args: []string{"capability", "integrate-queue-base-missing-v1"}, wantCode: 0, wantStdout: "integrate-queue-base-missing-v1\n"},
+		{name: "context observe", args: []string{"capability", "context-reference-observe-v1"}, wantCode: 0, wantStdout: "context-reference-observe-v1\n"},
 		{name: "unknown", args: []string{"capability", "future-capability"}, wantCode: 1},
 		{name: "missing", args: []string{"capability"}, wantCode: 1},
 		{name: "extra", args: []string{"capability", "integrate-readiness-v1", "extra"}, wantCode: 1},

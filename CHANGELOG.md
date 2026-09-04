@@ -32,6 +32,10 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
 
 ### Added
 
+- `gz-git observe` reports the D6 four-state `.gz-git-context.yaml` matrix
+  and aggregates CE v2 `ce.task.gate-doctor/v2` (origin tag `v0.8.3` /
+  `ac744597`) without an apply surface. Probe:
+  `gz-git capability context-reference-observe-v1`.
 - `gz-git capability integrate-readiness-v1` now provides a fail-closed machine
   probe for wrappers and hooks that must reject clients which would ignore the
   target-owned readiness contract.

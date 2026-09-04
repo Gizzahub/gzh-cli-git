@@ -99,7 +99,19 @@ install-analysis-tools: ## install code analysis tools
 # toolchain and ignores go.mod's `toolchain` directive, so a golangci-lint built
 # by an older Go reads a stdlib its go/types cannot parse and dies mid-analysis
 # instead of reporting findings.
-GOLANGCI_LINT_VERSION ?= v2.12.2
+#
+# The pin is v2.13.1, not the v2.12.2 this repo carried before. Fixing the
+# resolution above exposed the second half of the same measurement: 2.12.2
+# replays cached findings for files that no longer exist. Re-measured
+# 2026-09-04 after the resolution fix landed -- `make lint` still reported the
+# same 195 issues, and all 195 pointed at reclaimed worktrees under
+# ~/worktrees/... , with 391 accompanying "no such file or directory" warnings
+# from the linter itself. Running 2.13.1 against that same unmodified shared
+# cache reported 0 issues and named no worktree path, so the pin moved instead
+# of the cache being wiped: a wipe is machine-wide, one-shot, and the ghosts
+# return with the next reclaimed worktree. gzh-cli, gzh-cli-quality and
+# gzh-cli-package-manager already pin v2.13.1. (TASK-162)
+GOLANGCI_LINT_VERSION ?= v2.13.1
 GOLANGCI_LINT_MODULE := github.com/golangci/golangci-lint/v2
 GOLANGCI_LINT_INSTALL ?= $(GOLANGCI_LINT_MODULE)/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 GOLANGCI_LINT_DIR := $(CURDIR)/bin/tools

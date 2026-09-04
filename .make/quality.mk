@@ -159,59 +159,62 @@ fmt-diff: ## format only changed files (fast, for pre-commit)
 
 .PHONY: lint format lint-check lint-fix lint-new lint-ci lint-count lint-summary lint-stats lint-status lint-json
 
-lint-check: ## check all lint issues without fixing (exit code reflects status)
-	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint is required (run: make install-golangci-lint)" >&2; exit 1; }
+# The prerequisite is the whole guard. It resolves the linter from the
+# repository's own bin/tools, hard-fails when that binary is not the pinned
+# version, and installs the pin when it is missing -- so this target can no
+# longer run whichever golangci-lint the caller's PATH happened to expose.
+lint-check: install-golangci-lint ## check all lint issues without fixing (exit code reflects status)
 	@echo -e "$(CYAN)Running golangci-lint...$(RESET)"
-	GOWORK=off golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0
+	GOWORK=off "$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0
 
 lint: lint-check ## alias for lint-check
 
 lint-fix: install-golangci-lint ## run golangci-lint with auto-fix
 	@echo -e "$(CYAN)Running golangci-lint with auto-fix...$(RESET)"
-	GOWORK=off golangci-lint run -c .golangci.yml --fix
+	GOWORK=off "$(GOLANGCI_LINT)" run -c .golangci.yml --fix
 
 lint-new: install-golangci-lint ## run golangci-lint on new code only
 	@echo -e "$(CYAN)Running golangci-lint on new code only...$(RESET)"
-	GOWORK=off golangci-lint run -c .golangci.yml --new-from-rev=HEAD~
+	GOWORK=off "$(GOLANGCI_LINT)" run -c .golangci.yml --new-from-rev=HEAD~
 
 lint-ci: install-golangci-lint ## run golangci-lint for CI
 	@echo -e "$(CYAN)Running golangci-lint for CI...$(RESET)"
-	golangci-lint run -c .golangci.yml --out-format=github-actions
+	"$(GOLANGCI_LINT)" run -c .golangci.yml --out-format=github-actions
 
 lint-count: install-golangci-lint ## count total lint issues without fixing
 	@echo -e "$(CYAN)Counting lint issues...$(RESET)"
-	@ISSUES=$$(golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | grep -E "^[^[:space:]].*\\([^)]+\\)$$" | wc -l); \
+	@ISSUES=$$("$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | grep -E "^[^[:space:]].*\\([^)]+\\)$$" | wc -l); \
 	echo -e "$(YELLOW)Total lint issues: $$ISSUES$(RESET)"
 
 lint-summary: install-golangci-lint ## show lint issues summary by linter
 	@echo -e "$(CYAN)Lint issues summary:$(RESET)"
-	@golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | \
+	@"$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | \
 	grep -E "^[^[:space:]].*\\([^)]+\\)$$" | sed 's/.*(\\([^)]*\\))$$/\\1/' | sort | uniq -c | sort -nr | \
 	awk '{printf "  $(YELLOW)%-15s$(RESET) %d issues\\n", $$2, $$1}'
 
 lint-stats: install-golangci-lint ## show detailed lint statistics with golangci-lint built-in stats
 	@echo -e "$(CYAN)=== Lint Statistics ===$(RESET)"
-	@golangci-lint run -c .golangci.yml --show-stats --max-issues-per-linter=0 --max-same-issues=0
+	@"$(GOLANGCI_LINT)" run -c .golangci.yml --show-stats --max-issues-per-linter=0 --max-same-issues=0
 
 lint-status: install-golangci-lint ## comprehensive lint status report
 	@echo -e "$(BLUE)🔍 Comprehensive Lint Status Report$(RESET)"
 	@echo -e "$(BLUE)==================================$(RESET)"
 	@echo ""
 	@echo -e "$(GREEN)📊 Quick Stats:$(RESET)"
-	@TOTAL=$$(golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | grep -E "^[^[:space:]].*\\([^)]+\\)$$" | wc -l); \
-	ERRORS=$$(golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=json 2>/dev/null | jq -r '.Issues[]? | select(.Severity=="error") | .Severity' 2>/dev/null | wc -l || echo "0"); \
-	WARNINGS=$$(golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=json 2>/dev/null | jq -r '.Issues[]? | select(.Severity=="warning") | .Severity' 2>/dev/null | wc -l || echo "0"); \
+	@TOTAL=$$("$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | grep -E "^[^[:space:]].*\\([^)]+\\)$$" | wc -l); \
+	ERRORS=$$("$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=json 2>/dev/null | jq -r '.Issues[]? | select(.Severity=="error") | .Severity' 2>/dev/null | wc -l || echo "0"); \
+	WARNINGS=$$("$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=json 2>/dev/null | jq -r '.Issues[]? | select(.Severity=="warning") | .Severity' 2>/dev/null | wc -l || echo "0"); \
 	echo "  $(YELLOW)Total Issues: $$TOTAL$(RESET)"; \
 	echo "  $(RED)Errors: $$ERRORS$(RESET)"; \
 	echo "  $(YELLOW)Warnings: $$WARNINGS$(RESET)"
 	@echo ""
 	@echo -e "$(GREEN)🏷️  Top 10 Linters:$(RESET)"
-	@golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | \
+	@"$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | \
 	grep -E "^[^[:space:]].*\\([^)]+\\)$$" | sed 's/.*(\\([^)]*\\))$$/\\1/' | sort | uniq -c | sort -nr | head -10 | \
 	awk '{printf "  $(CYAN)%-15s$(RESET) %d issues\\n", $$2, $$1}'
 	@echo ""
 	@echo -e "$(GREEN)📁 Most Problematic Files:$(RESET)"
-	@golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | \
+	@"$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=line-number 2>/dev/null | \
 	grep -E "^[^[:space:]].*\\([^)]+\\)$$" | sed 's/^\\([^:]*\\):.*/\\1/' | sort | uniq -c | sort -nr | head -5 | \
 	awk '{printf "  $(MAGENTA)%-40s$(RESET) %d issues\\n", $$2, $$1}'
 
@@ -219,14 +222,14 @@ lint-diff: install-golangci-lint ## lint only changed files (fast, for pre-commi
 	@echo -e "$(CYAN)🔍 Linting changed files only...$(RESET)"
 	@CHANGED_FILES=$$(git diff --name-only --diff-filter=d HEAD | grep '\.go$$' || true); \
 	if [ -n "$$CHANGED_FILES" ]; then \
-		echo "$$CHANGED_FILES" | tr '\n' ' ' | xargs -r golangci-lint run -c .golangci.yml --new-from-rev=HEAD~1 || echo -e "$(YELLOW)⚠️  Some issues found in changed files$(RESET)"; \
+		echo "$$CHANGED_FILES" | tr '\n' ' ' | xargs -r "$(GOLANGCI_LINT)" run -c .golangci.yml --new-from-rev=HEAD~1 || echo -e "$(YELLOW)⚠️  Some issues found in changed files$(RESET)"; \
 	else \
 		echo -e "$(YELLOW)No Go files changed$(RESET)"; \
 	fi
 
 lint-json: install-golangci-lint ## export lint results to JSON for further analysis
 	@echo -e "$(CYAN)Exporting lint results to lint-report.json...$(RESET)"
-	@golangci-lint run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=json > lint-report.json 2>/dev/null || true
+	@"$(GOLANGCI_LINT)" run -c .golangci.yml --max-issues-per-linter=0 --max-same-issues=0 --out-format=json > lint-report.json 2>/dev/null || true
 	@echo -e "$(GREEN)✅ Report saved to lint-report.json$(RESET)"
 	@if command -v jq >/dev/null 2>&1; then \
 		echo ""; \

@@ -76,21 +76,56 @@ install-analysis-tools: ## install code analysis tools
 	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..." && go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
 	@echo -e "$(GREEN)✅ All analysis tools installed!$(RESET)"
 
-# Pin to a v2 release. A v1 binary on PATH rejects this repo's version: "2"
-# config with "you are using a configuration file for golangci-lint v2 with
-# golangci-lint v1". Prefer mise-managed golangci-lint when present; only
-# install into GOPATH/bin when the active binary is missing or not v2.
+# Pin to a v2 release. A v1 binary rejects this repo's version: "2" config with
+# "you are using a configuration file for golangci-lint v2 with golangci-lint
+# v1".
+#
+# The binary is resolved from a repository-owned bin/tools and never from PATH.
+# Asking PATH made the answer depend on how the command was reached: under make,
+# mise's shims directory came first and the pin applied (2.12.2); from a plain
+# shell, mise's installs directory came first and a different release won
+# (2.13.2). Same tree, same `make lint`, two linters -- and the old
+# `command -v golangci-lint` guard passed for both, because it only asks whether
+# a name resolves. Measured on 2026-09-04: one path reported 0 issues, the other
+# 195, all of them replayed from a shared cache for worktrees that no longer
+# exist. Installing into $$(go env GOPATH)/bin made it worse still: that
+# directory is shared with every other repository on the machine, so preparing
+# lint here overwrote the binary they run.
+#
+# `go version -m` is what makes the check honest. It reads the module version
+# recorded inside the binary, so it cannot be satisfied by a wrapper script or a
+# --version string, and it also reports the Go toolchain the binary was built
+# with. That second part is not decoration: `go install` builds with the active
+# toolchain and ignores go.mod's `toolchain` directive, so a golangci-lint built
+# by an older Go reads a stdlib its go/types cannot parse and dies mid-analysis
+# instead of reporting findings.
 GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_MODULE := github.com/golangci/golangci-lint/v2
+GOLANGCI_LINT_INSTALL ?= $(GOLANGCI_LINT_MODULE)/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT_DIR := $(CURDIR)/bin/tools
+GOLANGCI_LINT := $(GOLANGCI_LINT_DIR)/golangci-lint$(shell go env GOEXE)
 
-install-golangci-lint: ## install golangci-lint v2 (skip when PATH already has v2)
+# Exits 0 only when the binary really is the pinned module version and was built
+# with the Go toolchain that is active now.
+GOLANGCI_LINT_VERSION_OK = go version -m "$(GOLANGCI_LINT)" 2>/dev/null | \
+	awk -v want="$$(go env GOVERSION)" 'NR == 1 { built = $$NF } $$1 == "mod" && $$2 == "$(GOLANGCI_LINT_MODULE)" && $$3 == "$(GOLANGCI_LINT_VERSION)" { found = 1 } END { exit !(found && built == want) }'
+
+# The `rm -f` is load-bearing: `go install` overwrites an existing Go binary
+# happily but refuses a target path that is not an object file at all, so a
+# truncated or hand-placed file in bin/tools would otherwise wedge this target
+# behind an error that does not name its own fix.
+install-golangci-lint: ## install the pinned golangci-lint v2 into bin/tools
 	@echo -e "$(CYAN)Ensuring golangci-lint $(GOLANGCI_LINT_VERSION)...$(RESET)"
-	@if command -v golangci-lint >/dev/null 2>&1 && golangci-lint version 2>/dev/null | grep -q "$(GOLANGCI_LINT_VERSION)"; then \
-		echo -e "$(GREEN)✅ golangci-lint v2 already on PATH: $$(command -v golangci-lint)$(RESET)"; \
-	else \
-		echo -e "$(YELLOW)Installing golangci-lint $(GOLANGCI_LINT_VERSION) into $$(go env GOPATH)/bin$(RESET)"; \
-		GOBIN=$$(go env GOPATH)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
-		echo -e "$(GREEN)✅ golangci-lint $(GOLANGCI_LINT_VERSION) installed$(RESET)"; \
+	@mkdir -p "$(GOLANGCI_LINT_DIR)"
+	@if ! $(GOLANGCI_LINT_VERSION_OK); then \
+		echo -e "$(YELLOW)Installing golangci-lint $(GOLANGCI_LINT_VERSION) into $(GOLANGCI_LINT_DIR)$(RESET)"; \
+		rm -f "$(GOLANGCI_LINT)"; \
+		GOWORK=off GOBIN="$(GOLANGCI_LINT_DIR)" go install $(GOLANGCI_LINT_INSTALL); \
 	fi
+	@$(GOLANGCI_LINT_VERSION_OK) || { \
+		echo "golangci-lint at $(GOLANGCI_LINT) is not $(GOLANGCI_LINT_MODULE) $(GOLANGCI_LINT_VERSION) built with $$(go env GOVERSION); refusing to lint with an unpinned binary" >&2; \
+		exit 1; \
+	}
 
 install-goreleaser: ## install goreleaser
 	@echo -e "$(CYAN)Installing goreleaser...$(RESET)"
@@ -219,7 +254,7 @@ tools-status: ## show installed tool status
 	@printf "  %-20s " "gci:"; gci --version 2>/dev/null || echo -e "$(RED)Not installed$(RESET)"
 	@echo ""
 	@echo -e "$(GREEN)🔍 Lint Tools:$(RESET)"
-	@printf "  %-20s " "golangci-lint:"; golangci-lint --version 2>/dev/null | cut -d' ' -f4 || echo -e "$(RED)Not installed$(RESET)"
+	@printf "  %-20s " "golangci-lint:"; "$(GOLANGCI_LINT)" --version 2>/dev/null | cut -d' ' -f4 || echo -e "$(RED)Not installed$(RESET) (want $(GOLANGCI_LINT_VERSION))"
 	@printf "  %-20s " "staticcheck:"; staticcheck -version 2>/dev/null || echo -e "$(RED)Not installed$(RESET)"
 	@echo ""
 	@echo -e "$(GREEN)🛡️  Security Tools:$(RESET)"

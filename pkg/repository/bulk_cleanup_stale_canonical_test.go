@@ -63,9 +63,12 @@ func staleCanonicalFixture(t *testing.T) (origin, clone, liveDevelop string) {
 	return origin, clone, liveDevelop
 }
 
-func canonicalResolver(name string) func(context.Context, string) (string, []string, error) {
+// developResolver stands in for the .gz-git.yaml lookup: every fixture here
+// declares develop as the canonical branch, which is the shape the defect lives
+// in — a repository mirrored to a second trunk it no longer treats as canonical.
+func developResolver() func(context.Context, string) (string, []string, error) {
 	return func(context.Context, string) (string, []string, error) {
-		return name, nil, nil
+		return "develop", nil, nil
 	}
 }
 
@@ -85,7 +88,7 @@ func TestBulkCleanup_NonCanonicalRefusesRewoundCanonical(t *testing.T) {
 	opts := BulkCleanupOptions{
 		IncludeNonCanonical: true,
 		DeleteRemote:        true,
-		CanonicalResolver:   canonicalResolver("develop"),
+		CanonicalResolver:   developResolver(),
 	}
 
 	toDelete := c.collectCleanupCandidates(ctx, clone, "develop", DefaultRemoteName, "develop", opts, result)

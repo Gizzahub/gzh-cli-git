@@ -147,6 +147,11 @@ func checkSingleRepo(ctx context.Context, executor *gitcmd.Executor, repoPath, n
 	// 7. develop vs main/master distance
 	results = append(results, checkDevelopMainDistance(ctx, executor, repoPath, name)...)
 
+	// 7b. The same duplicate pair, on the remote. Checked separately because the
+	// local pair can drift apart while the remote pair is identical — which is
+	// exactly what `push --refspec develop:master` produces.
+	results = append(results, checkRemoteTrunkDuplicate(ctx, executor, repoPath, name)...)
+
 	// 8. Feature branch divergence
 	if verbose {
 		results = append(results, checkFeatureBranchDivergence(ctx, executor, repoPath, name)...)
@@ -419,6 +424,21 @@ func checkDevelopMainDistance(ctx context.Context, executor *gitcmd.Executor, re
 		return nil
 	}
 
+	// Distance 0 with both branches present is not health, it is a duplicate pair:
+	// the two refs name the same commit, so which one is canonical is undecidable
+	// from the graph alone. The drift thresholds below never fire on it, which is
+	// how a `push --refspec develop:master` reconciliation leaves a repository
+	// looking clean while both branches remain live.
+	if distance == 0 {
+		return []CheckResult{{
+			Name:     fmt.Sprintf("repo:%s:develop-main", name),
+			Category: CategoryRepo,
+			Status:   StatusWarning,
+			Message:  fmt.Sprintf("%s: %s and %s point at the same commit", name, developBranch, mainBranch),
+			Detail:   "duplicate branch pair; declare the canonical branch in .gz-git.yaml and retire the other with 'gz-git cleanup branch --non-canonical -r'",
+		}}
+	}
+
 	if distance >= BranchDistanceError {
 		return []CheckResult{{
 			Name:     fmt.Sprintf("repo:%s:develop-main", name),
@@ -440,6 +460,85 @@ func checkDevelopMainDistance(ctx context.Context, executor *gitcmd.Executor, re
 	}
 
 	return nil
+}
+
+// checkRemoteTrunkDuplicate reports a remote that carries two live trunk
+// branches at the same commit.
+//
+// checkDevelopMainDistance asks the question of the local pair, and in the shape
+// this check exists for the local pair is not identical: a stale local `master`
+// left behind by a `push --refspec develop:master` sits several commits back,
+// so the distance check sees ordinary drift below its threshold and says
+// nothing, while origin/develop and origin/master are the very same commit.
+// Which of the two is canonical cannot be read off the graph, so this reports
+// the ambiguity rather than picking a side.
+func checkRemoteTrunkDuplicate(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {
+	remote := primaryRemote(ctx, executor, repoPath)
+	if remote == "" {
+		return nil
+	}
+
+	devRef := firstResolvableRef(ctx, executor, repoPath, remote+"/develop", remote+"/dev")
+	if devRef == "" {
+		return nil
+	}
+	mainRef := firstResolvableRef(ctx, executor, repoPath, remote+"/main", remote+"/master")
+	if mainRef == "" {
+		return nil
+	}
+
+	devSHA := resolveSHA(ctx, executor, repoPath, devRef)
+	mainSHA := resolveSHA(ctx, executor, repoPath, mainRef)
+	if devSHA == "" || mainSHA == "" || devSHA != mainSHA {
+		return nil
+	}
+
+	return []CheckResult{{
+		Name:     fmt.Sprintf("repo:%s:remote-trunk-duplicate", name),
+		Category: CategoryRepo,
+		Status:   StatusWarning,
+		Message:  fmt.Sprintf("%s: %s and %s point at the same commit", name, devRef, mainRef),
+		Detail:   "duplicate branch pair on the remote; declare the canonical branch in .gz-git.yaml and retire the other with 'gz-git cleanup branch --non-canonical -r'",
+	}}
+}
+
+// primaryRemote returns "origin" when it exists, otherwise the first remote
+// configured. A repository with no remote has no remote pair to compare.
+func primaryRemote(ctx context.Context, executor *gitcmd.Executor, repoPath string) string {
+	output, err := executor.RunOutput(ctx, repoPath, "remote")
+	if err != nil {
+		return ""
+	}
+	remotes := strings.Fields(output)
+	for _, r := range remotes {
+		if r == "origin" {
+			return r
+		}
+	}
+	if len(remotes) > 0 {
+		return remotes[0]
+	}
+	return ""
+}
+
+// firstResolvableRef returns the first candidate that git can resolve.
+func firstResolvableRef(ctx context.Context, executor *gitcmd.Executor, repoPath string, candidates ...string) string {
+	for _, candidate := range candidates {
+		ok, err := executor.RunQuiet(ctx, repoPath, "rev-parse", "--verify", candidate)
+		if err == nil && ok {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// resolveSHA returns the commit a ref names, or "" if it does not resolve.
+func resolveSHA(ctx context.Context, executor *gitcmd.Executor, repoPath, ref string) string {
+	output, err := executor.RunOutput(ctx, repoPath, "rev-parse", ref)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(output)
 }
 
 func checkFeatureBranchDivergence(ctx context.Context, executor *gitcmd.Executor, repoPath, name string) []CheckResult {

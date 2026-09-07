@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"gopkg.in/yaml.v3"
+
+	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 )
 
 // ReadinessUpdatePlan is the one-use, human-confirmed transaction for changing

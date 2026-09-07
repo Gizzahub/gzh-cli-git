@@ -117,6 +117,7 @@ func cleanupEntriesFromReport(report *branch.CleanupReport) []repository.Cleanup
 	appendEntries(report.Stale, "stale")
 	appendEntries(report.Orphaned, "gone")
 	appendEntries(report.Superseded, "superseded")
+	appendEntries(report.NonCanonical, "non-canonical")
 	return out
 }
 

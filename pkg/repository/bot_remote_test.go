@@ -312,7 +312,7 @@ func TestBulkCleanup_RemoteMergedLeaseRefusesMovedTip(t *testing.T) {
 		BotsOnly:      true,
 		BaseBranch:    "master",
 	}
-	toDelete := c.collectCleanupCandidates(ctx, clone, "master", defaultRemoteName, "master", opts, result)
+	toDelete := c.collectCleanupCandidates(ctx, clone, "master", DefaultRemoteName, "master", opts, result)
 
 	classifiedSHA := ""
 	foundRemote := false
@@ -339,11 +339,23 @@ func TestBulkCleanup_RemoteMergedLeaseRefusesMovedTip(t *testing.T) {
 	runGit(t, other, "push", "origin", "dependabot/go_modules/x")
 	newSHA := gitOut(t, other, "rev-parse", "HEAD")
 
-	deleted := c.executeCleanupDeletes(ctx, clone, defaultRemoteName, toDelete, NewNoopLogger(), "clone")
+	deleted, failed := c.executeCleanupDeletes(ctx, clone, DefaultRemoteName, toDelete, NewNoopLogger(), "clone")
 	for _, b := range deleted {
 		if b.name == "dependabot/go_modules/x" && b.location == branchLocationRemote {
 			t.Error("leased delete reported success after remote tip moved")
 		}
+	}
+
+	// The refusal must also be reported, not merely withheld from `deleted`:
+	// a bulk summary that counts it nowhere tells the operator the branch is gone.
+	reported := false
+	for _, f := range failed {
+		if f.Name == "dependabot/go_modules/x" && f.Location == branchLocationRemote {
+			reported = true
+		}
+	}
+	if !reported {
+		t.Error("a refused leased delete must appear in the failure list")
 	}
 	if !refExists(t, origin, "refs/heads/dependabot/go_modules/x") {
 		t.Fatal("moved remote branch must still exist")

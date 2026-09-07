@@ -431,6 +431,35 @@ func TestCheckDevelopMainDistance_NoDevelop(t *testing.T) {
 	}
 }
 
+// TestCheckDevelopMainDistance_SameCommitWarns pins the distance==0 case: a
+// develop branch that duplicates main/master rather than diverging from it
+// still deserves a warning, not silence, because it is exactly the "declare a
+// canonical branch and retire the other" situation --non-canonical exists for.
+//
+// The branch is force-renamed to "master" rather than relying on whatever
+// init.defaultBranch the environment configures (see TestFindMainBranch_Master's
+// comment above), so this test's outcome does not depend on git config.
+func TestCheckDevelopMainDistance_SameCommitWarns(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepoWithCommit(t, dir)
+	runGit(t, dir, "branch", "-M", "master")
+	runGit(t, dir, "branch", "develop")
+
+	ctx := context.Background()
+	executor := gitcmd.NewExecutor(gitcmd.WithTimeout(5 * time.Second))
+
+	results := checkDevelopMainDistance(ctx, executor, dir, "test-repo")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result when develop and master are identical, got %d: %+v", len(results), results)
+	}
+	if results[0].Status != StatusWarning {
+		t.Errorf("status = %s, want %s", results[0].Status, StatusWarning)
+	}
+	if !strings.Contains(results[0].Message, "same commit") {
+		t.Errorf("message = %q, want it to say develop and master point at the same commit", results[0].Message)
+	}
+}
+
 // --- findMainBranch ---
 
 func TestFindMainBranch_Master(t *testing.T) {

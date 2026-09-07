@@ -13,9 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/gizzahub/gzh-cli-gitforge/internal/gitcmd"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
-	"gopkg.in/yaml.v3"
 )
 
 // BootstrapPlan is an immutable, auditable confirmation plan for the

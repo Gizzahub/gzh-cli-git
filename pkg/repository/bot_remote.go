@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-const defaultRemoteName = "origin"
+// DefaultRemoteName is the remote assumed when a repository does not say which
+// one it means. It is exported because pkg/branch needs the same assumption to
+// resolve a declared canonical branch to a remote-tracking ref.
+const DefaultRemoteName = "origin"
 
 // BotRemoteBranches partitions origin remote-tracking refs with bot prefixes
 // into merged (tip is an ancestor of base), superseded (not an ancestor, but
@@ -26,7 +29,7 @@ func (c *client) BotRemoteBranches(ctx context.Context, repo *Repository, base s
 		return nil, nil, nil, nil
 	}
 
-	names, err := c.listRemoteTrackingNames(ctx, repo.Path, defaultRemoteName)
+	names, err := c.listRemoteTrackingNames(ctx, repo.Path, DefaultRemoteName)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -46,7 +49,7 @@ func (c *client) BotRemoteBranches(ctx context.Context, repo *Repository, base s
 		if IsProtected(name) || !IsBotBranch(name) {
 			continue
 		}
-		tip := defaultRemoteName + "/" + name
+		tip := DefaultRemoteName + "/" + name
 		if c.isRefAncestor(ctx, repo.Path, tip, base) {
 			merged = append(merged, name)
 			continue
@@ -99,7 +102,7 @@ func (c *client) workflowContentsAt(ctx context.Context, repoPath, ref string) [
 // without the remote prefix. origin/HEAD is skipped.
 func (c *client) listRemoteTrackingNames(ctx context.Context, repoPath, remote string) ([]string, error) {
 	if remote == "" {
-		remote = defaultRemoteName
+		remote = DefaultRemoteName
 	}
 	output, err := c.executor.RunOutput(ctx, repoPath, "for-each-ref", "--format=%(refname:short)", "refs/remotes/"+remote+"/")
 	if err != nil {

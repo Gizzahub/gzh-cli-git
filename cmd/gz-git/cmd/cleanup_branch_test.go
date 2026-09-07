@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gizzahub/gzh-cli-gitforge/internal/testutil"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 // captureOutErr redirects both os.Stdout and os.Stderr for the duration of fn.
@@ -183,5 +185,130 @@ func TestCleanupBranchRequiresTypeIncludingSuperseded(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--superseded") {
 		t.Errorf("error = %q, want it to list --superseded", err)
+	}
+}
+
+func TestCleanupBranchHelpMentionsNonCanonical(t *testing.T) {
+	flag := cleanupBranchCmd.Flags().Lookup("non-canonical")
+	if flag == nil {
+		t.Fatal("missing --non-canonical flag")
+	}
+	if !strings.Contains(flag.Usage, "canonical") {
+		t.Errorf("--non-canonical usage = %q, want it to mention the canonical branch", flag.Usage)
+	}
+}
+
+// setCleanupBranchNonCanonTestGlobal pins cleanupBranchNonCanon and restores
+// it. It is separate from setCleanupBranchTestGlobals because that helper
+// predates the --non-canonical flag and does not manage this global; folding
+// it in there would touch every other test's baseline.
+func setCleanupBranchNonCanonTestGlobal(t *testing.T, value bool) {
+	t.Helper()
+	orig := cleanupBranchNonCanon
+	cleanupBranchNonCanon = value
+	t.Cleanup(func() { cleanupBranchNonCanon = orig })
+}
+
+// TestCleanupBranchRequiresTypeIncludingNonCanonical mirrors
+// TestCleanupBranchRequiresTypeIncludingSuperseded for --non-canonical: it
+// alone must satisfy the "specify at least one cleanup type" gate, and the
+// gate's error message must list it when no cleanup type is set at all.
+func TestCleanupBranchRequiresTypeIncludingNonCanonical(t *testing.T) {
+	setCleanupBranchTestGlobals(t, "master")
+	cleanupBranchMerged = false
+	cleanupBranchStale = false
+	cleanupBranchGone = false
+	cleanupBranchSuperseded = false
+	setCleanupBranchNonCanonTestGlobal(t, false)
+
+	err := runCleanupBranch(cleanupBranchCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when no cleanup type is set")
+	}
+	if !strings.Contains(err.Error(), "--non-canonical") {
+		t.Errorf("error = %q, want it to list --non-canonical", err)
+	}
+
+	// --non-canonical alone satisfies the gate. This repository has no
+	// .gz-git.yaml integrationBranch declaration, so runCleanupBranch still
+	// fails past the gate — but on resolveCanonicalDeclaration's error, not on
+	// "specify at least one cleanup type".
+	setCleanupBranchNonCanonTestGlobal(t, true)
+
+	repoPath := testutil.TempGitRepoWithCommit(t)
+	t.Chdir(repoPath)
+
+	err = runCleanupBranch(cleanupBranchCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error past the gate (no integrationBranch declaration)")
+	}
+	if strings.Contains(err.Error(), "specify at least one cleanup type") {
+		t.Errorf("error = %q, --non-canonical alone should have satisfied the cleanup-type gate", err)
+	}
+}
+
+// TestConfirmationLines_OneEntryPerRef pins confirmationLines to render a
+// separate line per ref rather than deduplicating by name: a local branch and
+// its remote namesake are two deletions, and --non-canonical makes that pair
+// the ordinary case, not the exception a name-deduplicated summary could get
+// away with hiding.
+func TestConfirmationLines_OneEntryPerRef(t *testing.T) {
+	repo := &repository.RepositoryCleanupResult{
+		Branches: []repository.CleanupBranchEntry{
+			{Name: "master", Location: "local"},
+			{Name: "master", Location: "remote"},
+			{Name: "old-topic", Location: "remote"},
+		},
+	}
+
+	got := confirmationLines(repo)
+	want := []string{"master", "master (remote)", "old-topic (remote)"}
+
+	if len(got) != len(want) {
+		t.Fatalf("confirmationLines = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("confirmationLines[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestConfirmationLines_FallsBackToDeletedBranches covers the human-output
+// path that predates the per-ref Branches field: when Branches is empty,
+// confirmationLines must still return the flat, name-deduplicated
+// DeletedBranches list rather than an empty slice.
+func TestConfirmationLines_FallsBackToDeletedBranches(t *testing.T) {
+	repo := &repository.RepositoryCleanupResult{
+		DeletedBranches: []string{"feature-one", "feature-two"},
+	}
+
+	got := confirmationLines(repo)
+	want := []string{"feature-one", "feature-two"}
+
+	if len(got) != len(want) {
+		t.Fatalf("confirmationLines = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("confirmationLines[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestResolveCanonicalDeclarationRequiresDeclaration pins
+// resolveCanonicalDeclaration's own error, not the CLI gate above: a
+// repository whose .gz-git.yaml declares no branch.integrationBranch must get
+// an explicit error explaining that a declaration is required, never a
+// silently empty canonical branch.
+func TestResolveCanonicalDeclarationRequiresDeclaration(t *testing.T) {
+	repoPath := t.TempDir()
+
+	canonical, patterns, err := resolveCanonicalDeclaration(context.Background(), repoPath)
+	if err == nil {
+		t.Fatalf("expected an error for an undeclared repository, got canonical=%q patterns=%v", canonical, patterns)
+	}
+	if !strings.Contains(err.Error(), "requires branch.integrationBranch") {
+		t.Errorf("error = %q, want it to explain that branch.integrationBranch must be declared", err)
 	}
 }

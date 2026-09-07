@@ -85,12 +85,13 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 	}
 
 	report := &CleanupReport{
-		Merged:     make([]*Branch, 0),
-		Stale:      make([]*Branch, 0),
-		Orphaned:   make([]*Branch, 0),
-		Superseded: make([]*Branch, 0),
-		Protected:  make([]*Branch, 0),
-		Total:      len(branches),
+		Merged:       make([]*Branch, 0),
+		Stale:        make([]*Branch, 0),
+		Orphaned:     make([]*Branch, 0),
+		Superseded:   make([]*Branch, 0),
+		NonCanonical: make([]*Branch, 0),
+		Protected:    make([]*Branch, 0),
+		Total:        len(branches),
 	}
 
 	// Ask git which branches it marks [gone] before the loop: the answer comes
@@ -135,6 +136,10 @@ func (c *cleanupService) classifyCleanupBranch(
 	}
 	if branch.IsRemote {
 		c.captureRemoteBranchSHA(ctx, repo, branch)
+	}
+	if opts.IncludeNonCanonical && c.isNonCanonical(ctx, repo, branch, opts) {
+		report.NonCanonical = append(report.NonCanonical, branch)
+		return
 	}
 	if c.isProtectedBranch(branch.Name, opts.Exclude) {
 		report.Protected = append(report.Protected, branch)
@@ -206,6 +211,21 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		filtered = append(filtered, branch)
 	}
 	toDelete = filtered
+
+	// report.NonCanonical is the one bucket allowed past built-in name
+	// protection, so it is screened on its own terms rather than added to
+	// toDelete above. Analyze already applied these conditions; they are applied
+	// again because CleanupReport is public and a hand-assembled report must not
+	// be able to turn this into "delete master". Only --protect patterns and a
+	// re-verified ancestry check stand between a candidate and deletion, and both
+	// are checked here, in this process, against this repository.
+	for _, branch := range report.NonCanonical {
+		if !c.authorizeRetire(ctx, repo, branch, opts) {
+			result.Skipped = append(result.Skipped, branch.Name)
+			continue
+		}
+		toDelete = append(toDelete, branch)
+	}
 
 	// Dry run: do not delete. Skipped already lists protected branches; non-protected
 	// candidates remain only in the input report (nothing was removed).
@@ -351,6 +371,13 @@ func (c *cleanupService) deleteRemoteBranch(ctx context.Context, repo *repositor
 		if result != nil {
 			detail = strings.TrimSpace(result.Stderr)
 		}
+		if repository.IsRemoteHeadRefusal(detail) {
+			return fmt.Errorf(
+				"leased remote delete %s/%s: refused because it is still %s's default branch"+
+					" — repoint the default branch first, then re-run",
+				remote, name, remote,
+			)
+		}
 		return fmt.Errorf("leased remote delete %s/%s: %s", remote, name, detail)
 	}
 	return nil
@@ -459,6 +486,157 @@ func (c *cleanupService) findGoneBranches(ctx context.Context, repo *repository.
 	return gone, nil
 }
 
+// authorizeRetire re-verifies, at deletion time, that a non-canonical candidate
+// is safe to delete. It fails closed on every uncertainty: no declared canonical
+// branch, a candidate that is the canonical branch, an operator --protect match,
+// or an ancestry check that does not come back clean.
+func (c *cleanupService) authorizeRetire(ctx context.Context, repo *repository.Repository, branch *Branch, opts ExecuteOptions) bool {
+	canonical := strings.TrimSpace(opts.CanonicalBranch)
+	if canonical == "" || branch == nil {
+		return false
+	}
+
+	if branch.Name == canonical || !repository.IsRetirableTrunkName(branch.Name) {
+		return false
+	}
+
+	for _, pattern := range opts.Exclude {
+		if matchPattern(branch.Name, pattern) {
+			return false
+		}
+	}
+
+	target := c.canonicalTargetRef(ctx, repo, branch, canonical)
+	return c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target)
+}
+
+// isNonCanonical reports whether branch duplicates the declared canonical branch
+// and may therefore be retired.
+//
+// The four conditions are an allow-list, not a deny-list, and that ordering is
+// the safety property: a deny-list ("delete what is not canonical") would sweep
+// up release lines, other people's work, and anything the declaration simply
+// failed to mention. Every condition must hold.
+//
+//  1. A canonical branch was declared. Without it there is no baseline, so the
+//     answer is always false — the command does nothing rather than guessing.
+//  2. The branch is not the canonical branch itself, under any of the spellings
+//     git reports it (local name, remotes/<remote>/<name>).
+//  3. The branch is not a declared task branch. Those belong to the reclaim
+//     path, which has its own lifecycle and its own gate.
+//  4. The branch carries no commit the canonical branch lacks. This is the gate
+//     that makes deletion lossless by construction, and it is asked of git, not
+//     inferred from names or dates.
+func (c *cleanupService) isNonCanonical(ctx context.Context, repo *repository.Repository, branch *Branch, opts AnalyzeOptions) bool {
+	canonical := strings.TrimSpace(opts.CanonicalBranch)
+	if canonical == "" {
+		return false
+	}
+
+	if branch.Name == canonical {
+		return false
+	}
+
+	// The bypass is only ever granted to a trunk name. Everything else that is
+	// an ancestor of the canonical branch is what --merged is for, and the
+	// operator has to ask for it there.
+	if !repository.IsRetirableTrunkName(branch.Name) {
+		return false
+	}
+
+	// A user-supplied --protect pattern is honored even here. Built-in name
+	// protection is what this classification is allowed to override; an explicit
+	// instruction from the operator is not.
+	for _, pattern := range opts.Exclude {
+		if matchPattern(branch.Name, pattern) {
+			return false
+		}
+	}
+
+	if repository.MatchesAnyTaskPattern(branch.Name, opts.TaskPatterns) {
+		return false
+	}
+
+	target := c.canonicalTargetRef(ctx, repo, branch, canonical)
+	return c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target)
+}
+
+// cleanupBranchRef returns the ref to hand to git for a classified branch.
+//
+// normalizeCleanupBranch shortens Name to the bare branch name so that local and
+// remote copies compare and print alike, which means a remote branch's Name no
+// longer resolves once its local namesake is deleted: git looks up a bare name
+// under refs/heads and refs/tags, never under refs/remotes/<remote>/. Ref keeps
+// the full path, so ancestry must be asked of Ref, not Name.
+func cleanupBranchRef(branch *Branch) string {
+	if branch == nil {
+		return ""
+	}
+	if branch.Ref != "" {
+		return branch.Ref
+	}
+	return branch.Name
+}
+
+// canonicalTargetRef resolves the declared canonical branch to the concrete ref
+// this candidate's ancestry must be measured against, or "" when no such ref
+// exists.
+//
+// The declaration is a bare name, and a bare name is not one ref. Handing it
+// straight to git gets both halves of the safety property wrong:
+//
+//   - For a remote candidate, a bare name resolves to refs/heads/<canonical>.
+//     A local trunk that is ahead of its own remote would then authorize
+//     deleting a remote branch holding commits the remote trunk does not have.
+//     A remote deletion must be justified by the remote trunk, so that is the
+//     only ref accepted here.
+//   - For a local candidate on a fresh clone there may be no local trunk at all
+//     — the clone checked out one branch. The bare name resolves to nothing,
+//     every probe fails closed, and the command reports "nothing to clean up"
+//     in precisely the repository it exists to clean. Falling back to the
+//     remote-tracking trunk is still lossless: the commits are on the remote.
+func (c *cleanupService) canonicalTargetRef(ctx context.Context, repo *repository.Repository, branch *Branch, canonical string) string {
+	if branch.IsRemote {
+		remote, _ := remoteAndBranch(branch)
+		if remote == "" {
+			return ""
+		}
+		return c.firstExistingRef(ctx, repo, "refs/remotes/"+remote+"/"+canonical)
+	}
+	return c.firstExistingRef(
+		ctx, repo,
+		"refs/heads/"+canonical,
+		"refs/remotes/"+repository.DefaultRemoteName+"/"+canonical,
+	)
+}
+
+// firstExistingRef returns the first candidate git can resolve, or "".
+func (c *cleanupService) firstExistingRef(ctx context.Context, repo *repository.Repository, candidates ...string) string {
+	for _, candidate := range candidates {
+		result, err := c.run(ctx, repo.Path, "rev-parse", "--verify", "--quiet", candidate)
+		if err == nil && result != nil && result.ExitCode == 0 {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// isAncestorOf reports whether ref is fully contained in target.
+//
+// It fails closed: a git error, a missing ref, or an unreadable repository all
+// yield false, because the caller uses this answer to authorize a deletion that
+// bypasses built-in protection.
+func (c *cleanupService) isAncestorOf(ctx context.Context, repo *repository.Repository, ref, target string) bool {
+	if ref == "" || target == "" {
+		return false
+	}
+	result, err := c.run(ctx, repo.Path, "merge-base", "--is-ancestor", ref, target)
+	if err != nil || result == nil {
+		return false
+	}
+	return result.ExitCode == 0
+}
+
 // isProtectedBranch checks if a branch is protected.
 func (c *cleanupService) isProtectedBranch(branch string, additionalPatterns []string) bool {
 	// Check built-in protected branches
@@ -478,7 +656,7 @@ func (c *cleanupService) isProtectedBranch(branch string, additionalPatterns []s
 
 // CountBranches returns the total number of branches in the report.
 func (r *CleanupReport) CountBranches() int {
-	return len(r.Merged) + len(r.Stale) + len(r.Orphaned) + len(r.Superseded)
+	return len(r.Merged) + len(r.Stale) + len(r.Orphaned) + len(r.Superseded) + len(r.NonCanonical)
 }
 
 // IsEmpty checks if the report has no branches to clean up.
@@ -488,10 +666,11 @@ func (r *CleanupReport) IsEmpty() bool {
 
 // GetAllBranches returns all branches eligible for cleanup.
 func (r *CleanupReport) GetAllBranches() []*Branch {
-	all := make([]*Branch, 0, len(r.Merged)+len(r.Stale)+len(r.Orphaned)+len(r.Superseded))
+	all := make([]*Branch, 0, len(r.Merged)+len(r.Stale)+len(r.Orphaned)+len(r.Superseded)+len(r.NonCanonical))
 	all = append(all, r.Merged...)
 	all = append(all, r.Stale...)
 	all = append(all, r.Orphaned...)
 	all = append(all, r.Superseded...)
+	all = append(all, r.NonCanonical...)
 	return all
 }

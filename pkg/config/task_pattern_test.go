@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
 func TestLoadRepoRootTaskPattern_HotfixLoads(t *testing.T) {
@@ -43,6 +45,44 @@ func TestMatchTaskPattern_DevTripleStar(t *testing.T) {
 	}
 	if MatchTaskPattern("dev/a/b/c", "*") {
 		t.Fatal("pattern * must not match everything")
+	}
+}
+
+// TestMatchTaskPattern_ParityWithRepository pins config.MatchTaskPattern and
+// config.MatchesAnyTaskPattern to behave identically to the pkg/repository
+// functions they now delegate to (see task_pattern.go's doc comment on why
+// ownership moved there). A future edit that reintroduces a forked copy in
+// this package instead of delegating would still pass every other test in
+// this file — those call config.MatchTaskPattern directly — so this test
+// exists to compare the two call sites side by side instead of trusting that
+// they stayed in sync.
+func TestMatchTaskPattern_ParityWithRepository(t *testing.T) {
+	cases := []struct {
+		name    string
+		pattern string
+	}{
+		{"dev/a/b/c", "dev/*/*/*"},
+		{"dev/a/b/c/d", "dev/*/*/*"},
+		{"hotfix/foo", "dev/*/*/*"},
+		{"dev/a/b/c", "*"},
+		{"hotfix/urgent", "hotfix/*"},
+		{"release/1.0.0", "release/*"},
+	}
+	for _, tc := range cases {
+		got := MatchTaskPattern(tc.name, tc.pattern)
+		want := repository.MatchTaskPattern(tc.name, tc.pattern)
+		if got != want {
+			t.Errorf("MatchTaskPattern(%q, %q) = %v, want parity with repository.MatchTaskPattern = %v", tc.name, tc.pattern, got, want)
+		}
+	}
+
+	patterns := []string{"hotfix/*", "dev/*/*/*"}
+	for _, name := range []string{"hotfix/urgent", "dev/a/b/c/d", "release/1.0.0"} {
+		got := MatchesAnyTaskPattern(name, patterns)
+		want := repository.MatchesAnyTaskPattern(name, patterns)
+		if got != want {
+			t.Errorf("MatchesAnyTaskPattern(%q, %v) = %v, want parity with repository.MatchesAnyTaskPattern = %v", name, patterns, got, want)
+		}
 	}
 }
 

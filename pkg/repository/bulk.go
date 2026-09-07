@@ -1159,7 +1159,7 @@ func (c *client) processRepository(ctx context.Context, rootDir, repoPath string
 func (c *client) applyBaseSync(ctx context.Context, repoPath string, opts BulkUpdateOptions, result *RepositoryUpdateResult, logger Logger) {
 	remote := result.Remote
 	if remote == "" {
-		remote = defaultRemoteName
+		remote = DefaultRemoteName
 	}
 
 	baseSync, err := c.SyncBase(ctx, repoPath, BaseSyncOptions{

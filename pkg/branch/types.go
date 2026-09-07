@@ -174,6 +174,23 @@ type AnalyzeOptions struct {
 	Exclude           []string      // Patterns to exclude
 	BaseBranch        string        // Base branch for merge detection (default: main/master)
 	BotsOnly          bool          // Restrict candidates to Dependabot/Renovate/github-actions prefixes
+
+	// IncludeNonCanonical enables retirement of branches that duplicate the
+	// declared canonical branch. It requires CanonicalBranch; without a
+	// declaration there is nothing to measure "non-canonical" against and the
+	// classification yields no candidates.
+	IncludeNonCanonical bool
+
+	// CanonicalBranch is the repository's declared integration branch, read from
+	// .gz-git.yaml. It is never guessed: detectBaseBranch's name heuristics
+	// answer "which branch looks like a trunk", not "which trunk did this
+	// repository declare", and only the latter can justify retiring the other.
+	CanonicalBranch string
+
+	// TaskPatterns is the declared task-branch allow-list (.gz-git.yaml
+	// taskPattern). Branches matching it belong to the reclaim path and are
+	// never retired here, even when they are ancestors of the canonical branch.
+	TaskPatterns []string
 }
 
 // ExecuteOptions configures branch cleanup execution.
@@ -183,6 +200,13 @@ type ExecuteOptions struct {
 	Remote  bool     // Also delete remote branches
 	Confirm bool     // Skip confirmation prompts
 	Exclude []string // Additional patterns to exclude
+
+	// CanonicalBranch re-arms the non-canonical gate inside Execute. Analyze
+	// already screened report.NonCanonical, but CleanupReport is a public type
+	// and callers may hand-assemble one, so Execute re-verifies ancestry against
+	// this branch before it will bypass built-in protection for any candidate.
+	// Empty means no candidate may bypass it.
+	CanonicalBranch string
 }
 
 // ExecuteResult reports what a cleanup run actually did.
@@ -216,6 +240,14 @@ type CleanupReport struct {
 	// Superseded holds unmerged remote bot branches whose version target is
 	// already satisfied on the base. Comparison is versions, not ancestry.
 	Superseded []*Branch
+
+	// NonCanonical holds branches that duplicate the declared canonical branch:
+	// they carry no commit the canonical branch lacks, and they are neither the
+	// canonical branch itself nor a declared task branch. This is the one bucket
+	// permitted to contain built-in protected names (master, develop), because
+	// the question it answers is which trunk this repository declared — not
+	// whether the name looks like a trunk.
+	NonCanonical []*Branch
 
 	Protected []*Branch // Protected (won't delete)
 	Total     int       // Total branches analyzed

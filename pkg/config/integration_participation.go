@@ -174,6 +174,17 @@ func resumeIntegrationParticipationTransition(ctx context.Context, repoPath stri
 	return action, nil
 }
 
+// ResolveDeclaredIntegrationBranch returns the repository's declared canonical
+// integration branch, resolved to a ref that actually exists.
+//
+// It returns ("", nil) when .gz-git.yaml declares none. That is a distinct
+// answer from an error and callers must keep it distinct: "this repository never
+// said which branch is canonical" is a reason to do nothing, not a reason to
+// fall back to a name heuristic.
+func ResolveDeclaredIntegrationBranch(ctx context.Context, repoPath string) (string, error) {
+	return resolveDeclaredIntegrationBranch(ctx, repoPath)
+}
+
 func resolveDeclaredIntegrationBranch(ctx context.Context, repoPath string) (string, error) {
 	decl, err := LoadRepoRootTaskPattern(repoPath)
 	if err != nil {

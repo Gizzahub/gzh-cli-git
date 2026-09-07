@@ -42,6 +42,19 @@ type BulkCleanupOptions struct {
 	// is already satisfied on the base. Only bot names are considered.
 	IncludeSuperseded bool
 
+	// IncludeNonCanonical retires branches that duplicate the repository's
+	// declared canonical branch. It does nothing without CanonicalResolver.
+	IncludeNonCanonical bool
+
+	// CanonicalResolver resolves one repository's declared canonical branch and
+	// task-branch allow-list from its .gz-git.yaml.
+	//
+	// It is injected rather than called directly because the declaration is
+	// owned by pkg/config, and pkg/config imports this package — the dependency
+	// cannot run the other way. A nil resolver disables the classification
+	// entirely, which is the safe default for every existing caller.
+	CanonicalResolver func(ctx context.Context, repoPath string) (canonical string, taskPatterns []string, err error)
+
 	// StaleThreshold is the threshold for stale branches (default: 30 days)
 	StaleThreshold time.Duration
 
@@ -94,6 +107,10 @@ type BulkCleanupResult struct {
 	// TotalBranchesDeleted is the total number of branches deleted across all repos
 	TotalBranchesDeleted int
 
+	// TotalBranchesFailed is the total number of branches the run tried to
+	// delete and could not.
+	TotalBranchesFailed int
+
 	// TotalBranchesAnalyzed is the total number of branches analyzed
 	TotalBranchesAnalyzed int
 }
@@ -133,6 +150,10 @@ type RepositoryCleanupResult struct {
 	// SupersededCount is the number of superseded bot remotes found/deleted
 	SupersededCount int
 
+	// NonCanonicalCount is the number of branches retired for duplicating the
+	// declared canonical branch
+	NonCanonicalCount int
+
 	// ProtectedCount is the number of protected branches skipped
 	ProtectedCount int
 
@@ -146,6 +167,20 @@ type RepositoryCleanupResult struct {
 	// used by machine-readable printers. DeletedBranches stays a flat name
 	// list for existing human output.
 	Branches []CleanupBranchEntry
+
+	// FailedBranches records candidates the run tried to delete and could not.
+	// A candidate count is not a deletion count: git refuses some deletes
+	// (a remote's default branch, most commonly), and reporting those as
+	// deleted would tell the operator the tree is clean when it is not.
+	FailedBranches []CleanupFailureEntry
+}
+
+// CleanupFailureEntry is one branch a cleanup run attempted and could not delete.
+type CleanupFailureEntry struct {
+	Name     string `json:"name"`
+	Reason   string `json:"reason"`
+	Location string `json:"location"`
+	Error    string `json:"error"`
 }
 
 // CleanupBranchEntry is one branch a cleanup run would delete (dry-run) or did.
@@ -220,12 +255,7 @@ func (c *client) BulkCleanup(ctx context.Context, opts BulkCleanupOptions) (*Bul
 
 	// Calculate summary and totals
 	summary := calculateCleanupSummary(results)
-	totalDeleted := 0
-	totalAnalyzed := 0
-	for _, r := range results {
-		totalDeleted += r.MergedCount + r.StaleCount + r.GoneCount + r.SupersededCount
-		totalAnalyzed += r.TotalAnalyzed
-	}
+	totalDeleted, totalFailed, totalAnalyzed := sumCleanupTotals(results)
 
 	return &BulkCleanupResult{
 		TotalScanned:          totalScanned,
@@ -234,8 +264,27 @@ func (c *client) BulkCleanup(ctx context.Context, opts BulkCleanupOptions) (*Bul
 		Duration:              time.Since(startTime),
 		Summary:               summary,
 		TotalBranchesDeleted:  totalDeleted,
+		TotalBranchesFailed:   totalFailed,
 		TotalBranchesAnalyzed: totalAnalyzed,
 	}, nil
+}
+
+// sumCleanupTotals adds up what a run actually did, across repositories.
+//
+// It reads r.Branches, not the per-reason counters. Those counters are
+// incremented while candidates are collected, so summing them reports every
+// candidate as deleted — including the ones git refused, which is precisely the
+// case an operator needs to see. r.Branches holds the deletions that succeeded
+// in execute mode, and the full candidate set in dry-run, where "would delete"
+// is the honest answer.
+func sumCleanupTotals(results []RepositoryCleanupResult) (deleted, failed, analyzed int) {
+	for _, r := range results {
+		deleted += len(r.Branches)
+		failed += len(r.FailedBranches)
+		analyzed += r.TotalAnalyzed
+	}
+
+	return deleted, failed, analyzed
 }
 
 // processCleanupRepositories processes repositories in parallel for cleanup.
@@ -300,7 +349,7 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		baseBranch = c.detectBaseBranch(ctx, repoPath)
 	}
 
-	remote := defaultRemoteName
+	remote := DefaultRemoteName
 	if info != nil && info.Remote != "" {
 		remote = info.Remote
 	}
@@ -330,11 +379,20 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		return result
 	}
 
-	deleted := c.executeCleanupDeletes(ctx, repoPath, remote, toDelete, logger, result.RelativePath)
+	deleted, failed := c.executeCleanupDeletes(ctx, repoPath, remote, toDelete, logger, result.RelativePath)
 	recordCleanupBranches(&result, deleted)
+	result.FailedBranches = failed
 
 	result.Status = StatusCleanedUp
 	result.Message = fmt.Sprintf("Deleted %d branch(es)", len(deleted))
+	if len(failed) > 0 {
+		result.Message = fmt.Sprintf("Deleted %d branch(es), %d failed", len(deleted), len(failed))
+		if len(deleted) == 0 {
+			// Nothing was removed. Calling that "cleaned up" is the report the
+			// operator would act on wrongly.
+			result.Status = StatusError
+		}
+	}
 	result.Duration = time.Since(startTime)
 
 	logger.Info("repository cleaned up",
@@ -342,7 +400,8 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		"merged", result.MergedCount,
 		"stale", result.StaleCount,
 		"gone", result.GoneCount,
-		"superseded", result.SupersededCount)
+		"superseded", result.SupersededCount,
+		"non-canonical", result.NonCanonicalCount)
 
 	return result
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/branch"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/cliutil"
+	"github.com/gizzahub/gzh-cli-gitforge/pkg/config"
 	"github.com/gizzahub/gzh-cli-gitforge/pkg/repository"
 )
 
@@ -32,6 +33,7 @@ var (
 	cleanupBranchProtect    string
 	cleanupBranchBaseBranch string
 	cleanupBranchBots       bool
+	cleanupBranchNonCanon   bool
 )
 
 // cleanupBranchCmd represents the cleanup branch command.
@@ -52,6 +54,9 @@ var cleanupBranchCmd = &cobra.Command{
 
   # Actually delete bot remotes (bulk, non-interactive)
   gz-git cleanup branch --bots --merged -r --force --yes .
+
+  # Preview branches that duplicate the declared canonical branch
+  gz-git cleanup branch --non-canonical -r
 
   # Preview stale branches (no activity for 30 days)
   gz-git cleanup branch --stale
@@ -76,6 +81,7 @@ func init() {
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchStale, "stale", false, "clean up stale branches (no recent activity)")
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchGone, "gone", false, "clean up gone branches (remote deleted)")
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchSuperseded, "superseded", false, "clean up unmerged bot remotes whose version target is already on base")
+	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchNonCanon, "non-canonical", false, "retire branches that duplicate the canonical branch declared in .gz-git.yaml (requires a declaration)")
 	cleanupBranchCmd.Flags().IntVar(&cleanupBranchStaleDays, "stale-days", 30, "days threshold for stale branches")
 	cleanupBranchCmd.Flags().BoolVarP(&cleanupBranchDryRun, "dry-run", "n", true, "preview changes without deleting (default: true)")
 	cleanupBranchCmd.Flags().BoolVar(&cleanupBranchForce, "force", false, "actually delete branches (disables dry-run)")
@@ -97,8 +103,8 @@ func runCleanupBranch(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	// Require at least one cleanup type
-	if !cleanupBranchMerged && !cleanupBranchStale && !cleanupBranchGone && !cleanupBranchSuperseded {
-		return fmt.Errorf("specify at least one cleanup type: --merged, --stale, --gone, or --superseded")
+	if !cleanupBranchMerged && !cleanupBranchStale && !cleanupBranchGone && !cleanupBranchSuperseded && !cleanupBranchNonCanon {
+		return fmt.Errorf("specify at least one cleanup type: --merged, --stale, --gone, --superseded, or --non-canonical")
 	}
 
 	if err := validateBulkFormat(cleanupBranchBulkFlags.Format); err != nil {
@@ -152,6 +158,20 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 		Exclude:           excludePatterns,
 		BaseBranch:        cleanupBranchBaseBranch,
 		BotsOnly:          cleanupBranchBots,
+	}
+
+	// The canonical declaration is resolved once, here, and only when the
+	// classification that needs it was asked for. Resolving it unconditionally
+	// would turn a missing or unresolvable .gz-git.yaml into an error for every
+	// other cleanup type, none of which depend on it.
+	if cleanupBranchNonCanon {
+		canonical, taskPatterns, err := resolveCanonicalDeclaration(ctx, repo.Path)
+		if err != nil {
+			return err
+		}
+		analyzeOpts.IncludeNonCanonical = true
+		analyzeOpts.CanonicalBranch = canonical
+		analyzeOpts.TaskPatterns = taskPatterns
 	}
 
 	machine := cliutil.IsMachineFormat(cleanupBranchBulkFlags.Format)
@@ -211,10 +231,11 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 	// Force is false, so it is intentionally omitted here (setting it was a
 	// no-op that read as "--force means the user confirmed").
 	executeOpts := branch.ExecuteOptions{
-		DryRun:  false,
-		Force:   true,
-		Remote:  cleanupBranchRemote,
-		Exclude: excludePatterns,
+		DryRun:          false,
+		Force:           true,
+		Remote:          cleanupBranchRemote,
+		Exclude:         excludePatterns,
+		CanonicalBranch: analyzeOpts.CanonicalBranch,
 	}
 
 	result, err := svc.Execute(ctx, repo, report, executeOpts)
@@ -248,14 +269,20 @@ func runBulkCleanupBranch(ctx context.Context, directory string, excludePatterns
 	client := repository.NewClient()
 
 	opts := repository.BulkCleanupOptions{
-		Directory:         directory,
-		Parallel:          cleanupBranchBulkFlags.Parallel,
-		MaxDepth:          cleanupBranchBulkFlags.Depth,
-		DryRun:            cleanupBranchDryRun,
-		IncludeMerged:     cleanupBranchMerged,
-		IncludeStale:      cleanupBranchStale,
-		IncludeGone:       cleanupBranchGone,
-		IncludeSuperseded: cleanupBranchSuperseded,
+		Directory:           directory,
+		Parallel:            cleanupBranchBulkFlags.Parallel,
+		MaxDepth:            cleanupBranchBulkFlags.Depth,
+		DryRun:              cleanupBranchDryRun,
+		IncludeMerged:       cleanupBranchMerged,
+		IncludeStale:        cleanupBranchStale,
+		IncludeGone:         cleanupBranchGone,
+		IncludeSuperseded:   cleanupBranchSuperseded,
+		IncludeNonCanonical: cleanupBranchNonCanon,
+		// Bulk mode resolves the declaration per repository, not once for the
+		// tree: each repository owns its own .gz-git.yaml, and a tree-wide
+		// canonical branch would be exactly the guess this classification exists
+		// to avoid. An undeclared repository yields no candidates and no error.
+		CanonicalResolver: bulkCanonicalResolver,
 		StaleThreshold:    time.Duration(cleanupBranchStaleDays) * 24 * time.Hour,
 		BaseBranch:        cleanupBranchBaseBranch,
 		DeleteRemote:      cleanupBranchRemote,
@@ -322,7 +349,7 @@ func confirmBulkCleanupBranch(ctx context.Context, client repository.Client, opt
 	repoCount := 0
 	for _, repo := range preview.Repositories {
 		if repo.Status == repository.StatusWouldCleanup && len(repo.DeletedBranches) > 0 {
-			branchCount += len(repo.DeletedBranches)
+			branchCount += len(confirmationLines(&repo))
 			repoCount++
 		}
 	}
@@ -344,12 +371,35 @@ func confirmBulkCleanupBranch(ctx context.Context, client repository.Client, opt
 		fmt.Printf("\nAbout to delete %d branch(es) across %d repositor(ies):\n", branchCount, repoCount)
 		for _, repo := range preview.Repositories {
 			if repo.Status == repository.StatusWouldCleanup && len(repo.DeletedBranches) > 0 {
-				fmt.Printf("  %s: %s\n", repo.RelativePath, strings.Join(repo.DeletedBranches, ", "))
+				fmt.Printf("  %s: %s\n", repo.RelativePath, strings.Join(confirmationLines(&repo), ", "))
 			}
 		}
 	}
 
 	return confirmDestructiveBulk(cleanupBranchYes)
+}
+
+// confirmationLines renders what a bulk run will actually delete, one entry per
+// ref.
+//
+// DeletedBranches is deduplicated by name on purpose — it is a flat summary —
+// but a confirmation prompt is the one place that must not deduplicate: a local
+// branch and its remote namesake are two deletions, and --non-canonical makes
+// that pair the ordinary case rather than the exception. Counting names there
+// would promise two deletions and perform four.
+func confirmationLines(repo *repository.RepositoryCleanupResult) []string {
+	if len(repo.Branches) == 0 {
+		return repo.DeletedBranches
+	}
+	out := make([]string, 0, len(repo.Branches))
+	for _, b := range repo.Branches {
+		if b.Location == "remote" {
+			out = append(out, b.Name+" (remote)")
+			continue
+		}
+		out = append(out, b.Name)
+	}
+	return out
 }
 
 // printBulkCleanupBranchResult displays bulk cleanup results.
@@ -375,6 +425,9 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 			if verbose {
 				fmt.Printf("✓ %s: %s\n", repo.RelativePath, repo.Message)
 			}
+			// Failures print regardless of --verbose: a branch the run could not
+			// delete is the one thing here the operator has to act on.
+			printCleanupFailures(&repo, quiet)
 		case repository.StatusWouldCleanup:
 			wouldCleanup++
 			if !quiet {
@@ -391,6 +444,7 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 			if !quiet {
 				fmt.Printf("✗ %s: %s\n", repo.RelativePath, repo.Message)
 			}
+			printCleanupFailures(&repo, quiet)
 		}
 	}
 
@@ -402,10 +456,23 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 		fmt.Printf("Would clean up: %d repo(s), Nothing to do: %d, Errors: %d\n", wouldCleanup, nothingToDo, errors)
 		fmt.Printf("\nDry-run mode: use --force to actually delete branches\n")
 	} else {
-		fmt.Printf("Cleaned up: %d repo(s), Deleted: %d branch(es), Errors: %d\n", cleanedUp, result.TotalBranchesDeleted, errors)
+		fmt.Printf(
+			"Cleaned up: %d repo(s), Deleted: %d branch(es), Failed: %d branch(es), Errors: %d\n",
+			cleanedUp, result.TotalBranchesDeleted, result.TotalBranchesFailed, errors,
+		)
 	}
 
 	fmt.Printf("Duration: %s\n", result.Duration.Round(time.Millisecond))
+}
+
+// printCleanupFailures lists the branches a repository could not delete.
+func printCleanupFailures(repo *repository.RepositoryCleanupResult, quiet bool) {
+	if quiet {
+		return
+	}
+	for _, f := range repo.FailedBranches {
+		fmt.Printf("  ✗ %s: %s (%s) — %s\n", repo.RelativePath, f.Name, f.Location, f.Error)
+	}
 }
 
 // printCleanupBranchReport displays the cleanup analysis report.
@@ -447,6 +514,20 @@ func printCleanupBranchReport(report *branch.CleanupReport, dryRun bool) {
 		}
 	}
 
+	if len(report.NonCanonical) > 0 {
+		fmt.Printf("\n🏷  Non-canonical branches (%d):\n", len(report.NonCanonical))
+		for _, b := range report.NonCanonical {
+			// Local and remote copies of the same branch both land here and print
+			// the same bare name, so the marker is what tells the reader which ref
+			// a line is about before they pass --force.
+			location := ""
+			if b.IsRemote {
+				location = " (remote)"
+			}
+			fmt.Printf("   • %s%s\n", b.Name, location)
+		}
+	}
+
 	if len(report.Superseded) > 0 {
 		fmt.Printf("\n📦 Superseded bot branches (%d):\n", len(report.Superseded))
 		for _, b := range report.Superseded {
@@ -464,4 +545,54 @@ func printCleanupBranchReport(report *branch.CleanupReport, dryRun bool) {
 
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Printf("Total: %d branch(es) to clean up (analyzed %d)\n", report.CountBranches(), report.Total)
+}
+
+// resolveCanonicalDeclaration reads the repository's own .gz-git.yaml for the
+// canonical branch and the task-branch allow-list.
+//
+// A repository that declares no canonical branch gets an error rather than a
+// fallback. Every other cleanup type can lean on a name heuristic when the
+// declaration is silent, because the worst case is that it skips a branch. This
+// one authorizes deleting a branch git protects by name, so the only acceptable
+// basis is an explicit declaration — guessing here would delete master because
+// master merely looks retired.
+func resolveCanonicalDeclaration(ctx context.Context, repoPath string) (canonical string, taskPatterns []string, err error) {
+	canonical, err = config.ResolveDeclaredIntegrationBranch(ctx, repoPath)
+	if err != nil {
+		return "", nil, fmt.Errorf("--non-canonical: %w", err)
+	}
+	if canonical == "" {
+		return "", nil, fmt.Errorf(
+			"--non-canonical requires branch.integrationBranch in %s/.gz-git.yaml; "+
+				"without it there is no declared canonical branch to retire the others against", repoPath,
+		)
+	}
+
+	decl, err := config.LoadRepoRootTaskPattern(repoPath)
+	if err != nil {
+		return "", nil, fmt.Errorf("--non-canonical: load task-branch declaration: %w", err)
+	}
+
+	return canonical, decl.Patterns, nil
+}
+
+// bulkCanonicalResolver adapts the per-repository declaration lookup to the
+// signature pkg/repository accepts.
+//
+// It reports "no declaration" as ("", nil, nil) rather than an error. In bulk
+// mode a repository that never declared a canonical branch is an ordinary
+// member of the tree, not a fault: it simply contributes no candidates, and the
+// scan continues. The single-repository path makes the opposite call, because
+// there the user named that one repository and a silent no-op would read as
+// "nothing to clean up".
+func bulkCanonicalResolver(ctx context.Context, repoPath string) (canonical string, taskPatterns []string, err error) {
+	canonical, err = config.ResolveDeclaredIntegrationBranch(ctx, repoPath)
+	if err != nil || canonical == "" {
+		return "", nil, nil //nolint:nilerr // an undeclared or unresolvable repo contributes nothing; it does not fail the tree
+	}
+	decl, err := config.LoadRepoRootTaskPattern(repoPath)
+	if err != nil {
+		return "", nil, nil //nolint:nilerr // same policy: skip this repository rather than fail the run
+	}
+	return canonical, decl.Patterns, nil
 }

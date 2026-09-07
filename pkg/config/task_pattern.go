@@ -81,33 +81,16 @@ func LoadRepoRootTaskPattern(repoRoot string) (TaskPatternDecl, error) {
 	return decl, nil
 }
 
-// MatchTaskPattern reports whether name is in the namespace declared by
-// pattern. The prefix is everything before the first '*'. That is how
-// devenv's `dev/*/*/*` matches `dev/a/b/c` (DECISION-004). A trailing-*
-// prefix compare on the whole pattern would treat the middle stars as
-// literal characters and miss every real task branch.
-//
-// Pattern "*" (empty prefix) never matches here; load rejects it.
+// MatchTaskPattern reports whether name falls inside a declared task-branch
+// namespace. It delegates to pkg/repository, the single source of truth (see
+// repository.MatchTaskPattern for why ownership sits there).
 func MatchTaskPattern(name, pattern string) bool {
-	if pattern == name {
-		return true
-	}
-	star := strings.IndexByte(pattern, '*')
-	if star <= 0 {
-		return false
-	}
-	prefix := pattern[:star]
-	return strings.HasPrefix(name, prefix)
+	return repository.MatchTaskPattern(name, pattern)
 }
 
 // MatchesAnyTaskPattern reports whether name matches any declared pattern.
 func MatchesAnyTaskPattern(name string, patterns []string) bool {
-	for _, pattern := range patterns {
-		if MatchTaskPattern(name, pattern) {
-			return true
-		}
-	}
-	return false
+	return repository.MatchesAnyTaskPattern(name, patterns)
 }
 
 func statRepoRootConfig(root *safefs.Root, rootPath string) (string, error) {

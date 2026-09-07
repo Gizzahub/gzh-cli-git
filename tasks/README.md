@@ -1,6 +1,6 @@
 # Tasks — gzh-cli-gitforge
 
-> Last Updated: 2026-09-02
+> Last Updated: 2026-09-07
 
 ## 구조
 
@@ -30,6 +30,7 @@ ______________________________________________________________________
 | 30  | d6-context-reference-contract-gaps                 | 완료. P1 4건(매니페스트 상태 매트릭스, `componentOutcome: unknown` 제거와 `faultDomain` 도입, envelope/exit 불일치 규칙, CE→gz-git exit 매핑)과 P2 4건을 D6 문서로 종결했다. P3-1·P3-2는 pilot 실측을 선점하지 않도록 의도적으로 이월 |
 | 31  | hosted-only-test-failures-shell-and-default-branch | 완료. 픽스처의 `printf` 이스케이프와 `git init --bare` 기본 브랜치 의존을 제거했다(`1b1298e`). hosted `Quality gate` 초록 확인                                                                                                        |
 | 32  | escaped-pipe-latency-assertion-measures-setup      | 완료. `TestExecuteReadinessWaitDelayBoundsEscapedPipe`의 `started`가 러너 spawn 앞에서 찍혀 setup 지연까지 재고 있었다. 약 20회 중 1회 실패하던 선재 flake이며 `started`를 `cancel()` 직전으로 옮겨 해소했다(60/60 통과)              |
+| 33  | integrate-subcommand-retirement                    | 열림. 소비자가 Worktrunk 엔진 + ce 전략의 2층으로 옮겨 `integrate` 의 소비자가 없어진다. deprecated 표시 후 다음 릴리스 제거, `pkg/integrate` 는 동결. `.gz-git.yaml` `branch` 절은 다른 서브커맨드가 쓰므로 남는다. 작업 항목은 devbox TASK-176 |
 
 메인테이너는 다음 stable 버전을 v0.8.0으로 결정했고 `VERSION`과 릴리스 노트를 준비했다.
 실제 태그 발행은 아직 하지 않는다. 빈 `homebrew-tap` 기본 브랜치, 최소 권한

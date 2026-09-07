@@ -26,6 +26,12 @@ type cleanupBranchRepoJSONOutput struct {
 	Status   string                          `json:"status"`
 	Error    string                          `json:"error,omitempty"`
 	Branches []repository.CleanupBranchEntry `json:"branches,omitempty"`
+	// FailedBranches carries the per-branch refusals and their remedy text. The
+	// repository-level Error above is a different thing — the gate sets Status
+	// and FailedBranches, never Error — so without this field a machine caller
+	// saw the candidate list shrink with no stated reason, in the one channel
+	// where there is no scrollback to fall back on.
+	FailedBranches []repository.CleanupFailureEntry `json:"failed_branches,omitempty"`
 }
 
 func writeCleanupBranchJSON(output cleanupBranchJSONOutput) {
@@ -46,10 +52,11 @@ func cleanupBranchJSONFromBulk(result *repository.BulkCleanupResult, dryRun bool
 	}
 	for _, repo := range result.Repositories {
 		entry := cleanupBranchRepoJSONOutput{
-			Path:     repo.RelativePath,
-			Branch:   repo.Branch,
-			Status:   repo.Status,
-			Branches: repo.Branches,
+			Path:           repo.RelativePath,
+			Branch:         repo.Branch,
+			Status:         repo.Status,
+			Branches:       repo.Branches,
+			FailedBranches: repo.FailedBranches,
 		}
 		if repo.Error != nil {
 			entry.Error = repo.Error.Error()

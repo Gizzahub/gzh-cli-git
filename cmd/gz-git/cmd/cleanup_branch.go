@@ -190,6 +190,13 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 		currentBranch = info.Branch
 	}
 
+	// A dry run has to ask everything the real run asks, short of writing.
+	screened, screenErr := screenDryRunCandidates(ctx, svc, repo, report, analyzeOpts, excludePatterns)
+	if screenErr != nil {
+		return screenErr
+	}
+	report = screened.report
+
 	if !machine && !quiet {
 		printCleanupBranchReport(report, cleanupBranchDryRun)
 	}
@@ -199,22 +206,15 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 	if report.IsEmpty() {
 		status = repository.StatusNothingToDo
 	}
+	// Same rule the bulk engine follows: a preview with nothing left to approve
+	// and a refusal behind it is not "nothing to do" — that reads as a clean
+	// repository, and this one has a branch the tool declined to touch.
+	if len(entries) == 0 && len(screened.refused) > 0 {
+		status = repository.StatusError
+	}
 
 	if cleanupBranchDryRun {
-		if machine {
-			writeCleanupBranchJSON(cleanupBranchJSONFromSingle(repo, currentBranch, entries, status, "", start))
-			return nil
-		}
-		if report.IsEmpty() {
-			if !quiet {
-				fmt.Println("\n✓ No branches to clean up")
-			}
-			return nil
-		}
-		if !quiet {
-			fmt.Println("\nDry-run mode: use --force to actually delete branches")
-		}
-		return nil
+		return reportDryRunCleanup(repo, currentBranch, entries, status, start, screened, machine)
 	}
 
 	if report.IsEmpty() {
@@ -253,10 +253,7 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 	}
 
 	if len(result.Failed) > 0 {
-		fmt.Fprintf(os.Stderr, "\n✗ Failed to delete %d branch(es):\n", len(result.Failed))
-		for _, f := range result.Failed {
-			fmt.Fprintf(os.Stderr, "  %-30s %v\n", f.Branch, f.Err)
-		}
+		printDeleteFailures(result.Failed)
 
 		return cliutil.NewExitError(cliutil.ExitPartialFailed,
 			fmt.Errorf("%d of %d branches failed to delete",
@@ -478,6 +475,185 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 	}
 
 	fmt.Printf("Duration: %s\n", result.Duration.Round(time.Millisecond))
+}
+
+// dryRunScreen is what a preview knows after asking every question the real run
+// asks: the candidates that survived, and the refusals that did not.
+type dryRunScreen struct {
+	report         *branch.CleanupReport
+	refused        []branch.DeleteFailure
+	refusedEntries []repository.CleanupFailureEntry
+}
+
+// screenDryRunCandidates puts the preview through the same screening the real
+// run uses. The canonical-tip gate lives inside Execute, and the dry-run path
+// used to return straight from Analyze without ever reaching it — so the
+// preview offered branches the run then refused, and the operator approved one
+// thing and received another. Execute with DryRun is that same screening with
+// the deletes turned off: one evaluation reused, not a second copy of the
+// decision that can drift away from it.
+//
+// Analyze already routes protected branches into report.Protected, so for a
+// report this command built, Skipped is empty and the only thing this adds is
+// the gate. That is the whole reason to come through here.
+//
+// Outside a dry run it does nothing: Execute is about to run for real and will
+// apply the same screening itself.
+func screenDryRunCandidates(
+	ctx context.Context,
+	svc branch.CleanupService,
+	repo *repository.Repository,
+	report *branch.CleanupReport,
+	analyzeOpts branch.AnalyzeOptions,
+	excludePatterns []string,
+) (dryRunScreen, error) {
+	if !cleanupBranchDryRun {
+		return dryRunScreen{report: report}, nil
+	}
+
+	screen, err := svc.Execute(ctx, repo, report, branch.ExecuteOptions{
+		DryRun:          true,
+		Force:           true,
+		Remote:          cleanupBranchRemote,
+		Exclude:         excludePatterns,
+		CanonicalBranch: analyzeOpts.CanonicalBranch,
+		CanonicalRemote: analyzeOpts.CanonicalRemote,
+	})
+	if err != nil {
+		return dryRunScreen{}, fmt.Errorf("failed to screen cleanup candidates: %w", err)
+	}
+
+	return dryRunScreen{
+		report:  reportWithoutBranches(report, screen.Failed),
+		refused: screen.Failed,
+		// The vocabulary a refusal is described in comes from the same builder
+		// that describes the deletable candidates, looked up before the branch
+		// is filtered out of the report. Spelling "non-canonical"/"remote" a
+		// second time here is how the two lists start disagreeing about what to
+		// call the same branch.
+		refusedEntries: failureEntriesFrom(screen.Failed, cleanupEntriesFromReport(report)),
+	}, nil
+}
+
+// reportDryRunCleanup emits the preview on whichever channel was asked for. The
+// refusals print exactly as the real run prints them: a preview whose only
+// difference from the run is that nothing was written is the preview worth
+// having, and a machine caller has no scrollback to fall back on, so the remedy
+// text travels in the document too.
+func reportDryRunCleanup(
+	repo *repository.Repository,
+	currentBranch string,
+	entries []repository.CleanupBranchEntry,
+	status string,
+	start time.Time,
+	screened dryRunScreen,
+	machine bool,
+) error {
+	if machine {
+		out := cleanupBranchJSONFromSingle(repo, currentBranch, entries, status, "", start)
+		out.Repositories[0].FailedBranches = screened.refusedEntries
+		writeCleanupBranchJSON(out)
+
+		return dryRunRefusalError(entries, screened.refused)
+	}
+
+	printDeleteFailures(screened.refused)
+
+	if len(entries) == 0 && len(screened.refused) == 0 {
+		if !quiet {
+			fmt.Println("\n✓ No branches to clean up")
+		}
+
+		return nil
+	}
+
+	if !quiet && len(entries) > 0 {
+		fmt.Println("\nDry-run mode: use --force to actually delete branches")
+	}
+
+	return dryRunRefusalError(entries, screened.refused)
+}
+
+// printDeleteFailures lists refusals on stderr. The dry run and the real run
+// call this same function, so a change to how a refusal reads cannot land in
+// one and miss the other.
+func printDeleteFailures(failed []branch.DeleteFailure) {
+	if len(failed) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\n✗ Failed to delete %d branch(es):\n", len(failed))
+	for _, f := range failed {
+		fmt.Fprintf(os.Stderr, "  %-30s %v\n", f.Branch, f.Err)
+	}
+}
+
+// failureEntriesFrom converts screening refusals into the machine-readable
+// shape. A scripted caller has no scrollback to squint at, so the remedy text
+// has to travel in the document rather than only on stderr.
+func failureEntriesFrom(
+	failed []branch.DeleteFailure, described []repository.CleanupBranchEntry,
+) []repository.CleanupFailureEntry {
+	if len(failed) == 0 {
+		return nil
+	}
+	byName := make(map[string]repository.CleanupBranchEntry, len(described))
+	for _, e := range described {
+		byName[e.Name] = e
+	}
+	out := make([]repository.CleanupFailureEntry, 0, len(failed))
+	for _, f := range failed {
+		entry := repository.CleanupFailureEntry{Name: f.Branch, Error: f.Err.Error()}
+		if d, ok := byName[f.Branch]; ok {
+			entry.Reason = d.Reason
+			entry.Location = d.Location
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// dryRunRefusalError decides what a blocked preview exits with, on the rule the
+// bulk engine already follows: a partial plan is still a plan the operator will
+// go on to execute, so it exits zero; a preview with nothing left to approve
+// and a refusal behind it is not a plan at all, and reporting success for it is
+// the report the operator would act on wrongly.
+func dryRunRefusalError(entries []repository.CleanupBranchEntry, refused []branch.DeleteFailure) error {
+	if len(refused) == 0 || len(entries) > 0 {
+		return nil
+	}
+	return cliutil.NewExitError(cliutil.ExitPartialFailed,
+		fmt.Errorf("%d branch(es) blocked, none deletable", len(refused)))
+}
+
+// reportWithoutBranches drops the named branches from every candidate bucket.
+// The gate only ever refuses non-canonical candidates today; filtering all of
+// them costs nothing and means a gate added to another bucket later cannot
+// leave a refused branch sitting in the preview.
+func reportWithoutBranches(report *branch.CleanupReport, failed []branch.DeleteFailure) *branch.CleanupReport {
+	if report == nil || len(failed) == 0 {
+		return report
+	}
+	drop := make(map[string]struct{}, len(failed))
+	for _, f := range failed {
+		drop[f.Branch] = struct{}{}
+	}
+	keep := func(in []*branch.Branch) []*branch.Branch {
+		out := make([]*branch.Branch, 0, len(in))
+		for _, b := range in {
+			if _, blocked := drop[b.Name]; blocked {
+				continue
+			}
+			out = append(out, b)
+		}
+		return out
+	}
+	filtered := *report
+	filtered.Merged = keep(report.Merged)
+	filtered.Stale = keep(report.Stale)
+	filtered.Orphaned = keep(report.Orphaned)
+	filtered.Superseded = keep(report.Superseded)
+	filtered.NonCanonical = keep(report.NonCanonical)
+	return &filtered
 }
 
 // printCleanupFailures lists the branches a repository could not delete.

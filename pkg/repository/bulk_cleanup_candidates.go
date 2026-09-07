@@ -152,6 +152,17 @@ func (c *client) appendNonCanonical(
 		return !MatchesAnyTaskPattern(name, taskPatterns)
 	}
 
+	// Refresh the canonical branch's remote-tracking ref before measuring
+	// anything against it. That ref is a cache from the last fetch, and every
+	// ancestry answer below is only as current as it is: a canonical branch
+	// force-pushed to a rewritten history since that fetch still looks, locally,
+	// like it contains the trunk about to be deleted. ls-remote cannot settle
+	// this on its own — it returns an id without the object, so it can say the
+	// tip moved but not whether it advanced or was rewound. Fetching is what
+	// tells those apart. Best-effort: an unreachable remote leaves the cache in
+	// place, and deleteCleanupRemoteBranch refuses rather than trusting it.
+	c.refreshCanonicalTracking(ctx, repoPath, remote, canonical, opts)
+
 	// The declaration is a bare name, which is not yet a ref. A local candidate
 	// may be measured against the local trunk, falling back to the remote one on
 	// a fresh clone that has no local copy; a remote candidate may only ever be
@@ -173,7 +184,7 @@ func (c *client) appendNonCanonical(
 		return toDelete
 	}
 
-	return c.appendNonCanonicalRemotes(ctx, repoPath, remote, remoteTarget, eligible, result, toDelete)
+	return c.appendNonCanonicalRemotes(ctx, repoPath, remote, canonical, remoteTarget, eligible, result, toDelete)
 }
 
 // appendNonCanonicalLocals collects local branches that are ancestors of target.
@@ -212,7 +223,7 @@ func (c *client) appendNonCanonicalLocals(
 // ancestors of target, which is always the remote copy of the canonical branch.
 func (c *client) appendNonCanonicalRemotes(
 	ctx context.Context,
-	repoPath, remote, target string,
+	repoPath, remote, canonical, target string,
 	eligible func(string) bool,
 	result *RepositoryCleanupResult,
 	toDelete []branchInfo,
@@ -233,6 +244,8 @@ func (c *client) appendNonCanonicalRemotes(
 		if !ok {
 			continue
 		}
+		info.canonical = canonical
+		info.canonicalSHA = c.fullRefSHA(ctx, repoPath, target)
 		toDelete = append(toDelete, info)
 		result.NonCanonicalCount++
 	}
@@ -392,7 +405,9 @@ func (c *client) executeCleanupDeletes(
 	return deleted, failed
 }
 
-func (c *client) remoteDeleteCandidate(ctx context.Context, repoPath, remote, name, reason string) (branchInfo, bool) {
+func (c *client) remoteDeleteCandidate(
+	ctx context.Context, repoPath, remote, name, reason string,
+) (branchInfo, bool) {
 	if remote == "" {
 		remote = DefaultRemoteName
 	}
@@ -412,6 +427,90 @@ func (c *client) fullRefSHA(ctx context.Context, repoPath, ref string) string {
 		return ""
 	}
 	return strings.TrimSpace(sha)
+}
+
+// refreshCanonicalTracking updates one remote-tracking ref: the declared
+// canonical branch, and only when remote deletions are actually on the table.
+//
+// It is deliberately narrow. A full fetch --prune would change what every other
+// classification sees, and bulk mode runs this across a whole tree; this path
+// needs exactly one ref to be current, so it asks for exactly that one.
+//
+// --dry-run is not exempt. A preview that lists a remote deletion the real run
+// would refuse is worse than a preview that touched the network: the operator
+// confirms one thing and gets another. Answering "what would you delete on the
+// remote" truthfully requires knowing where the remote actually is.
+func (c *client) refreshCanonicalTracking(
+	ctx context.Context, repoPath, remote, canonical string, opts BulkCleanupOptions,
+) {
+	if !opts.DeleteRemote || canonical == "" {
+		return
+	}
+	if remote == "" {
+		remote = DefaultRemoteName
+	}
+	refspec := "+refs/heads/" + canonical + ":refs/remotes/" + remote + "/" + canonical
+	_, _ = c.executor.RunWithEnv( //nolint:errcheck // best-effort; the delete path refuses on a stale or unreachable tip
+		ctx, repoPath, nonInteractiveEnv, "fetch", "--quiet", remote, refspec,
+	)
+}
+
+// requireCurrentCanonicalTip refuses a non-canonical remote deletion whose
+// authorizing evidence may already be void.
+//
+// The ancestry that authorized this delete was measured against a cached
+// remote-tracking ref. --force-with-lease does not cover that: the lease names
+// the branch being deleted, never the branch the ancestry was measured against.
+// So if the canonical branch moved on the remote since the ref was cached, the
+// deletion is authorized by something no longer true — and the commits it drops
+// exist nowhere else, since being an ancestor of the canonical branch was the
+// whole argument for their being safe to lose.
+func (c *client) requireCurrentCanonicalTip(ctx context.Context, repoPath, remote string, b branchInfo) error {
+	if b.canonical == "" || b.canonicalSHA == "" {
+		return fmt.Errorf(
+			"retire %s/%s: no record of the canonical tip this deletion was measured against",
+			remote, b.name,
+		)
+	}
+
+	live, err := c.executor.RunWithEnv(
+		ctx, repoPath, nonInteractiveEnv, "ls-remote", remote, "refs/heads/"+b.canonical,
+	)
+	if err != nil || live == nil || live.ExitCode != 0 {
+		return fmt.Errorf(
+			"retire %s/%s: could not reach %s to confirm %s still points where the ancestry was measured",
+			remote, b.name, remote, b.canonical,
+		)
+	}
+
+	liveSHA := firstField(live.Stdout)
+	if liveSHA == "" {
+		return fmt.Errorf(
+			"retire %s/%s: %s no longer exists on %s; the branch that authorized this deletion is gone",
+			remote, b.name, b.canonical, remote,
+		)
+	}
+	if liveSHA != b.canonicalSHA {
+		return fmt.Errorf(
+			"retire %s/%s: %s moved on %s since the ancestry was measured (measured %s, remote now %s);"+
+				" run `git fetch %s` and re-run",
+			remote, b.name, b.canonical, remote, shortSHA(b.canonicalSHA), shortSHA(liveSHA), remote,
+		)
+	}
+
+	return nil
+}
+
+// firstField returns the first whitespace-separated token of the first
+// non-empty line, which for ls-remote is the object id.
+func firstField(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			return fields[0]
+		}
+	}
+
+	return ""
 }
 
 // IsRemoteHeadRefusal recognizes the one remote-delete failure that is not a
@@ -469,6 +568,15 @@ func (c *client) deleteCleanupRemoteBranch(ctx context.Context, repoPath, remote
 	}
 	if b.sha == "" {
 		return fmt.Errorf("delete %s/%s: no remote-tracking SHA to lease against", remote, b.name)
+	}
+
+	if b.reason == nonCanonicalReason {
+		// The one classification allowed past the built-in protected-name list
+		// is also the one whose authorization lives on another branch. Confirm
+		// that branch has not moved before firing.
+		if err := c.requireCurrentCanonicalTip(ctx, repoPath, remote, b); err != nil {
+			return err
+		}
 	}
 
 	ref := "refs/heads/" + b.name
@@ -539,6 +647,14 @@ type branchInfo struct {
 	reason   string // "merged", "stale", "gone", "superseded", "non-canonical"
 	location string // "local", "remote"
 	sha      string // full classified tip; required to lease a remote delete
+
+	// canonical and canonicalSHA record what a non-canonical retirement was
+	// justified by: the declared branch, and the cached tip the ancestry was
+	// actually measured against. A remote delete re-checks that tip against the
+	// remote before it fires, because --force-with-lease covers only the branch
+	// being deleted and says nothing about the one that authorized it.
+	canonical    string
+	canonicalSHA string
 }
 
 func (b branchInfo) entry() CleanupBranchEntry {

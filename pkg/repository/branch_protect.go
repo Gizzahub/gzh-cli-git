@@ -62,6 +62,12 @@ var RetirableTrunkNames = []string{
 
 // IsRetirableTrunkName reports whether a declared canonical branch may overrule
 // built-in protection for this name.
+//
+// name must be the bare branch name, as normalizeCleanupBranch produces. A
+// remote-tracking spelling ("remotes/origin/master", "origin/master") matches
+// nothing here and is therefore not retirable — the safe answer, and one callers
+// may rely on: it is what stops a hand-assembled CleanupReport carrying a
+// qualified name from reaching a delete.
 func IsRetirableTrunkName(name string) bool {
 	for _, candidate := range RetirableTrunkNames {
 		if name == candidate {

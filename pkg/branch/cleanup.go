@@ -76,6 +76,15 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 		}
 	}
 
+	// A remote retirement is authorized entirely by the cached remote-tracking
+	// copy of the canonical branch, so that cache is refreshed before anything
+	// is measured against it. Refreshing is what distinguishes a canonical
+	// branch that merely advanced (the ancestry still holds) from one that was
+	// rewound (it does not) — ls-remote alone cannot tell those apart, because
+	// it returns an id without the object needed to test containment. Best
+	// effort: offline, the tip check in Execute refuses rather than guesses.
+	c.refreshCanonicalTracking(ctx, repo, opts)
+
 	// Get all branches
 	branches, err := c.branchManager.List(ctx, repo, ListOptions{
 		All: opts.IncludeRemote,
@@ -223,6 +232,19 @@ func (c *cleanupService) Execute(ctx context.Context, repo *repository.Repositor
 		if !c.authorizeRetire(ctx, repo, branch, opts) {
 			result.Skipped = append(result.Skipped, branch.Name)
 			continue
+		}
+		// The ancestry above was measured against a remote-tracking ref, which
+		// is a cache from the last fetch. For a remote deletion that cache is
+		// the whole of the evidence, and --force-with-lease does not check it:
+		// the lease covers the branch being deleted, never the branch the
+		// ancestry was measured against. A canonical branch rewound since the
+		// fetch makes the deletion authorized by something no longer true, and
+		// the commits it drops exist nowhere else.
+		if branch.IsRemote {
+			if err := c.requireCurrentCanonicalTip(ctx, repo, branch, opts); err != nil {
+				result.Failed = append(result.Failed, DeleteFailure{Branch: branch.Name, Err: err})
+				continue
+			}
 		}
 		toDelete = append(toDelete, branch)
 	}
@@ -576,6 +598,98 @@ func cleanupBranchRef(branch *Branch) string {
 		return branch.Ref
 	}
 	return branch.Name
+}
+
+// refreshCanonicalTracking updates the one remote-tracking ref the
+// non-canonical classification depends on. It is deliberately narrow: one ref
+// from one remote, not a whole fetch, and only when a remote retirement is
+// actually on the table.
+func (c *cleanupService) refreshCanonicalTracking(
+	ctx context.Context, repo *repository.Repository, opts AnalyzeOptions,
+) {
+	canonical := strings.TrimSpace(opts.CanonicalBranch)
+	if !opts.IncludeNonCanonical || !opts.IncludeRemote || canonical == "" {
+		return
+	}
+	governed := governedRemote(opts.CanonicalRemote)
+	refspec := "+refs/heads/" + canonical + ":refs/remotes/" + governed + "/" + canonical
+	// Errors are not propagated: a repository that cannot reach its remote must
+	// still be able to run the local half of cleanup. What must not happen is a
+	// remote deletion on stale evidence, and that is Execute's gate, not this.
+	_, _ = c.executor.RunWithEnv( //nolint:errcheck // best-effort refresh; Execute refuses on a stale or unreachable tip
+		ctx, repo.Path, repository.NonInteractiveEnv(), "fetch", "--quiet", governed, refspec,
+	)
+}
+
+// requireCurrentCanonicalTip confirms the remote's canonical branch still points
+// where the classification measured against.
+//
+// It fails closed on every uncertainty — an unreadable cache, an unreachable
+// remote, a canonical branch missing from the remote — because the alternative
+// is deleting the last ref holding a commit on the strength of a stale answer.
+// A tip that merely advanced is refused too: this compares identity, not
+// ancestry, and re-running after a fetch is the cheap, safe way to say yes.
+func (c *cleanupService) requireCurrentCanonicalTip(
+	ctx context.Context, repo *repository.Repository, branch *Branch, opts ExecuteOptions,
+) error {
+	canonical := strings.TrimSpace(opts.CanonicalBranch)
+	governed := governedRemote(opts.CanonicalRemote)
+
+	cached, err := c.run(ctx, repo.Path, "rev-parse", "--verify", "--quiet",
+		"refs/remotes/"+governed+"/"+canonical)
+	if err != nil || cached == nil || cached.ExitCode != 0 {
+		return fmt.Errorf(
+			"retire %s: no cached tip for %s/%s to confirm the ancestry against",
+			branch.Name, governed, canonical,
+		)
+	}
+	cachedSHA := strings.TrimSpace(cached.Stdout)
+
+	live, err := c.executor.RunWithEnv(ctx, repo.Path, repository.NonInteractiveEnv(),
+		"ls-remote", governed, "refs/heads/"+canonical)
+	if err != nil || live == nil || live.ExitCode != 0 {
+		return fmt.Errorf(
+			"retire %s: could not reach %s to confirm %s still points where the ancestry was measured",
+			branch.Name, governed, canonical,
+		)
+	}
+	liveSHA := firstField(live.Stdout)
+	if liveSHA == "" {
+		return fmt.Errorf(
+			"retire %s: %s/%s no longer exists on the remote;"+
+				" the branch that authorized this deletion is gone",
+			branch.Name, governed, canonical,
+		)
+	}
+
+	if liveSHA != cachedSHA {
+		return fmt.Errorf(
+			"retire %s: %s/%s moved on the remote since the last fetch (cached %s, remote %s);"+
+				" the ancestry that authorized this deletion was measured against the cached tip"+
+				" — run `git fetch %s` and re-run",
+			branch.Name, governed, canonical, shortSHA(cachedSHA), shortSHA(liveSHA), governed,
+		)
+	}
+	return nil
+}
+
+// firstField returns the first whitespace-delimited field of the first non-empty
+// line, which for ls-remote output is the object id.
+func firstField(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			return fields[0]
+		}
+	}
+	return ""
+}
+
+// shortSHA abbreviates an object id for an operator-facing message.
+func shortSHA(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
 }
 
 // canonicalTargetRef resolves the declared canonical branch to the concrete ref

@@ -266,6 +266,64 @@ type CleanupReport struct {
 
 	Protected []*Branch // Protected (won't delete)
 	Total     int       // Total branches analyzed
+
+	// Refused holds trunk-named branches that reached the non-canonical
+	// ancestry gate and were turned away by it.
+	//
+	// It exists because "not a candidate" and "checked, and it still holds
+	// commits" are different facts and the operator acts on them differently.
+	// Without it the second one is reported as the first: RetirableTrunkNames
+	// is a subset of ProtectedBranches, so a refused master falls through to
+	// Protected and is labeled by the very name protection the operator
+	// passed --non-canonical to overrule. True, and useless.
+	//
+	// A refusal is a diagnostic, not a candidate. It is not counted by
+	// CountBranches and nothing here is ever deleted.
+	Refused []RetireRefusal
+
+	// Bases records, for each non-canonical candidate, the fact that authorized
+	// it: which ref its ancestry was measured against and where that ref pointed.
+	//
+	// It is a sidecar rather than a field on Branch because Branch is the
+	// vocabulary every classification shares, and this fact belongs to exactly
+	// one of them. Keyed by the candidate's Ref, which is the spelling that
+	// survives normalizeCleanupBranch collapsing local and remote copies onto
+	// the same Name.
+	Bases []RetireBasis
+}
+
+// RetireBasis is the evidence behind one non-canonical candidate.
+//
+// The operator deciding whether to pass --force sees a branch name and nothing
+// else, and since the local→remote fallback landed, the name no longer implies
+// the target: a local master may have been measured against refs/heads/develop
+// or against refs/remotes/origin/develop — another machine's branch, as of the
+// last fetch — and those two carry materially different risk. This is what makes
+// "an informed --force" possible, which is the premise --non-canonical rests on.
+type RetireBasis struct {
+	// Ref is the candidate's own ref, matching Branch.Ref.
+	Ref string
+	// TargetRef is the ref the ancestry was measured against, spelled in full
+	// so that refs/heads/develop and refs/remotes/origin/develop are visibly
+	// different things.
+	TargetRef string
+	// TargetSHA is where TargetRef pointed when the measurement was taken. On a
+	// remote-tracking target it is a cache from the last fetch, which is the
+	// whole reason to show it.
+	TargetSHA string
+}
+
+// RetireRefusal is one trunk-named branch the non-canonical gate examined and
+// declined, with the reason in the operator's terms.
+type RetireRefusal struct {
+	// Branch is the bare branch name, as the candidate listings spell it.
+	Branch string
+	// IsRemote distinguishes the remote-tracking copy from the local one; both
+	// print the same bare name, and they are refused independently.
+	IsRemote bool
+	// Reason is a whole sentence, not a code: it is the entire remedy the
+	// operator gets, and a code would send them back to the source to read it.
+	Reason string
 }
 
 // CleanupStrategy defines cleanup approach.

@@ -100,6 +100,8 @@ func (c *cleanupService) Analyze(ctx context.Context, repo *repository.Repositor
 		Superseded:   make([]*Branch, 0),
 		NonCanonical: make([]*Branch, 0),
 		Protected:    make([]*Branch, 0),
+		Refused:      make([]RetireRefusal, 0),
+		Bases:        make([]RetireBasis, 0),
 		Total:        len(branches),
 	}
 
@@ -146,9 +148,34 @@ func (c *cleanupService) classifyCleanupBranch(
 	if branch.IsRemote {
 		c.captureRemoteBranchSHA(ctx, repo, branch)
 	}
-	if opts.IncludeNonCanonical && c.isNonCanonical(ctx, repo, branch, opts) {
-		report.NonCanonical = append(report.NonCanonical, branch)
-		return
+	if opts.IncludeNonCanonical {
+		retirable, target, refusal := c.classifyNonCanonical(ctx, repo, branch, opts)
+		if retirable {
+			report.NonCanonical = append(report.NonCanonical, branch)
+			// The evidence travels with the candidate. Resolving the tip here,
+			// beside the ancestry check that used it, is what keeps the label
+			// describing the measurement that was actually taken rather than a
+			// second one taken later at print time.
+			report.Bases = append(report.Bases, RetireBasis{
+				Ref:       cleanupBranchRef(branch),
+				TargetRef: target,
+				TargetSHA: c.refSHA(ctx, repo, target),
+			})
+			return
+		}
+		if refusal != "" {
+			// Deliberately not also filed under Protected. It is protected, and
+			// it will not be deleted — but that label is the one this run was
+			// asked to look past, and printing both would answer the operator's
+			// question with the reason they already rejected. One line, with the
+			// reason git actually gave.
+			report.Refused = append(report.Refused, RetireRefusal{
+				Branch:   branch.Name,
+				IsRemote: branch.IsRemote,
+				Reason:   refusal,
+			})
+			return
+		}
 	}
 	if c.isProtectedBranch(branch.Name, opts.Exclude) {
 		report.Protected = append(report.Protected, branch)

@@ -41,8 +41,17 @@ func (c *cleanupService) authorizeRetire(ctx context.Context, repo *repository.R
 	return c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target)
 }
 
-// isNonCanonical reports whether branch duplicates the declared canonical branch
-// and may therefore be retired.
+// isNonCanonical reports whether branch duplicates the declared canonical
+// branch and may therefore be retired. It is classifyNonCanonical without the
+// reason, for callers that only need the verdict.
+func (c *cleanupService) isNonCanonical(ctx context.Context, repo *repository.Repository, branch *Branch, opts AnalyzeOptions) bool {
+	retirable, _, _ := c.classifyNonCanonical(ctx, repo, branch, opts)
+	return retirable
+}
+
+// classifyNonCanonical decides whether branch duplicates the declared canonical
+// branch, and — when it got as far as asking git and the answer was no — says
+// why in the operator's terms.
 //
 // The four conditions are an allow-list, not a deny-list, and that ordering is
 // the safety property: a deny-list ("delete what is not canonical") would sweep
@@ -58,38 +67,100 @@ func (c *cleanupService) authorizeRetire(ctx context.Context, repo *repository.R
 //  4. The branch carries no commit the canonical branch lacks. This is the gate
 //     that makes deletion lossless by construction, and it is asked of git, not
 //     inferred from names or dates.
-func (c *cleanupService) isNonCanonical(ctx context.Context, repo *repository.Repository, branch *Branch, opts AnalyzeOptions) bool {
+//
+// Only condition 4 produces a reason, and that asymmetry is the point. The
+// first three are answered from the branch's own name and the operator's own
+// flags: a feature branch is not a thwarted retirement, and narrating every one
+// of them would bury the case that matters. Condition 4 is the opposite — the
+// branch is named like a trunk, the operator asked for exactly this, git was
+// consulted, and the answer was no. That is a fact the operator has to act on,
+// and the alternative to reporting it is what this function was changed to fix:
+// the branch falls through to Protected and is explained by the name protection
+// that --non-canonical exists to overrule.
+func (c *cleanupService) classifyNonCanonical(
+	ctx context.Context, repo *repository.Repository, branch *Branch, opts AnalyzeOptions,
+) (retirable bool, target, refusal string) {
 	canonical := strings.TrimSpace(opts.CanonicalBranch)
-	if canonical == "" {
-		return false
+	if canonical == "" || branch == nil {
+		return false, "", ""
 	}
 
 	if branch.Name == canonical {
-		return false
+		return false, "", ""
 	}
 
 	// The bypass is only ever granted to a trunk name. Everything else that is
 	// an ancestor of the canonical branch is what --merged is for, and the
 	// operator has to ask for it there.
 	if !repository.IsRetirableTrunkName(branch.Name) {
-		return false
+		return false, "", ""
 	}
 
 	// A user-supplied --protect pattern is honored even here. Built-in name
 	// protection is what this classification is allowed to override; an explicit
-	// instruction from the operator is not.
+	// instruction from the operator is not. It needs no reason either: the
+	// operator wrote the pattern, and Protected already lists the branch.
 	for _, pattern := range opts.Exclude {
 		if matchPattern(branch.Name, pattern) {
-			return false
+			return false, "", ""
 		}
 	}
 
 	if repository.MatchesAnyTaskPattern(branch.Name, opts.TaskPatterns) {
-		return false
+		return false, "", ""
 	}
 
-	target := c.canonicalTargetRef(ctx, repo, branch, canonical, opts.CanonicalRemote)
-	return c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target)
+	governed := governedRemote(opts.CanonicalRemote)
+	if branch.IsRemote {
+		// A candidate on any other remote is not this declaration's business,
+		// so it is passed over rather than refused. Reporting it would tell the
+		// operator their upstream/master was "declined", which invites them to
+		// go and force it.
+		if remote, _ := remoteAndBranch(branch); remote == "" || remote != governed {
+			return false, "", ""
+		}
+	}
+
+	target = c.canonicalTargetRef(ctx, repo, branch, canonical, governed)
+	if target == "" {
+		return false, "", fmt.Sprintf(
+			"no ref for %s to measure against (looked in %s); run `git fetch %s %s` and re-run",
+			canonical, strings.Join(canonicalTargetProbes(branch, canonical, governed), ", "),
+			governed, canonical,
+		)
+	}
+
+	if !c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target) {
+		return false, target, fmt.Sprintf(
+			"holds commits %s does not, measured against %s;"+
+				" retiring it would drop them — merge it or delete it deliberately",
+			canonical, target,
+		)
+	}
+
+	return true, target, ""
+}
+
+// refSHA resolves ref to its object id, or "" when it cannot be read. A missing
+// id degrades the label rather than the decision: the target ref name is the
+// half that says what was compared, and the id is the half that says when.
+func (c *cleanupService) refSHA(ctx context.Context, repo *repository.Repository, ref string) string {
+	result, err := c.run(ctx, repo.Path, "rev-parse", "--verify", "--quiet", ref)
+	if err != nil || result == nil || result.ExitCode != 0 {
+		return ""
+	}
+	return strings.TrimSpace(result.Stdout)
+}
+
+// canonicalTargetProbes names the refs canonicalTargetRef would have tried, so
+// a refusal can say where it looked rather than only that it failed. It mirrors
+// that function's cases; the two are read together.
+func canonicalTargetProbes(branch *Branch, canonical, governed string) []string {
+	remoteRef := "refs/remotes/" + governed + "/" + canonical
+	if branch != nil && branch.IsRemote {
+		return []string{remoteRef}
+	}
+	return []string{"refs/heads/" + canonical, remoteRef}
 }
 
 // cleanupBranchRef returns the ref to hand to git for a classified branch.

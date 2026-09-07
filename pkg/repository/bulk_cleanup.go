@@ -173,6 +173,25 @@ type RepositoryCleanupResult struct {
 	// (a remote's default branch, most commonly), and reporting those as
 	// deleted would tell the operator the tree is clean when it is not.
 	FailedBranches []CleanupFailureEntry
+
+	// RetireRefusals records trunk-named branches the non-canonical gate
+	// examined and declined. They were never candidates, so they are kept apart
+	// from FailedBranches: folding them in would inflate TotalBranchesFailed and
+	// turn a repository that is behaving correctly into a failing one.
+	RetireRefusals []RetireRefusalEntry
+}
+
+// RetireRefusalEntry is one trunk-named branch the non-canonical gate declined,
+// with the reason in the operator's terms.
+//
+// It exists so that "there was nothing to clean up here" and "there was
+// something, it was checked, and it is not safe to retire" stop arriving as the
+// same silence. The operator's next move differs between the two, and a tool
+// that refuses without saying why sends them to `git branch -D` instead.
+type RetireRefusalEntry struct {
+	Name     string `json:"name"`
+	Location string `json:"location"`
+	Reason   string `json:"reason"`
 }
 
 // CleanupFailureEntry is one branch a cleanup run attempted and could not delete.
@@ -189,6 +208,12 @@ type CleanupBranchEntry struct {
 	Reason   string `json:"reason"`
 	Location string `json:"location"`
 	Kind     string `json:"kind,omitempty"`
+	// TargetRef and TargetSHA are set on non-canonical candidates: the ref the
+	// ancestry was measured against, spelled in full, and where it pointed. They
+	// are the justification for the deletion, and until they were carried here
+	// the operator passing --force had the branch name and nothing else.
+	TargetRef string `json:"target_ref,omitempty"`
+	TargetSHA string `json:"target_sha,omitempty"`
 }
 
 // GetStatus returns the status for summary calculation.
@@ -374,7 +399,17 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 
 	if len(toDelete) == 0 && len(gateFailed) == 0 {
 		result.Status = StatusNothingToDo
+		// The status stays NothingToDo — there is genuinely nothing to delete,
+		// and callers key off it. The message is what has to stop lying: a
+		// repository whose duplicate trunk was examined and declined is not the
+		// same as one that was already clean, and reporting both as "No branches
+		// to clean up" is what sends the operator to `git branch -D`.
 		result.Message = "No branches to clean up"
+		if n := len(result.RetireRefusals); n > 0 {
+			result.Message = fmt.Sprintf(
+				"No branches to clean up (%d trunk(s) examined and declined)", n,
+			)
+		}
 		result.Duration = time.Since(startTime)
 		return result
 	}

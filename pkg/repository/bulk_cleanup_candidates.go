@@ -454,14 +454,25 @@ type branchInfo struct {
 	// being deleted and says nothing about the one that authorized it.
 	canonical    string
 	canonicalSHA string
+
+	// targetRef and targetSHA are the same measurement stated for the operator
+	// rather than for the delete gate. canonical above is deliberately empty
+	// when the ancestry was measured against a ref this clone owns — that
+	// emptiness is how the gate knows the network check can be skipped — so it
+	// cannot double as the label. Reusing it would make the display say
+	// "measured against nothing" in precisely the safe case.
+	targetRef string
+	targetSHA string
 }
 
 func (b branchInfo) entry() CleanupBranchEntry {
 	return CleanupBranchEntry{
-		Name:     b.name,
-		Reason:   b.reason,
-		Location: b.location,
-		Kind:     BotKind(b.name),
+		Name:      b.name,
+		Reason:    b.reason,
+		Location:  b.location,
+		Kind:      BotKind(b.name),
+		TargetRef: b.targetRef,
+		TargetSHA: b.targetSHA,
 	}
 }
 

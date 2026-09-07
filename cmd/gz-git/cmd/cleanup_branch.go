@@ -197,8 +197,11 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 	}
 	report = screened.report
 
-	if !machine && !quiet {
-		printCleanupBranchReport(report, cleanupBranchDryRun)
+	if !machine {
+		if !quiet {
+			printCleanupBranchReport(report, cleanupBranchDryRun)
+		}
+		printReportRefusals(report)
 	}
 
 	entries := cleanupEntriesFromReport(report)
@@ -223,7 +226,14 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 			return nil
 		}
 		if !quiet {
-			fmt.Println("\n✓ No branches to clean up")
+			// The refusals have already gone to stderr above. This line is the
+			// stdout report, and it stops short of calling the repository clean
+			// when a trunk here was examined and declined.
+			if n := len(report.Refused); n > 0 {
+				fmt.Printf("\n✓ No branches to clean up (%d trunk(s) examined and declined)\n", n)
+			} else {
+				fmt.Println("\n✓ No branches to clean up")
+			}
 		}
 		return nil
 	}
@@ -419,6 +429,12 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 	errors := 0
 
 	for _, repo := range result.Repositories {
+		// Ahead of the status switch, and outside it: a declined trunk is worth
+		// the same line whether the repository had other work to do or none at
+		// all. NothingToDo is the case that needed it most — it prints nothing,
+		// which is how "examined and declined" arrived looking like "clean".
+		printRetireRefusals(&repo)
+
 		switch repo.Status {
 		case repository.StatusCleanedUp:
 			cleanedUp++
@@ -431,10 +447,7 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 		case repository.StatusWouldCleanup:
 			wouldCleanup++
 			if !quiet {
-				branchList := ""
-				if len(repo.DeletedBranches) > 0 {
-					branchList = fmt.Sprintf(" [%s]", strings.Join(repo.DeletedBranches, ", "))
-				}
+				branchList := cleanupBranchListLabel(&repo)
 				fmt.Printf("→ %s: %s%s\n", repo.RelativePath, repo.Message, branchList)
 			}
 			// Same rule as the execute path above: a refusal is what the operator
@@ -483,6 +496,11 @@ type dryRunScreen struct {
 	report         *branch.CleanupReport
 	refused        []branch.DeleteFailure
 	refusedEntries []repository.CleanupFailureEntry
+	// retireRefusals travels alongside, carried from the report rather than
+	// produced by the screen: these branches never reached a delete, so the
+	// gate has nothing to say about them. It rides here so the dry-run
+	// reporters need only one argument to answer both halves.
+	retireRefusals []repository.RetireRefusalEntry
 }
 
 // screenDryRunCandidates puts the preview through the same screening the real
@@ -508,7 +526,7 @@ func screenDryRunCandidates(
 	excludePatterns []string,
 ) (dryRunScreen, error) {
 	if !cleanupBranchDryRun {
-		return dryRunScreen{report: report}, nil
+		return dryRunScreen{report: report, retireRefusals: retireRefusalEntriesFromReport(report)}, nil
 	}
 
 	screen, err := svc.Execute(ctx, repo, report, branch.ExecuteOptions{
@@ -532,6 +550,7 @@ func screenDryRunCandidates(
 		// second time here is how the two lists start disagreeing about what to
 		// call the same branch.
 		refusedEntries: failureEntriesFrom(screen.Failed, cleanupEntriesFromReport(report)),
+		retireRefusals: retireRefusalEntriesFromReport(report),
 	}, nil
 }
 
@@ -552,6 +571,7 @@ func reportDryRunCleanup(
 	if machine {
 		out := cleanupBranchJSONFromSingle(repo, currentBranch, entries, status, "", start)
 		out.Repositories[0].FailedBranches = screened.refusedEntries
+		out.Repositories[0].RetireRefusals = screened.retireRefusals
 		writeCleanupBranchJSON(out)
 
 		return dryRunRefusalError(entries, screened.refused)
@@ -561,7 +581,13 @@ func reportDryRunCleanup(
 
 	if len(entries) == 0 && len(screened.refused) == 0 {
 		if !quiet {
-			fmt.Println("\n✓ No branches to clean up")
+			// printReportRefusals has already named these on stderr; what this
+			// line must not do is call the repository clean anyway.
+			if n := len(screened.retireRefusals); n > 0 {
+				fmt.Printf("\n✓ No branches to clean up (%d trunk(s) examined and declined)\n", n)
+			} else {
+				fmt.Println("\n✓ No branches to clean up")
+			}
 		}
 
 		return nil
@@ -673,6 +699,139 @@ func printCleanupFailures(repo *repository.RepositoryCleanupResult) {
 	}
 }
 
+// printRetireRefusals reports trunks the non-canonical gate examined and turned
+// down.
+//
+// stderr, and not gated on --quiet, for the reason TASK-181 settled: --quiet
+// silences progress on stdout, not diagnostics on stderr, and a refusal is a
+// diagnostic. The operator who wants it gone has 2>/dev/null, which is
+// per-stream rather than all-or-nothing. The counts stay on stdout — those are
+// report.
+//
+// The marker is ⊘ rather than ✗: nothing failed here. The gate did its job and
+// the answer was no.
+// cleanupBranchListLabel renders the preview's branch list, carrying the same
+// basis label the single-repo report puts on its candidate lines.
+//
+// It reads repo.Branches rather than repo.DeletedBranches because only the
+// former knows what each candidate was measured against; DeletedBranches is a
+// deduplicated list of names and has nowhere to put it. The dedup is kept —
+// local and remote copies share a name — but keyed on name and location, since
+// those are two different refs whose bases can differ, and collapsing them was
+// how a remote retirement came to be described by a local measurement.
+//
+// It falls back to DeletedBranches when Branches is empty, which is the shape a
+// caller assembling a result by hand produces.
+func cleanupBranchListLabel(repo *repository.RepositoryCleanupResult) string {
+	if len(repo.Branches) == 0 {
+		if len(repo.DeletedBranches) == 0 {
+			return ""
+		}
+		return fmt.Sprintf(" [%s]", strings.Join(repo.DeletedBranches, ", "))
+	}
+
+	seen := make(map[string]bool, len(repo.Branches))
+	labels := make([]string, 0, len(repo.Branches))
+	for _, e := range repo.Branches {
+		key := e.Name + "\x00" + e.Location
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		labels = append(labels, e.Name+entryBasisLabel(e))
+	}
+
+	return fmt.Sprintf(" [%s]", strings.Join(labels, ", "))
+}
+
+// entryBasisLabel is the bulk engine's spelling of retireBasisLabel. The two
+// produce the same text from the same facts; keeping them phrased identically
+// is what criterion 2 of the card asks for, and a diverging phrase here would
+// mean the preview an operator reads depends on which command they reached it
+// through.
+func entryBasisLabel(e repository.CleanupBranchEntry) string {
+	if e.TargetRef == "" {
+		return ""
+	}
+	if e.TargetSHA == "" {
+		return fmt.Sprintf(" → contained in %s", e.TargetRef)
+	}
+	return fmt.Sprintf(" → contained in %s @ %s", e.TargetRef, shortObjectID(e.TargetSHA))
+}
+
+// retireBasisLabel renders the fact that authorized retiring one candidate:
+// the ref its ancestry was measured against, and where that ref pointed.
+//
+// This is report, not diagnostic, so it stays on stdout with the candidate line
+// and is silenced by --quiet along with it — the opposite side of the split
+// that sends refusals to stderr. The two are different questions and only look
+// like one because they concern the same branch: a refusal changes what the
+// operator does next, while this changes whether they can justify what they
+// were already going to do.
+//
+// The target ref is spelled in full on purpose. Since the local→remote fallback
+// landed, `master` may have been measured against refs/heads/develop or against
+// refs/remotes/origin/develop, and abbreviating them both to "develop" would
+// hide exactly the distinction the label exists to show. The short id says when
+// that ref was last seen, which is the question a cached target raises.
+//
+// An unresolvable basis renders as nothing rather than as a placeholder. A line
+// with no label reads as "no extra information"; a line reading "→ unknown"
+// reads as a defect in the branch.
+func retireBasisLabel(report *branch.CleanupReport, b *branch.Branch) string {
+	if report == nil || b == nil {
+		return ""
+	}
+	ref := b.Ref
+	if ref == "" {
+		ref = b.Name
+	}
+	for _, basis := range report.Bases {
+		if basis.Ref != ref || basis.TargetRef == "" {
+			continue
+		}
+		if basis.TargetSHA == "" {
+			return fmt.Sprintf(" → contained in %s", basis.TargetRef)
+		}
+		return fmt.Sprintf(" → contained in %s @ %s", basis.TargetRef, shortObjectID(basis.TargetSHA))
+	}
+	return ""
+}
+
+// shortObjectID abbreviates an object id for an operator-facing line.
+func shortObjectID(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
+}
+
+// printReportRefusals is the single-repo half of printRetireRefusals, and is
+// kept out of printCleanupBranchReport on purpose: that function is the stdout
+// report and its caller gates it on --quiet. A refusal is a diagnostic, so it
+// must survive --quiet, which means it cannot live inside the thing --quiet
+// silences. Machine mode is the one exemption — there the JSON document carries
+// it, and a second copy on stderr would be noise beside a parsed stream.
+func printReportRefusals(report *branch.CleanupReport) {
+	if report == nil || len(report.Refused) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\n⊘ Trunks examined and declined (%d):\n", len(report.Refused))
+	for _, r := range report.Refused {
+		location := ""
+		if r.IsRemote {
+			location = " (remote)"
+		}
+		fmt.Fprintf(os.Stderr, "   ⊘ %s%s — %s\n", r.Branch, location, r.Reason)
+	}
+}
+
+func printRetireRefusals(repo *repository.RepositoryCleanupResult) {
+	for _, r := range repo.RetireRefusals {
+		fmt.Fprintf(os.Stderr, "  ⊘ %s: %s (%s) — %s\n", repo.RelativePath, r.Name, r.Location, r.Reason)
+	}
+}
+
 // printCleanupBranchReport displays the cleanup analysis report.
 func printCleanupBranchReport(report *branch.CleanupReport, dryRun bool) {
 	modeStr := "[DRY-RUN]"
@@ -722,7 +881,7 @@ func printCleanupBranchReport(report *branch.CleanupReport, dryRun bool) {
 			if b.IsRemote {
 				location = " (remote)"
 			}
-			fmt.Printf("   • %s%s\n", b.Name, location)
+			fmt.Printf("   • %s%s%s\n", b.Name, location, retireBasisLabel(report, b))
 		}
 	}
 

@@ -32,6 +32,13 @@ type cleanupBranchRepoJSONOutput struct {
 	// saw the candidate list shrink with no stated reason, in the one channel
 	// where there is no scrollback to fall back on.
 	FailedBranches []repository.CleanupFailureEntry `json:"failed_branches,omitempty"`
+	// RetireRefusals carries trunks the non-canonical gate examined and
+	// declined. It is separate from FailedBranches because nothing was
+	// attempted: a caller that treats failed_branches as an error signal must
+	// not start reporting healthy repositories as broken. Without this field the
+	// machine channel has the same gap the terminal had — a shorter candidate
+	// list and no stated reason.
+	RetireRefusals []repository.RetireRefusalEntry `json:"retire_refusals,omitempty"`
 }
 
 func writeCleanupBranchJSON(output cleanupBranchJSONOutput) {
@@ -57,6 +64,7 @@ func cleanupBranchJSONFromBulk(result *repository.BulkCleanupResult, dryRun bool
 			Status:         repo.Status,
 			Branches:       repo.Branches,
 			FailedBranches: repo.FailedBranches,
+			RetireRefusals: repo.RetireRefusals,
 		}
 		if repo.Error != nil {
 			entry.Error = repo.Error.Error()
@@ -98,6 +106,23 @@ func cleanupBranchJSONFromSingle(
 	}
 }
 
+// retireRefusalEntriesFromReport converts the single engine's refusals to the
+// bulk engine's wire shape, so one schema describes both paths.
+func retireRefusalEntriesFromReport(report *branch.CleanupReport) []repository.RetireRefusalEntry {
+	if report == nil || len(report.Refused) == 0 {
+		return nil
+	}
+	out := make([]repository.RetireRefusalEntry, 0, len(report.Refused))
+	for _, r := range report.Refused {
+		loc := "local"
+		if r.IsRemote {
+			loc = "remote"
+		}
+		out = append(out, repository.RetireRefusalEntry{Name: r.Branch, Location: loc, Reason: r.Reason})
+	}
+	return out
+}
+
 func cleanupEntriesFromReport(report *branch.CleanupReport) []repository.CleanupBranchEntry {
 	if report == nil {
 		return nil
@@ -112,11 +137,19 @@ func cleanupEntriesFromReport(report *branch.CleanupReport) []repository.Cleanup
 			if b.IsRemote {
 				loc = "remote"
 			}
+			// The basis travels with the entry for the same reason the human
+			// preview grew a label: a consumer reading "master, non-canonical"
+			// cannot tell a local trunk from another machine's ref, and the two
+			// carry different risk. Only non-canonical entries have one — the
+			// other reasons are not measured against a target ref.
+			targetRef, targetSHA := reportBasis(report, b)
 			out = append(out, repository.CleanupBranchEntry{
-				Name:     b.Name,
-				Reason:   reason,
-				Location: loc,
-				Kind:     repository.BotKind(b.Name),
+				Name:      b.Name,
+				Reason:    reason,
+				Location:  loc,
+				Kind:      repository.BotKind(b.Name),
+				TargetRef: targetRef,
+				TargetSHA: targetSHA,
 			})
 		}
 	}
@@ -126,6 +159,22 @@ func cleanupEntriesFromReport(report *branch.CleanupReport) []repository.Cleanup
 	appendEntries(report.Superseded, "superseded")
 	appendEntries(report.NonCanonical, "non-canonical")
 	return out
+}
+
+// reportBasis looks up what a candidate was measured against. It shares its
+// lookup with retireBasisLabel deliberately: the human line and the JSON field
+// must not be able to disagree about the same branch.
+func reportBasis(report *branch.CleanupReport, b *branch.Branch) (targetRef, targetSHA string) {
+	ref := b.Ref
+	if ref == "" {
+		ref = b.Name
+	}
+	for _, basis := range report.Bases {
+		if basis.Ref == ref {
+			return basis.TargetRef, basis.TargetSHA
+		}
+	}
+	return "", ""
 }
 
 func filterCleanupEntries(entries []repository.CleanupBranchEntry, names []string) []repository.CleanupBranchEntry {

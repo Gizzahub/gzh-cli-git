@@ -97,11 +97,89 @@ func (c *client) appendNonCanonical(
 		)
 	}
 
-	if !opts.DeleteRemote || remoteTarget == "" {
-		return toDelete
+	if opts.DeleteRemote && remoteTarget != "" {
+		toDelete = c.appendNonCanonicalRemotes(
+			ctx, repoPath, remote, canonical, remoteTarget, eligible, result, toDelete,
+		)
 	}
 
-	return c.appendNonCanonicalRemotes(ctx, repoPath, remote, canonical, remoteTarget, eligible, result, toDelete)
+	// Everything above answers "what may be retired". This answers the question
+	// the operator actually asked and was never told: of the trunks that are
+	// here, which ones were looked at and turned down. It runs last so it can
+	// see the final candidate list and skip anything already on it.
+	c.recordNonCanonicalRefusals(ctx, repoPath, remote, canonical,
+		localTarget, remoteTarget, opts.DeleteRemote, eligible, result, toDelete)
+
+	return toDelete
+}
+
+// recordNonCanonicalRefusals files a reason for every trunk-named branch that
+// was eligible for retirement and did not become a candidate.
+//
+// It enumerates RetirableTrunkNames and probes for each rather than reading the
+// candidate listings, because those listings are the filter: local candidates
+// come from `git branch --merged <target>`, so a trunk that still holds its own
+// commits — the one case worth reporting — is absent from the input by
+// construction. Asking for the branches by name is what makes the missing ones
+// visible, and the list is four entries, so the cost is four rev-parses.
+func (c *client) recordNonCanonicalRefusals(
+	ctx context.Context,
+	repoPath, remote, canonical, localTarget, remoteTarget string,
+	deleteRemote bool,
+	eligible func(string) bool,
+	result *RepositoryCleanupResult,
+	toDelete []branchInfo,
+) {
+	for _, name := range RetirableTrunkNames {
+		if !eligible(name) {
+			continue
+		}
+		if c.firstExistingRef(ctx, repoPath, "refs/heads/"+name) != "" &&
+			!containsBranch(toDelete, name, branchLocationLocal) {
+			c.appendRetireRefusal(ctx, repoPath, result, branchLocationLocal,
+				name, "refs/heads/"+name, localTarget, canonical, remote)
+		}
+		if !deleteRemote {
+			continue
+		}
+		if c.firstExistingRef(ctx, repoPath, remoteRef(remote, name)) != "" &&
+			!containsBranch(toDelete, name, branchLocationRemote) {
+			c.appendRetireRefusal(ctx, repoPath, result, branchLocationRemote,
+				name, remoteRef(remote, name), remoteTarget, canonical, remote)
+		}
+	}
+}
+
+// appendRetireRefusal records why one existing trunk did not become a candidate,
+// distinguishing "there was nothing to measure against" from "it was measured
+// and it still holds commits". Nothing is recorded when the ancestry passes:
+// that branch is on the candidate list already, and its absence here is how the
+// two stay consistent.
+func (c *client) appendRetireRefusal(
+	ctx context.Context,
+	repoPath string,
+	result *RepositoryCleanupResult,
+	location, name, ref, target, canonical, remote string,
+) {
+	switch {
+	case target == "":
+		result.RetireRefusals = append(result.RetireRefusals, RetireRefusalEntry{
+			Name: name, Location: location,
+			Reason: fmt.Sprintf(
+				"no ref for %s to measure against; run `git fetch %s %s` and re-run",
+				canonical, remote, canonical,
+			),
+		})
+	case !c.isRefAncestor(ctx, repoPath, ref, target):
+		result.RetireRefusals = append(result.RetireRefusals, RetireRefusalEntry{
+			Name: name, Location: location,
+			Reason: fmt.Sprintf(
+				"holds commits %s does not, measured against %s;"+
+					" retiring it would drop them — merge it or delete it deliberately",
+				canonical, target,
+			),
+		})
+	}
 }
 
 // appendNonCanonicalLocals collects local branches that are ancestors of target.
@@ -144,6 +222,8 @@ func (c *client) appendNonCanonicalLocals(
 			location:     branchLocationLocal,
 			canonical:    cachedBasis,
 			canonicalSHA: canonicalSHA,
+			targetRef:    target,
+			targetSHA:    c.fullRefSHA(ctx, repoPath, target),
 		})
 		result.NonCanonicalCount++
 	}
@@ -178,6 +258,8 @@ func (c *client) appendNonCanonicalRemotes(
 		}
 		info.canonical = canonical
 		info.canonicalSHA = c.fullRefSHA(ctx, repoPath, target)
+		info.targetRef = target
+		info.targetSHA = info.canonicalSHA
 		toDelete = append(toDelete, info)
 		result.NonCanonicalCount++
 	}

@@ -44,6 +44,18 @@ is to cut a release and move that line into `docs/changelog/`, not to write less
   runner tree to both checked commits, runs it in detached worktrees with bounded
   output and time, and makes `integrate run` revalidate the target SHA and push it
   with an exact lease before reclaiming anything.
+- `gz-git cleanup branch --non-canonical` retires trunk branches that duplicate the
+  canonical branch a repository declares in `.gz-git.yaml`. It refuses to act on an
+  undeclared repository, scopes remote deletion to the declared remote, and re-measures
+  the canonical tip at delete time rather than trusting a cached one — the flag exists
+  for repositories carrying a second trunk nobody deletes because deleting it by hand
+  is unnerving, so being wrong once is worse than not shipping.
+- The `--non-canonical` preview says what it is proposing and what it turned down.
+  Each candidate carries the ref that authorized it (`→ contained in <ref> @ <sha>`),
+  which since the local→remote fallback can be another machine's branch as of the last
+  fetch; each trunk the gate examined and declined is reported with its reason on
+  stderr, ungated by `--quiet`. "Nothing to clean up" and "checked, and refused" are
+  different facts for an operator deciding whether to pass `--force`.
 
 ______________________________________________________________________
 

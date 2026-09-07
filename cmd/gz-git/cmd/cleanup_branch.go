@@ -418,6 +418,7 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 	cleanedUp := 0
 	wouldCleanup := 0
 	nothingToDo := 0
+	blocked := 0
 	errors := 0
 
 	for _, repo := range result.Repositories {
@@ -439,6 +440,12 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 				}
 				fmt.Printf("→ %s: %s%s\n", repo.RelativePath, repo.Message, branchList)
 			}
+			// Same rule as the execute path above: a refusal is what the operator
+			// has to act on, and the remedy is in the failure text, not the count.
+			// The all-blocked case sets StatusError and prints there; this is the
+			// mixed repo, where "1 blocked" would otherwise name nothing.
+			printCleanupFailures(&repo, quiet)
+			blocked += len(repo.FailedBranches)
 		case repository.StatusNothingToDo:
 			nothingToDo++
 		case repository.StatusError:
@@ -456,6 +463,12 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 
 	if dryRun {
 		fmt.Printf("Would clean up: %d repo(s), Nothing to do: %d, Errors: %d\n", wouldCleanup, nothingToDo, errors)
+		if blocked > 0 {
+			// Counted only from would-cleanup repos. A fully blocked repo is a
+			// StatusError and is already in that total; adding it here too would
+			// report the same refusal twice under two names.
+			fmt.Printf("Blocked: %d branch(es) — listed above\n", blocked)
+		}
 		fmt.Printf("\nDry-run mode: use --force to actually delete branches\n")
 	} else {
 		fmt.Printf(

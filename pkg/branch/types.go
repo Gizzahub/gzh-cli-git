@@ -191,6 +191,15 @@ type AnalyzeOptions struct {
 	// taskPattern). Branches matching it belong to the reclaim path and are
 	// never retired here, even when they are ancestors of the canonical branch.
 	TaskPatterns []string
+
+	// CanonicalRemote names the one remote the declaration speaks for. A
+	// .gz-git.yaml describes its own repository, never a third party's: in a
+	// fork checkout that also tracks `upstream`, `upstream/master` is an
+	// ancestor of `upstream/develop` and would otherwise classify as
+	// non-canonical, aiming a delete at the upstream project on the strength of
+	// a declaration that never mentioned it. Remote candidates on any other
+	// remote are skipped. Empty means origin.
+	CanonicalRemote string
 }
 
 // ExecuteOptions configures branch cleanup execution.
@@ -207,6 +216,12 @@ type ExecuteOptions struct {
 	// this branch before it will bypass built-in protection for any candidate.
 	// Empty means no candidate may bypass it.
 	CanonicalBranch string
+
+	// CanonicalRemote is the AnalyzeOptions field of the same name, re-armed
+	// here for the same reason CanonicalBranch is: Execute re-verifies rather
+	// than trusting a report a caller may have hand-assembled. Empty means
+	// origin.
+	CanonicalRemote string
 }
 
 // ExecuteResult reports what a cleanup run actually did.

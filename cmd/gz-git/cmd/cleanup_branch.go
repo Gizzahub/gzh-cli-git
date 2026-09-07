@@ -172,6 +172,7 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 		analyzeOpts.IncludeNonCanonical = true
 		analyzeOpts.CanonicalBranch = canonical
 		analyzeOpts.TaskPatterns = taskPatterns
+		analyzeOpts.CanonicalRemote = resolveGovernedRemote(ctx, repo)
 	}
 
 	machine := cliutil.IsMachineFormat(cleanupBranchBulkFlags.Format)
@@ -236,6 +237,7 @@ func runSingleRepoCleanupBranch(ctx context.Context, excludePatterns []string) e
 		Remote:          cleanupBranchRemote,
 		Exclude:         excludePatterns,
 		CanonicalBranch: analyzeOpts.CanonicalBranch,
+		CanonicalRemote: analyzeOpts.CanonicalRemote,
 	}
 
 	result, err := svc.Execute(ctx, repo, report, executeOpts)
@@ -574,6 +576,20 @@ func resolveCanonicalDeclaration(ctx context.Context, repoPath string) (canonica
 	}
 
 	return canonical, decl.Patterns, nil
+}
+
+// resolveGovernedRemote names the one remote a .gz-git.yaml speaks for.
+//
+// It mirrors how the bulk path picks its remote — repository info, falling back
+// to origin — so the two cleanup paths cannot disagree about which remote a
+// declaration governs. That divergence is exactly what let the single-repo path
+// aim a delete at a fork's `upstream`.
+func resolveGovernedRemote(ctx context.Context, repo *repository.Repository) string {
+	info, err := repository.NewClient().GetInfo(ctx, repo)
+	if err == nil && info != nil && strings.TrimSpace(info.Remote) != "" {
+		return info.Remote
+	}
+	return repository.DefaultRemoteName
 }
 
 // bulkCanonicalResolver adapts the per-repository declaration lookup to the

@@ -506,7 +506,7 @@ func (c *cleanupService) authorizeRetire(ctx context.Context, repo *repository.R
 		}
 	}
 
-	target := c.canonicalTargetRef(ctx, repo, branch, canonical)
+	target := c.canonicalTargetRef(ctx, repo, branch, canonical, opts.CanonicalRemote)
 	return c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target)
 }
 
@@ -557,7 +557,7 @@ func (c *cleanupService) isNonCanonical(ctx context.Context, repo *repository.Re
 		return false
 	}
 
-	target := c.canonicalTargetRef(ctx, repo, branch, canonical)
+	target := c.canonicalTargetRef(ctx, repo, branch, canonical, opts.CanonicalRemote)
 	return c.isAncestorOf(ctx, repo, cleanupBranchRef(branch), target)
 }
 
@@ -595,10 +595,16 @@ func cleanupBranchRef(branch *Branch) string {
 //     every probe fails closed, and the command reports "nothing to clean up"
 //     in precisely the repository it exists to clean. Falling back to the
 //     remote-tracking trunk is still lossless: the commits are on the remote.
-func (c *cleanupService) canonicalTargetRef(ctx context.Context, repo *repository.Repository, branch *Branch, canonical string) string {
+func (c *cleanupService) canonicalTargetRef(
+	ctx context.Context, repo *repository.Repository, branch *Branch, canonical, governed string,
+) string {
+	governed = governedRemote(governed)
 	if branch.IsRemote {
 		remote, _ := remoteAndBranch(branch)
-		if remote == "" {
+		// A candidate on any other remote is not this declaration's business.
+		// Returning no target fails the ancestry probe closed, which is the
+		// same refusal every other unresolvable case gets.
+		if remote == "" || remote != governed {
 			return ""
 		}
 		return c.firstExistingRef(ctx, repo, "refs/remotes/"+remote+"/"+canonical)
@@ -606,8 +612,19 @@ func (c *cleanupService) canonicalTargetRef(ctx context.Context, repo *repositor
 	return c.firstExistingRef(
 		ctx, repo,
 		"refs/heads/"+canonical,
-		"refs/remotes/"+repository.DefaultRemoteName+"/"+canonical,
+		"refs/remotes/"+governed+"/"+canonical,
 	)
+}
+
+// governedRemote resolves the remote a declaration speaks for, defaulting to
+// origin. The default is deliberately a name and not "any remote": a repository
+// whose only remote is named something else simply yields no remote candidates,
+// which is the safe direction to be wrong in.
+func governedRemote(name string) string {
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		return trimmed
+	}
+	return repository.DefaultRemoteName
 }
 
 // firstExistingRef returns the first candidate git can resolve, or "".

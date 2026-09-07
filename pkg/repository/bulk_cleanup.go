@@ -364,7 +364,15 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 		result.TotalAnalyzed = len(lines)
 	}
 
-	if len(toDelete) == 0 {
+	// Confirm the cached evidence before the run commits to an answer. A
+	// non-canonical candidate is authorized by a remote-tracking ref, and this
+	// is where that authorization stops being provisional — which has to happen
+	// ahead of the --dry-run return below, or the preview would name branches
+	// the real run refuses and the operator would approve one thing and receive
+	// another.
+	toDelete, gateFailed := c.screenStaleCanonical(ctx, repoPath, remote, toDelete)
+
+	if len(toDelete) == 0 && len(gateFailed) == 0 {
 		result.Status = StatusNothingToDo
 		result.Message = "No branches to clean up"
 		result.Duration = time.Since(startTime)
@@ -372,8 +380,22 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 	}
 
 	if opts.DryRun {
+		// The refusals are reported in a dry run exactly as the real run would
+		// report them. A preview whose only difference from the run is that
+		// nothing was written is the preview worth having.
+		result.FailedBranches = gateFailed
 		result.Status = StatusWouldCleanup
 		result.Message = fmt.Sprintf("Would delete %d branch(es)", len(toDelete))
+		if len(gateFailed) > 0 {
+			result.Message = fmt.Sprintf(
+				"Would delete %d branch(es), %d blocked", len(toDelete), len(gateFailed),
+			)
+			if len(toDelete) == 0 {
+				// Nothing would be deleted. "would-cleanup" would read as a
+				// clean plan the operator can approve; there is no plan.
+				result.Status = StatusError
+			}
+		}
 		recordCleanupBranches(&result, toDelete)
 		result.Duration = time.Since(startTime)
 		return result
@@ -381,12 +403,19 @@ func (c *client) processCleanupRepository(ctx context.Context, rootDir, repoPath
 
 	deleted, failed := c.executeCleanupDeletes(ctx, repoPath, remote, toDelete, logger, result.RelativePath)
 	recordCleanupBranches(&result, deleted)
-	result.FailedBranches = failed
+	// The screen's refusals are failures of this run just as much as git's are,
+	// and everything below counts from this combined list. Counting only the
+	// deletes git refused would let a run blocked entirely by the screen report
+	// itself as a clean sweep of nothing.
+	allFailed := make([]CleanupFailureEntry, 0, len(gateFailed)+len(failed))
+	allFailed = append(allFailed, gateFailed...)
+	allFailed = append(allFailed, failed...)
+	result.FailedBranches = allFailed
 
 	result.Status = StatusCleanedUp
 	result.Message = fmt.Sprintf("Deleted %d branch(es)", len(deleted))
-	if len(failed) > 0 {
-		result.Message = fmt.Sprintf("Deleted %d branch(es), %d failed", len(deleted), len(failed))
+	if len(allFailed) > 0 {
+		result.Message = fmt.Sprintf("Deleted %d branch(es), %d failed", len(deleted), len(allFailed))
 		if len(deleted) == 0 {
 			// Nothing was removed. Calling that "cleaned up" is the report the
 			// operator would act on wrongly.

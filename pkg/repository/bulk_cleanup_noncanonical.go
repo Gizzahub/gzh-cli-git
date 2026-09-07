@@ -261,3 +261,69 @@ func (c *client) requireCurrentCanonicalTip(ctx context.Context, repoPath, remot
 
 	return nil
 }
+
+// needsCanonicalTipCheck reports whether a candidate's authorization rests on a
+// remote-tracking ref, and so has to be re-confirmed against the live tip.
+//
+// Both delete paths and the pre-dry-run screen ask this one function rather
+// than each spelling the condition out. Three copies of a safety predicate is
+// three things to drift, and the screen in particular must fire on exactly the
+// set the deletes fire on: a screen that is narrower silently reintroduces the
+// preview/execute disagreement it exists to close, and one that is wider
+// refuses in the preview what the run would happily do.
+func needsCanonicalTipCheck(b branchInfo) bool {
+	if b.reason != nonCanonicalReason {
+		return false
+	}
+	// A remote retirement is always measured against the cached copy of the
+	// canonical branch — never a local ref — so it is always re-checked. That
+	// includes a candidate carrying no recorded basis at all, which
+	// requireCurrentCanonicalTip turns into a refusal rather than a pass.
+	if b.location == branchLocationRemote {
+		return true
+	}
+	// A local retirement carries canonical only when it fell back to the cache
+	// for want of a local copy. Measured against a local ref there is nothing
+	// for a remote to invalidate, and demanding the network would break
+	// offline cleanup for no safety gain.
+	return b.canonical != ""
+}
+
+// screenStaleCanonical applies the canonical-tip gate before the run decides
+// what it would delete, returning the survivors and the refusals separately.
+//
+// The gate still lives inside the delete paths, and that duplication is
+// deliberate: a caller reaching a delete directly must not be able to skip it,
+// and this pass must not be the only thing standing between a stale cache and
+// `branch -D`. What this pass adds is *when* the refusal is known. Without it
+// the bulk engine answers "what would you delete" from the candidate list and
+// returns before any delete runs, so --dry-run names branches the real run
+// refuses — the operator approves one thing and receives another. That is the
+// same disagreement the canonical refresh is unconditional to avoid, and the
+// reason it is not exempt from --dry-run either.
+//
+// The single-repo engine has never had this gap: its gate runs inside the
+// screening loop, ahead of its own dry-run return. This brings bulk to the
+// same shape rather than inventing a second one.
+func (c *client) screenStaleCanonical(
+	ctx context.Context, repoPath, remote string, toDelete []branchInfo,
+) (kept []branchInfo, failed []CleanupFailureEntry) {
+	for _, b := range toDelete {
+		if !needsCanonicalTipCheck(b) {
+			kept = append(kept, b)
+			continue
+		}
+		if err := c.requireCurrentCanonicalTip(ctx, repoPath, remote, b); err != nil {
+			failed = append(failed, CleanupFailureEntry{
+				Name:     b.name,
+				Reason:   b.reason,
+				Location: b.location,
+				Error:    err.Error(),
+			})
+			continue
+		}
+		kept = append(kept, b)
+	}
+
+	return kept, failed
+}

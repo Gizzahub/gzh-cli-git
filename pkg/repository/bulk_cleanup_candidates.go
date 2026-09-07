@@ -315,14 +315,19 @@ func (c *client) deleteCleanupBranch(ctx context.Context, repoPath, remote strin
 		return c.deleteCleanupRemoteBranch(ctx, repoPath, remote, b)
 	}
 
-	if b.reason == nonCanonicalReason && b.canonical != "" {
+	if needsCanonicalTipCheck(b) {
 		// This local candidate was measured against the remote-tracking copy of
 		// the canonical branch, because the clone has no local copy of its own.
 		// That ref is a cache, and -D below removes the branch reflog along with
 		// the branch: a local trunk ahead of its own remote, authorized by a
 		// canonical branch rewound since the last fetch, leaves its commits on
-		// no ref at all. Only the fallback case carries canonical — measured
-		// against a local ref, there is nothing here for a remote to invalidate.
+		// no ref at all.
+		//
+		// collectCleanupCandidates' caller has usually asked this already, so
+		// the answer is normally settled before --dry-run reports anything.
+		// It is asked again here because a caller can reach this function
+		// directly, and the last thing before `branch -D` is not the place to
+		// assume someone upstream checked.
 		if err := c.requireCurrentCanonicalTip(ctx, repoPath, remote, b); err != nil {
 			return err
 		}
@@ -363,10 +368,11 @@ func (c *client) deleteCleanupRemoteBranch(ctx context.Context, repoPath, remote
 		return fmt.Errorf("delete %s/%s: no remote-tracking SHA to lease against", remote, b.name)
 	}
 
-	if b.reason == nonCanonicalReason {
+	if needsCanonicalTipCheck(b) {
 		// The one classification allowed past the built-in protected-name list
 		// is also the one whose authorization lives on another branch. Confirm
-		// that branch has not moved before firing.
+		// that branch has not moved before firing — again, if the pre-dry-run
+		// screen already did: this is the last gate before an irreversible push.
 		if err := c.requireCurrentCanonicalTip(ctx, repoPath, remote, b); err != nil {
 			return err
 		}

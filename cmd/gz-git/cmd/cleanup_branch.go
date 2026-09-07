@@ -427,7 +427,7 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 			}
 			// Failures print regardless of --verbose: a branch the run could not
 			// delete is the one thing here the operator has to act on.
-			printCleanupFailures(&repo, quiet)
+			printCleanupFailures(&repo)
 		case repository.StatusWouldCleanup:
 			wouldCleanup++
 			if !quiet {
@@ -441,7 +441,7 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 			// has to act on, and the remedy is in the failure text, not the count.
 			// The all-blocked case sets StatusError and prints there; this is the
 			// mixed repo, where "1 blocked" would otherwise name nothing.
-			printCleanupFailures(&repo, quiet)
+			printCleanupFailures(&repo)
 			blocked += len(repo.FailedBranches)
 		case repository.StatusNothingToDo:
 			nothingToDo++
@@ -450,7 +450,7 @@ func printBulkCleanupBranchResult(result *repository.BulkCleanupResult, dryRun b
 			if !quiet {
 				fmt.Printf("✗ %s: %s\n", repo.RelativePath, repo.Message)
 			}
-			printCleanupFailures(&repo, quiet)
+			printCleanupFailures(&repo)
 		}
 	}
 
@@ -657,12 +657,19 @@ func reportWithoutBranches(report *branch.CleanupReport, failed []branch.DeleteF
 }
 
 // printCleanupFailures lists the branches a repository could not delete.
-func printCleanupFailures(repo *repository.RepositoryCleanupResult, quiet bool) {
-	if quiet {
-		return
-	}
+//
+// stderr, and not gated on quiet, matching printDeleteFailures on the single
+// engine. A refusal is a diagnostic, not progress: --quiet conventionally
+// silences the latter, and putting the refusal on stderr leaves the operator
+// the conventional opt-out (2>/dev/null) instead of an all-or-nothing flag.
+//
+// This used to honor quiet, on the reasoning that the machine channel would
+// carry the detail. That channel does carry it now, but it only ever helped
+// callers who chose --format json, and --quiet on its own is the common
+// scripted invocation — so the refusal reached nothing at all.
+func printCleanupFailures(repo *repository.RepositoryCleanupResult) {
 	for _, f := range repo.FailedBranches {
-		fmt.Printf("  ✗ %s: %s (%s) — %s\n", repo.RelativePath, f.Name, f.Location, f.Error)
+		fmt.Fprintf(os.Stderr, "  ✗ %s: %s (%s) — %s\n", repo.RelativePath, f.Name, f.Location, f.Error)
 	}
 }
 

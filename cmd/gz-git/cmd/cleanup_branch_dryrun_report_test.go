@@ -47,17 +47,23 @@ func TestPrintBulkCleanup_DryRunPrintsRefusalDetail(t *testing.T) {
 	quiet = false
 	verbose = false
 
-	out := captureStdout(t, func() {
+	out, errOut := captureOutErr(t, func() {
 		printBulkCleanupBranchResult(
 			mixedBlockedResult(repository.StatusWouldCleanup, "Would delete 1 branch(es), 1 blocked"),
 			true,
 		)
 	})
 
-	for _, want := range []string{"master", "git fetch origin", "Blocked: 1 branch(es)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("dry-run report is missing %q\n---\n%s", want, out)
+	// The per-branch remedy is a diagnostic and goes to stderr; the summary
+	// count is part of the report and stays on stdout. Asserting each on its own
+	// stream is what keeps the two from quietly swapping places.
+	for _, want := range []string{"master", "git fetch origin"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("refusal detail is missing %q from stderr\n---\n%s", want, errOut)
 		}
+	}
+	if !strings.Contains(out, "Blocked: 1 branch(es)") {
+		t.Errorf("dry-run summary omits the blocked total\n---\n%s", out)
 	}
 }
 
@@ -69,13 +75,13 @@ func TestPrintBulkCleanup_DryRunAndRunReportSameRefusal(t *testing.T) {
 	quiet = false
 	verbose = false
 
-	preview := captureStdout(t, func() {
+	_, preview := captureOutErr(t, func() {
 		printBulkCleanupBranchResult(
 			mixedBlockedResult(repository.StatusWouldCleanup, "Would delete 1 branch(es), 1 blocked"),
 			true,
 		)
 	})
-	executed := captureStdout(t, func() {
+	_, executed := captureOutErr(t, func() {
 		printBulkCleanupBranchResult(
 			mixedBlockedResult(repository.StatusCleanedUp, "Deleted 1 branch(es), 1 failed"),
 			false,
@@ -91,23 +97,31 @@ func TestPrintBulkCleanup_DryRunAndRunReportSameRefusal(t *testing.T) {
 	}
 }
 
-// --quiet is an explicit instruction to say less, and it outranks the rule
-// above. The failure detail is suppressed with everything else; the exit status
-// is what a quiet caller reads.
-func TestPrintBulkCleanup_QuietSuppressesRefusalDetail(t *testing.T) {
+// --quiet and the output stream are two different axes, and TASK-179 conflated
+// them. "The exit status is what a quiet caller reads" was the reasoning then,
+// and it was wrong: a mixed repository is StatusWouldCleanup, so the exit status
+// is zero, and quiet took the only remaining report with it.
+func TestPrintBulkCleanup_QuietKeepsRefusalOnStderr(t *testing.T) {
 	resetStatusFlags(t)
 	quiet = true
 	verbose = false
 
-	out := captureStdout(t, func() {
+	out, errOut := captureOutErr(t, func() {
 		printBulkCleanupBranchResult(
 			mixedBlockedResult(repository.StatusWouldCleanup, "Would delete 1 branch(es), 1 blocked"),
 			true,
 		)
 	})
 
+	// --quiet silences progress, which lives on stdout.
 	if strings.Contains(out, "master moved on the remote") {
-		t.Errorf("--quiet still printed the refusal detail\n---\n%s", out)
+		t.Errorf("refusal detail is on stdout, where --quiet is entitled to drop it\n---\n%s", out)
+	}
+	// It does not silence diagnostics. The operator who wants these gone has
+	// 2>/dev/null; the one who passed --quiet to a script asked for less
+	// progress, not for a refusal to go unreported on every channel at once.
+	if !strings.Contains(errOut, "master moved on the remote") {
+		t.Errorf("--quiet swallowed the refusal entirely\n---\n%s", errOut)
 	}
 }
 
@@ -122,13 +136,15 @@ func TestPrintBulkCleanup_BlockedTotalExcludesErrorRepos(t *testing.T) {
 	res := mixedBlockedResult(repository.StatusError, "Nothing deletable, 1 blocked")
 	res.Repositories[0].DeletedBranches = nil
 
-	out := captureStdout(t, func() { printBulkCleanupBranchResult(res, true) })
+	out, errOut := captureOutErr(t, func() { printBulkCleanupBranchResult(res, true) })
 
 	if strings.Contains(out, "Blocked:") {
 		t.Errorf("error repo was double-counted into the blocked total\n---\n%s", out)
 	}
-	if !strings.Contains(out, "master moved on the remote") {
-		t.Errorf("error repo lost its refusal detail\n---\n%s", out)
+	// Excluded from the total, but never from the report — a fully blocked
+	// repository is the case where the remedy matters most.
+	if !strings.Contains(errOut, "master moved on the remote") {
+		t.Errorf("error repo lost its refusal detail\n---\n%s", errOut)
 	}
 	if !strings.Contains(out, "Errors: 1") {
 		t.Errorf("error repo missing from the error total\n---\n%s", out)
